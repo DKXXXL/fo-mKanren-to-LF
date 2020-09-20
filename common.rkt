@@ -6,12 +6,17 @@
   (struct-out state)
   empty-state
   state-sub
+  state-direction-set
   trace-left
   trace-right
   unify
   walk*
   reify
   reify/initial-var)
+
+;;; bear with it now.... let me search if there is
+;;;  extensible record later
+(require struct-update)
 
 ;; Logic variables
 (struct var (name index) #:prefab)
@@ -36,12 +41,21 @@
 (define (extend-sub x t sub)
   (and (not (occurs? x t sub)) `((,x . ,t) . ,sub)))
 
-(struct state (sub trace) #:prefab)
-(define empty-state (state empty-sub '()))
+(struct state (sub trace direction) #:prefab)
+(define empty-state (state empty-sub '() '()))
+(define-struct-updaters state)
+
 (define (trace-left st)
-  (state (state-sub st) (cons 'left (state-trace st))))
+  (state-trace-update st (lambda (x) (cons 'left x))))
+
 (define (trace-right st)
-  (state (state-sub st) (cons 'right (state-trace st))))
+  (state-trace-update st (lambda (x) (cons 'right x))))
+;;;  purely functional structure update, 
+
+
+;;;  TODO:let's later make trace-left/right row polymorphic
+;;;   so that we can decouple trace field and direction field out of state
+
 
 ;; Unification
 (define (unify/sub u v sub)
@@ -53,9 +67,15 @@
       ((and (pair? u) (pair? v))           (let ((sub (unify/sub (car u) (car v) sub)))
                                              (and sub (unify/sub (cdr u) (cdr v) sub))))
       (else                                (and (eqv? u v) sub)))))
+
+
+;;; (define (unify u v st)
+;;;   (let ((sub (unify/sub u v (state-sub st))))
+;;;     (and sub (cons (state sub (state-trace st)) #f))))
+
 (define (unify u v st)
   (let ((sub (unify/sub u v (state-sub st))))
-    (and sub (cons (state sub (state-trace st)) #f))))
+    (and sub (cons (state-sub-set st sub) #f))))
 
 ;; Reification
 (define (walk* tm sub)
