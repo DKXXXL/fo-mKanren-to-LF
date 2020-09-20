@@ -61,8 +61,8 @@
             (step-directed (mplus (pause (trace-left st) g1)
                                   (pause (trace-right st) g2)))
             (match fuel
-              [`(left . ,remain)  (pause (trace-left st) g1)]
-              [`(right . ,remain) (pause (trace-right st) g2)]
+              [`(left . ,remain)  (pause (state-direction-set (trace-left st) remain) g1)]
+              [`(right . ,remain) (pause (state-direction-set (trace-right st) remain) g2)]
             )
         )
       ))
