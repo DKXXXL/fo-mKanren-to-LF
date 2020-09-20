@@ -1,0 +1,30 @@
+> (run*/trace (x y) (appendo x y '(1 2 3)))
+'(((() (1 2 3)) (left))
+  (((1) (2 3)) (right left))
+  (((1 2) (3)) (right right left))
+  (((1 2 3) ()) (right right right left)))
+
+
+(left)             ==>
+
+0. (appendo x y '(1 2 3)) . sub
+1. ((== '() ab) (== c abc)) . sub
+
+
+
+(right right left) ==> 
+
+0. (appendo x y '(1 2 3)) . sub
+1.   ((fresh (a b bc)
+        (== `(,a . ,b) ab)
+        (== `(,a . ,bc) abc)
+        (appendo b c bc))) . sub
+2.      ((fresh (a b bc)
+          (== `(,a . ,b) ab)
+          (== `(,a . ,bc) abc)
+          (appendo b c bc))) . sub
+3.      ((fresh (a b bc)
+
+
+
+

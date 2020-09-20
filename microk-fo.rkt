@@ -30,8 +30,8 @@
 (define (start st g)
   (match g
     ((disj g1 g2)
-     (step (mplus (pause st g1)
-                  (pause st g2))))
+     (step (mplus (pause (trace-left st) g1)
+                  (pause (trace-right st) g2))))
     ((conj g1 g2)
      (step (bind (pause st g1) g2)))
     ((relate thunk _)

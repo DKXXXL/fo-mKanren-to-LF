@@ -6,6 +6,8 @@
   (struct-out state)
   empty-state
   state-sub
+  trace-left
+  trace-right
   unify
   walk*
   reify
@@ -34,8 +36,12 @@
 (define (extend-sub x t sub)
   (and (not (occurs? x t sub)) `((,x . ,t) . ,sub)))
 
-(struct state (sub) #:prefab)
-(define empty-state (state empty-sub))
+(struct state (sub trace) #:prefab)
+(define empty-state (state empty-sub '()))
+(define (trace-left st)
+  (state (state-sub st) (cons 'left (state-trace st))))
+(define (trace-right st)
+  (state (state-sub st) (cons 'right (state-trace st))))
 
 ;; Unification
 (define (unify/sub u v sub)
@@ -49,7 +55,7 @@
       (else                                (and (eqv? u v) sub)))))
 (define (unify u v st)
   (let ((sub (unify/sub u v (state-sub st))))
-    (and sub (cons (state sub) #f))))
+    (and sub (cons (state sub (state-trace st)) #f))))
 
 ;; Reification
 (define (walk* tm sub)

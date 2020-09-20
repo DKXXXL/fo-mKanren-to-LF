@@ -42,3 +42,12 @@
     ((_ n body ...) (map reify/initial-var (stream-take n (query body ...))))))
 (define-syntax run*
   (syntax-rules () ((_ body ...) (run #f body ...))))
+
+(define-syntax run/trace
+  (syntax-rules ()
+    ((_ n body ...) (map (lambda (state)
+                           (list (reify/initial-var state)
+                                 (reverse (state-trace state))))
+                         (stream-take n (query body ...))))))
+(define-syntax run*/trace
+  (syntax-rules () ((_ body ...) (run/trace #f body ...))))

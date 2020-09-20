@@ -10,6 +10,8 @@
   query
   run
   run*
+  run/trace
+  run*/trace
 
   stream-take
   conj*
