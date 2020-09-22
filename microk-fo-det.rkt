@@ -5,6 +5,7 @@
   (struct-out conj)
   (struct-out relate)
   (struct-out ==)
+  (struct-out ex)
   (struct-out mplus)
   (struct-out bind)
   (struct-out pause)
@@ -13,10 +14,12 @@
   mature/directed
   mature?
   empty-state/fuel
+  proof-term-construct
   )
 
 ;;; (require struct-update)
 (require "microk-fo.rkt")
+(require "proof-term.rkt")
 
 
 ;;; one implementation idea is to use trace information 
@@ -70,7 +73,9 @@
      (step-directed (bind (pause st g1) g2)))
     ((relate thunk _)
      (pause st (thunk)))
-    ((== t1 t2) (unify t1 t2 st))))
+    ((== t1 t2) (unify t1 t2 st))
+    ((ex _ gn) (start-directed st gn)))
+    )
 
 (define (step-directed s)
   (match s
@@ -90,3 +95,48 @@
              (else (bind s g)))))
     ((pause st g) (start-directed st g))
     (_            s)))
+
+
+;;; This is the function that construct LF-term with
+;;;    given a trace and a goal
+;;;  Q1. the trace might be re-arrange? why not
+;;; proof-term-construct :: 
+;;;   Trace x Subst x Goal -> Trace x LF-proof-term
+(define (proof-term-construct trace subst goal)
+  (let ([ptc (lambda (trace goal) (proof-term-construct trace subst goal))])
+    (match goal
+      [(conj g1 g2)
+        (match-let* 
+          ([(cons rmt1 lterm) (ptc trace g1)]
+           [(cons rmt2 rterm) (ptc rmt1 g2)])
+          (cons rmt2 (LFpair lterm rterm))
+        )
+      ] 
+      [(relate thunk description)
+        ;;; I won't do anything here, 
+        ;;; Greg says something should be done here
+        (cons trace (ptc trace (thunk)))
+      ]
+      [(ex varname g)
+        (match-let* (
+          [index (walk* varname subst)]
+          [(cons rmt body) (ptc trace g)])
+
+          (cons rmt (LFsigma index body goal))
+        )
+      ]
+      [(== t1 t2)
+        (if (unify t1 t2 subst) 
+          (cons trace (LFrefl (walk* t1 subst)))
+          (raise "Equality estabilished Failure"))
+      ]
+      [(disj g1 g2)
+        (match trace 
+          [`(left . ,rmt) (cons rmt (LFinjl (ptc rmt g1) goal))]
+          [`(right . ,rmt) (cons rmt (LFinjr (ptc rmt g2) goal))]
+          [_ (raise "Trace Not Enough or Format Incorrect ")]
+        )
+      ]
+    )
+  )
+)

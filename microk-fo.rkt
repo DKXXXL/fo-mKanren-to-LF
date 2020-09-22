@@ -5,6 +5,7 @@
   (struct-out conj)
   (struct-out relate)
   (struct-out ==)
+  (struct-out ex)
   (struct-out mplus)
   (struct-out bind)
   (struct-out pause)
@@ -15,10 +16,17 @@
 (require "common.rkt")
 
 ;; first-order microKanren
+;;; goals
 (struct disj   (g1 g2)                  #:prefab)
 (struct conj   (g1 g2)                  #:prefab)
 (struct relate (thunk description)      #:prefab)
 (struct ==     (t1 t2)                  #:prefab)
+(struct ex     (varname g)                  #:prefab)
+;;; meta-data ex, actually will be ignored
+;;;   indicating the scope of varname, 
+;;;   but only as a hint
+
+;;; streams
 (struct bind   (bind-s bind-g)          #:prefab)
 (struct mplus  (mplus-s1 mplus-s2)      #:prefab)
 (struct pause  (pause-state pause-goal) #:prefab)
@@ -36,7 +44,9 @@
      (step (bind (pause st g1) g2)))
     ((relate thunk _)
      (pause st (thunk)))
-    ((== t1 t2) (unify t1 t2 st))))
+    ((== t1 t2) (unify t1 t2 st))
+    ((ex _ gn) (start st gn))
+    ))
 
 (define (step s)
   (match s

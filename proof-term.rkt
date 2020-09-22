@@ -1,3 +1,14 @@
+#lang racket
+(provide
+  (struct-out LFsigma)
+  (struct-out LFpair)
+  (struct-out LFinjl)
+  (struct-out LFinjr)
+  (struct-out LFrefl)
+  )
+
+
+
 ;;; this file is defining structure for proof terms
 ;;;  vanilla miniKanren only has 
 ;;;     dependent pair(sigma), normal pair(left right), sum type(injl, injr)
@@ -21,13 +32,18 @@
 (struct LFinjl  (left wholeType) #:prefab)
 (struct LFinjr  (right wholeType) #:prefab)
 ;;; the wholeType is actually the wholeProp
-(struct refl    (x) #:prefab)
+(struct LFrefl    (x) #:prefab)
 ;;; wholeType here is trivial, (== x x)
 
 ;;; (struct var (index) #:prefab) ;;; object variable, only used for lambda term
-(struct const (term type) #prefab) ;;; all the lisp terms should be here
+;;; (struct const (term type) #:prefab) ;;; all the lisp terms should be here
 
 ;;; the above consists the BNF definition of LF-lambda-term
+;;; also exactly the definition of proof tree, except the wholeType
+;;;     which are the meta-data
+
+;;; The following data structure is to construct LF-term when searching
+;;;   might not be useful now 
 
 ;;; proof-terms with holes!
 ;;;  basically incomplete proof terms
@@ -35,5 +51,28 @@
 (struct hole (index) #:prefab)
 
 
-;;; Partial-Proof-Tree(PPT) := 
-(struct partial-proof-tree ())
+;;; Partial-Proof-Tree(PPT) := [indicesOfHoles] x proof-tree
+(struct ppt (holes pt) #:prefab)
+;;; this is direct style, but at the end we only need something 
+;;;   to represent a tree with a hole
+;;;   the following traversal will be expensive... maybe
+;;;   use (prooftree -> prooftree) as a tree with one hole
+;;;   will be much less expensive
+;;;   but a tree with several holes inside requires some
+;;;   kind of algebraid design and interface to maintain the
+;;;    invariance... let's postpone it TODO!
+
+
+(define (subst ppt index term)
+  (match ppt
+    [(hole tindex) (if (equal? index tindex) term ppt)]
+    ;;; other cases are direct recursion
+  )
+)
+
+;;; fill-in-partial-tree : partial-proof-tree x partial-proof-tree -> partial-proof-tree 
+;;;  it will fill in the first hole of 'withHole
+;;; note that the 'withHole should have at least one hole
+(define (fill-in-partial-tree stuffing withHole)
+  (void)
+)

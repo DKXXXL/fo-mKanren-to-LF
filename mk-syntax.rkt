@@ -16,11 +16,20 @@
     ((_)           fail)
     ((_ g)         g)
     ((_ g0 gs ...) (disj g0 (disj* gs ...)))))
+
+(define-syntax ex-s
+  (syntax-rules ()
+    ((_ () body)
+      body)
+    ((_ (x y ...) body)
+      (ex x (ex-s (y ...) body)))
+    ))
+
 ;; High level goals
 (define-syntax fresh
   (syntax-rules ()
     ((_ (x ...) g0 gs ...)
-     (let ((x (var/fresh 'x)) ...) (conj* g0 gs ...)))))
+     (let ((x (var/fresh 'x)) ...) (ex-s (x ...) (conj* g0 gs ...))))))
 (define-syntax conde
   (syntax-rules ()
     ((_ (g gs ...) (h hs ...) ...)
