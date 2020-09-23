@@ -28,12 +28,28 @@
 ;;; Move run/trace to here because
 ;;;  mk-syntax.rkt is public common code
 
+;;; (define-syntax run/trace
+;;;   (syntax-rules ()
+;;;     ((_ n body ...) (map (lambda (state)
+;;;                            (list (reify/initial-var state)
+;;;                                  (reverse (state-trace state))))
+;;;                          (stream-take n (query body ...))))))
+
 (define-syntax run/trace
   (syntax-rules ()
-    ((_ n body ...) (map (lambda (state)
-                           (list (reify/initial-var state)
-                                 (reverse (state-trace state))))
-                         (stream-take n (query body ...))))))
+    ((_ n body ...) 
+        (match-let* 
+            ([streamq (query body ...)]
+             [(pause _ prop-goal) streamq])
+          (map (lambda (state)
+                           (match-let* 
+                              ([tr (reverse (state-trace state))])
+                             (list (reify/initial-var state)
+                                   tr
+                                   (proof-term-construct tr state prop-goal)
+                                 )))
+                         (stream-take n streamq))))                       
+  ))
 (define-syntax run*/trace
   (syntax-rules () ((_ body ...) (run/trace #f body ...))))
 

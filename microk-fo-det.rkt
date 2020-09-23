@@ -100,10 +100,10 @@
 ;;; This is the function that construct LF-term with
 ;;;    given a trace and a goal
 ;;;  Q1. the trace might be re-arrange? why not
-;;; proof-term-construct :: 
-;;;   Trace x Subst x Goal -> Trace x LF-proof-term
-(define (proof-term-construct trace subst goal)
-  (let ([ptc (lambda (trace goal) (proof-term-construct trace subst goal))])
+;;; proof-term-construct-wt :: 
+;;;   Trace x FinalState x Goal -> Trace x LF-proof-term
+(define (proof-term-construct-wt trace st goal)
+  (let ([ptc (lambda (trace goal) (proof-term-construct-wt trace st goal))])
     (match goal
       [(conj g1 g2)
         (match-let* 
@@ -119,15 +119,15 @@
       ]
       [(ex varname g)
         (match-let* (
-          [index (walk* varname subst)]
+          [index (walk* varname (state-sub st))]
           [(cons rmt body) (ptc trace g)])
 
           (cons rmt (LFsigma index body goal))
         )
       ]
       [(== t1 t2)
-        (if (unify t1 t2 subst) 
-          (cons trace (LFrefl (walk* t1 subst)))
+        (if (unify t1 t2 st) 
+          (cons trace (LFrefl (walk* t1 (state-sub st))))
           (raise "Equality estabilished Failure"))
       ]
       [(disj g1 g2)
@@ -139,4 +139,8 @@
       ]
     )
   )
+)
+
+(define (proof-term-construct trace state goal)
+  (cdr (proof-term-construct-wt trace state goal))
 )
