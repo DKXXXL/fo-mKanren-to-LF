@@ -17,11 +17,32 @@
 
 ;; first-order microKanren
 ;;; goals
-(struct disj   (g1 g2)                  #:prefab)
-(struct conj   (g1 g2)                  #:prefab)
-(struct relate (thunk description)      #:prefab)
-(struct ==     (t1 t2)                  #:prefab)
-(struct ex     (varname g)                  #:prefab)
+(struct disj   (g1 g2) 
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "~a ∨ ~a" (disj-g1 val) (disj-g2 val)))]
+)
+
+(struct conj   (g1 g2)  
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "~a ∧ ~a" (conj-g1 val) (conj-g2 val)))]
+)
+(struct relate (thunk description)      ;;;#:prefab
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "~a" (relate-description val)))]
+)
+(struct ==     (t1 t2)               
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "~a =ᴸ ~a" (==-t1 val) (==-t2 val)))]
+)
+(struct ex     (varname g) 
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "∃~a. ~a" (ex-varname val) (ex-g val)))]
+)
 ;;; meta-data ex, actually will be ignored
 ;;;   indicating the scope of varname, 
 ;;;   but only as a hint

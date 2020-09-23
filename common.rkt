@@ -19,7 +19,11 @@
 (require struct-update)
 
 ;; Logic variables
-(struct var (name index) #:prefab)
+(struct var (name index) ;;;#:prefab
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "~a#~a" (var-name val) (var-index val)))]
+)
 (define (var=? x1 x2)
   (= (var-index x1) (var-index x2)))
 (define initial-var (var #f 0))

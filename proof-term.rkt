@@ -16,7 +16,11 @@
 ;;;  wholeType == goal!
 ;;;  construct CH correspondence for miniKanren goals
 
-(struct LFsigma (ex body wholeType)  #:prefab) 
+(struct LFsigma (ex body wholeType)  #:prefab)
+;;;   #:methods gen:custom-write
+;;;   [(define (write-proc val output-port output-mode)
+;;;      (fprintf output-port "{~a ~a}" (LFsigma-ex val) (LFsigma-body val)))]
+;;; 
 ;;; it suppose to have bindingType, i.e. (LFsigma ex bindingType body)
 ;;;  but I think we are working on dynamic typed staff
 ;;;  (fresh (x) (disj (== x 5) (== x "1"))) is acceptable

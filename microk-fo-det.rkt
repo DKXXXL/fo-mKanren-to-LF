@@ -102,6 +102,9 @@
 ;;;  Q1. the trace might be re-arrange? why not
 ;;; proof-term-construct-wt :: 
 ;;;   Trace x FinalState x Goal -> Trace x LF-proof-term
+;;;  the correct way to write this piece of code 
+;;;   is to use state-monad on "Trace"
+;;;   but we refactor it later
 (define (proof-term-construct-wt trace st goal)
   (let ([ptc (lambda (trace goal) (proof-term-construct-wt trace st goal))])
     (match goal
@@ -115,13 +118,12 @@
       [(relate thunk description)
         ;;; I won't do anything here, 
         ;;; Greg says something should be done here
-        (cons trace (ptc trace (thunk)))
+        (ptc trace (thunk))
       ]
       [(ex varname g)
         (match-let* (
           [index (walk* varname (state-sub st))]
           [(cons rmt body) (ptc trace g)])
-
           (cons rmt (LFsigma index body goal))
         )
       ]
@@ -132,8 +134,12 @@
       ]
       [(disj g1 g2)
         (match trace 
-          [`(left . ,rmt) (cons rmt (LFinjl (ptc rmt g1) goal))]
-          [`(right . ,rmt) (cons rmt (LFinjr (ptc rmt g2) goal))]
+          [`(left . ,rmt) 
+              (match-let* ([(cons rmt2 term) (ptc rmt g1)]) 
+                (cons rmt2 (LFinjl term goal)))]
+          [`(right . ,rmt) 
+              (match-let* ([(cons rmt2 term) (ptc rmt g2)]) 
+                (cons rmt2 (LFinjr term goal)))]
           [_ (raise "Trace Not Enough or Format Incorrect ")]
         )
       ]
@@ -142,5 +148,7 @@
 )
 
 (define (proof-term-construct trace state goal)
-  (cdr (proof-term-construct-wt trace state goal))
+  (let ([l state])
+    (cdr (proof-term-construct-wt trace state goal))
+  ) 
 )
