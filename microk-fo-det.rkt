@@ -99,7 +99,7 @@
 
 ;;; This is the function that construct LF-term with
 ;;;    given a trace and a goal
-;;;  Q1. the trace might be re-arrange? why not
+;;;  Q. the trace might be re-arrange? I am not sure
 ;;; proof-term-construct-wt :: 
 ;;;   Trace x FinalState x Goal -> Trace x LF-proof-term
 ;;;  the correct way to write this piece of code 
@@ -118,7 +118,16 @@
       [(relate thunk description)
         ;;; I won't do anything here, 
         ;;; Greg says something should be done here
-        (ptc trace (thunk))
+        ;;;   TODO: put substitution information here
+        ;;;     appendo a bc abc=>
+        ;;;    printed as append [a:= subst(a)] [subst(bc)] [subst(abc)] 
+        ;;; (ptc trace (thunk))
+        (match-let* 
+          ([(cons rmt1 bodyterm) (ptc trace (thunk))]
+           [subst-description (cons (car description) (walk* (cdr description) (state-sub st)))])
+          (cons rmt1 (LFpack bodyterm subst-description))
+        )
+        
       ]
       [(ex varname g)
         (match-let* (
@@ -148,7 +157,6 @@
 )
 
 (define (proof-term-construct trace state goal)
-  (let ([l state])
-    (cdr (proof-term-construct-wt trace state goal))
-  ) 
+  (cdr (proof-term-construct-wt trace state goal))
 )
+

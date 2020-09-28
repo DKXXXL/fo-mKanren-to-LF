@@ -5,6 +5,7 @@
   (struct-out LFinjl)
   (struct-out LFinjr)
   (struct-out LFrefl)
+  (struct-out LFpack)
   )
 
 
@@ -38,6 +39,8 @@
 ;;; the wholeType is actually the wholeProp
 (struct LFrefl    (x) #:prefab)
 ;;; wholeType here is trivial, (== x x)
+
+(struct LFpack (subterm description) #:prefab)
 
 ;;; (struct var (index) #:prefab) ;;; object variable, only used for lambda term
 ;;; (struct const (term type) #:prefab) ;;; all the lisp terms should be here
