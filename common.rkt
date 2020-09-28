@@ -11,6 +11,7 @@
   trace-right
   unify
   walk*
+  unitize-metavar
   reify
   reify/initial-var)
 
@@ -27,10 +28,32 @@
 (define (var=? x1 x2)
   (= (var-index x1) (var-index x2)))
 (define initial-var (var #f 0))
-(define var/fresh
-  (let ((index 0))
-    (lambda (name) (set! index (+ 1 index))
-      (var name index))))
+
+(define var/fresh (void))
+;; return a new var with incremented id
+(define var-reset! (void)) 
+;; reset the maximum existing var-id to 0
+(define var-number (void)) 
+;; return the maximum existing var-id, unless it is 0
+
+
+(let ((index 0))
+  (begin 
+    (set! var/fresh     
+      (lambda (name) 
+        (set! index (+ 1 index))
+        (var name index)))
+    (set! var-reset!
+      (lambda () (set! index 0)))
+    (set! var-number (lambda () index))  
+  )
+)
+
+;;; (define var/fresh
+;;;   (let ((index 0))
+;;;     (lambda (name) (set! index (+ 1 index))
+;;;       (var name index))
+;;;       ))
 
 ;; States
 (define empty-sub '())
@@ -100,3 +123,15 @@
                     (else      sub)))))
 (define (reify/initial-var st)
   (reify initial-var st))
+
+
+;; Replace Meta-var inside term with Unit
+(define (unitize-metavar tm)
+  (let ([um unitize-metavar])
+    (match tm
+      [(var _ _) '()]
+      [(cons a b) (cons (um a) (um b))]
+      [x x]
+    )
+  )
+)

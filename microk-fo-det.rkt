@@ -105,8 +105,15 @@
 ;;;  the correct way to write this piece of code 
 ;;;   is to use state-monad on "Trace"
 ;;;   but we refactor it later
+;;; TODO: a bug when (run*/trace (x y) (== x y))
+;;;   currently it returns some weird meta-variable into the 
+;;;     term. which is of course incorrect
+;;;   I suggest make the given subst compose with s default subst
+;;;   that will subst all the meta-variable into unit
+;;;    (basically saying every unspecified element will be considered as unit)
 (define (proof-term-construct-wt trace st goal)
-  (let ([ptc (lambda (trace goal) (proof-term-construct-wt trace st goal))])
+  (let ([ptc (lambda (trace goal) (proof-term-construct-wt trace st goal))]
+        [walk*/unitize (lambda (x y) (unitize-metavar (walk* x y)))])
     (match goal
       [(conj g1 g2)
         (match-let* 
@@ -124,22 +131,24 @@
         ;;; (ptc trace (thunk))
         (match-let* 
           ([(cons rmt1 bodyterm) (ptc trace (thunk))]
-           [subst-description (cons (car description) (walk* (cdr description) (state-sub st)))])
+           [subst-description (cons (car description) (walk*/unitize (cdr description) (state-sub st)))])
           (cons rmt1 (LFpack bodyterm subst-description))
         )
         
       ]
       [(ex varname g)
         (match-let* (
-          [index (walk* varname (state-sub st))]
+          [index (walk*/unitize varname (state-sub st))]
           [(cons rmt body) (ptc trace g)])
           (cons rmt (LFsigma index body goal))
         )
       ]
       [(== t1 t2)
-        (if (unify t1 t2 st) 
-          (cons trace (LFrefl (walk* t1 (state-sub st))))
-          (raise "Equality estabilished Failure"))
+        (let* ([t1_ (walk*/unitize t1 (state-sub st))]
+               [t2_ (walk*/unitize t2 (state-sub st))])
+          (if (equal? t1_ t2_)
+            (cons trace (LFrefl t1_))
+            (raise "Equality estabilished Failure")))
       ]
       [(disj g1 g2)
         (match trace 
@@ -160,3 +169,6 @@
   (cdr (proof-term-construct-wt trace state goal))
 )
 
+;;; (define (proof-check term type)
+
+;;; )

@@ -37,15 +37,30 @@
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "~a =ᴸ ~a" (==-t1 val) (==-t2 val)))]
+     ;;; L stands for Lisp Elements
 )
 (struct ex     (varname g) 
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "∃~a. ~a" (ex-varname val) (ex-g val)))]
 )
-;;; meta-data ex, actually will be ignored
+;;; meta-data ex, actually will be ignored at this stage
 ;;;   indicating the scope of varname, 
 ;;;   but only as a hint
+
+;;; we need implement the first version of complement,
+;;;   so the complement version of each operation need to be defined
+(struct =/= (t1 t2)
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "~a ≠ᴸ ~a" (==-t1 val) (==-t2 val)))]
+)
+
+(struct forall (varname g)
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "∀~a. ~a" (ex-varname val) (ex-g val)))]
+)
 
 ;;; streams
 (struct bind   (bind-s bind-g)          #:prefab)
@@ -87,3 +102,22 @@
              (else (bind s g)))))
     ((pause st g) (start st g))
     (_            s)))
+
+;;; trivially negate the goal
+;;;   not really useful, because on the run, the negate is used
+;;;   on a subsitution map together with some other things
+;;;  I currently don't know how to implement
+;;;  and I think something like forall-bound is needed, but it currenty
+;;;   isn't defined here, and the dual is ugly for it as well
+(define (complement g)
+  (let ([c complement])
+    (match g
+      [(disj g1 g2) (conj (c g1) (c g2))]
+      [(conj g1 g2) (disj (c g1) (c g2))]
+      [(relate _ _) (raise "User-Relation not supported.")]
+      [(== t1 t2) (=/= t1 t2)]
+      [(ex a gn) (forall a (c gn))]
+      [(forall a gn) (ex a (c gn))]
+    )
+  )
+)
