@@ -99,7 +99,7 @@
 ;;;   i.e. the range of subst doesn't intersect its domain 
 ;;;  specification: it will substitute just as subst, except for x, it won't change
 (define (shadow-idempotent-sub x subst)
-  (void)
+  (filter (lambda (pair) (not (equal? (car pair) x))) subst)
 )
 
 (struct state (sub trace direction) #:prefab)
