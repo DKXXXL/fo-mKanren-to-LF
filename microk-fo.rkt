@@ -109,7 +109,7 @@
 ;;;  precondition: subst has to be idempotent
 (define (walk*/goal goal subst)
   (let* ([rec (lambda (g) (walk*/goal g subst))])
-    (match g
+    (match goal
     ;;; non trivial parts
     ;;;   deal with terms
       ((== t1 t2) 

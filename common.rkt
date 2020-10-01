@@ -169,26 +169,3 @@
     )
   )
 )
-
-
-
-;;; ;;; ho-sub :: [(var, Term)] -> (var -> Term)
-;;; ;;;   precondition: there is no cyclic reference in subst
-;;; (define (ho-sub subst) (lambda (v) (walk v subst)))
-;;; ;;;  the second way to define is clearer
-;;; ;;;   and we will do occur check
-;;; (define (ho-subst-singleton x t) (lambda (v) (if (equal? x v) t v)))
-
-;;; ;;; now we alias type ho-subst = (var -> Term)
-;;; (define (compose hs1 hs2) (lambda (v) (hs1 (hs2 v))))
-;;; ;;; this version of extend might not be satisfactory
-;;; (define (extend-ho-sub x t ho-sub)
-;;;   (compose ho-sub (ho-subst-singleton x t)))
-
-;;; ;;; return a subst that works exactly like hs
-;;; ;;;   except that won't do anything on x
-;;; (define (shadow x hs)
-;;;   (lambda (v)
-;;;     (if (equal? x v) v (hs v))))
-
-;;; ;;;  interestingly (shadow x hs) =/= (extend-ho-sub x x hs)
