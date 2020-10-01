@@ -169,6 +169,31 @@
   (cdr (proof-term-construct-wt trace state goal))
 )
 
-;;; (define (proof-check term type)
-
-;;; )
+;;; proof-check :: LFterm x goal -> Bool
+;;;   currently it will ignore the type information that is auxilary
+;;;     inside LFterm; also the description of the relate (user-customized relation)
+;;;   interestingly, it will check equality :)
+(define (proof-check term type)
+  (match `(,term . ,type)
+    ;;; watch out binding name
+    [(cons (LFsigma exval bodyt _) (ex exvar bodyT))
+      (let* ([subst (list `(,exvar . ,exval))]
+             [bodyT-indexed (walk*/goal bodyT subst)])
+        (proof-check bodyt bodyT-indexed)     
+        )]
+    ;;; dead recursion on others
+    [(cons (LFpair lt rt) (conj lT rT))
+      (and (proof-check lt lT) (proof-check rt rT))]
+    [(cons (LFinjl lt _) (disj lT rT))
+      (proof-check lt lT)]
+    [(cons (LFinjr rt _) (disj lT rT))
+      (proof-check rt rT)]
+    [(cons (LFrefl x) (== lt rt))
+      (and (equal? x lt) (equal? x rt))]
+    [(cons (LFpack subterm _) (relate thunk _))
+      (proof-check subterm (thunk))
+    ]
+    [_ #f]
+        
+  )
+)

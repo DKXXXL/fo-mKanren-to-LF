@@ -7,6 +7,7 @@
   empty-state
   state-sub
   state-direction-set
+  shadow-idempotent-sub
   trace-left
   trace-right
   unify
@@ -65,8 +66,41 @@
                        (occurs? x (walk (cdr t) sub) sub)))
         ((var? t)  (var=? x t))
         (else      #f)))
+
 (define (extend-sub x t sub)
   (and (not (occurs? x t sub)) `((,x . ,t) . ,sub)))
+;;; the above version is causing substitution "non-compositional"
+;;;   the reason this thing comes up is motivated by two reasons:
+;;; 1. each sigma is not idempotent currently 
+;;;  (this sentence might not make sense, )
+;;; 2. there is no easy way to represent sigma_1 \compose sigma_2, 
+;;;       where sigma_1,2 are both of type List, and their composition is still List
+;;;    (the real reason is 1.) 
+;;; 3. there is no easy way to represent (shadow x sigma_1), 
+;;;     i.e. subst everything as sigma except variable x
+;;;    (the real reason is still 1.)
+;;;     for example [(v1 v3) (v2 v1) (v3 1)] , 
+;;;       whose idempotent version is [(v1 1) (v2 1) (v3 1)]
+;;;     and if we want to shadow v1 (fix v1 unchanged)
+;;;       we cannot just remove (v1 v3) from the list, otherwise we will get a thing
+;;;       that is [(v2 v1) (v3 1)], that cannot map v1 to 1
+;;;     similarly, [(v1 v1) (v1 v3) (v2 v1) (v3 v1)] won't work 
+
+
+;;; same as extend-sub, except the input has to be idempotent, 
+;;;   and its output is also idempotent 
+(define (extend-idempotent-sub x t sub)
+  ;;; TODO: to implement in the future, currently just use the non-idempotent version
+  (extend-sub x t sub)
+)
+
+;;; var x [(var . term)] -> [(var . term)]
+;;;  precondition: subst is already idempotent, 
+;;;   i.e. the range of subst doesn't intersect its domain 
+;;;  specification: it will substitute just as subst, except for x, it won't change
+(define (shadow-idempotent-sub x subst)
+  (void)
+)
 
 (struct state (sub trace direction) #:prefab)
 (define empty-state (state empty-sub '() '()))
@@ -135,3 +169,26 @@
     )
   )
 )
+
+
+
+;;; ;;; ho-sub :: [(var, Term)] -> (var -> Term)
+;;; ;;;   precondition: there is no cyclic reference in subst
+;;; (define (ho-sub subst) (lambda (v) (walk v subst)))
+;;; ;;;  the second way to define is clearer
+;;; ;;;   and we will do occur check
+;;; (define (ho-subst-singleton x t) (lambda (v) (if (equal? x v) t v)))
+
+;;; ;;; now we alias type ho-subst = (var -> Term)
+;;; (define (compose hs1 hs2) (lambda (v) (hs1 (hs2 v))))
+;;; ;;; this version of extend might not be satisfactory
+;;; (define (extend-ho-sub x t ho-sub)
+;;;   (compose ho-sub (ho-subst-singleton x t)))
+
+;;; ;;; return a subst that works exactly like hs
+;;; ;;;   except that won't do anything on x
+;;; (define (shadow x hs)
+;;;   (lambda (v)
+;;;     (if (equal? x v) v (hs v))))
+
+;;; ;;;  interestingly (shadow x hs) =/= (extend-ho-sub x x hs)

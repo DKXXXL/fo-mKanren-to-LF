@@ -11,7 +11,8 @@
   (struct-out pause)
   step
   mature
-  mature?)
+  mature?
+  walk*/goal)
 
 (require "common.rkt")
 
@@ -102,6 +103,30 @@
              (else (bind s g)))))
     ((pause st g) (start st g))
     (_            s)))
+
+
+;;; walk*/goals :: Goal x subst -> Goal
+;;;  precondition: subst has to be idempotent
+(define (walk*/goal goal subst)
+  (let* ([rec (lambda (g) (walk*/goal g subst))])
+    (match g
+    ;;; non trivial parts
+    ;;;   deal with terms
+      ((== t1 t2) 
+        (== (walk* t1 subst) (walk* t2 subst)))
+    ;;; ex needs shadow the exvar
+      ((ex exvar gn) 
+        (ex exvar (walk*/goal gn (shadow-idempotent-sub exvar subst))))
+    ;;; dead recursion on others
+      ((disj g1 g2)
+        (disj (rec g1) (rec g2)))
+      ((conj g1 g2)
+        (conj (rec g1) (rec g2)))
+      ((relate thunk _)
+        (relate (lambda () (rec (thunk)))))
+    )
+  )
+)
 
 ;;; trivially negate the goal
 ;;;   not really useful, because on the run, the negate is used
