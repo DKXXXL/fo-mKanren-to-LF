@@ -1,6 +1,6 @@
 #lang racket
 (provide
-  ;;; (all-from-out "micro-fo.rkt")
+  (all-from-out "proof-term.rkt")
   (struct-out disj)
   (struct-out conj)
   (struct-out relate)
@@ -15,6 +15,7 @@
   mature?
   empty-state/fuel
   proof-term-construct
+  proof-check
   )
 
 ;;; (require struct-update)
