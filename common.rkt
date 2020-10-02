@@ -137,6 +137,10 @@
 ;;;   (let ((sub (unify/sub u v (state-sub st))))
 ;;;     (and sub (cons (state sub (state-trace st)) #f))))
 
+(define (check-against subst disjeq)
+  (void)
+)
+
 (define (unify u v st)
   (let ((sub (unify/sub u v (state-sub st))))
     (and sub (cons (state-sub-set st sub) #f))))
@@ -189,20 +193,29 @@
 ;;; dis-unification, we try to find the solution
 ;;;   for u =/= v
 (define (neg-unify u v st)
-  (let* (
-      [subst (state-sub st)]
-      [unification-info (unify u v st)]
-      [newly-added (extract-new unification-info subst)]
-          ;;; I should check unification result
+  (neg-unify* `((,u . ,v)) st)
+)
+
+;;; 
+(define (neg-unify* list-u-v st)
+  (match list-u-v
+    ['() #f]
+    [(cons (cons u v) rest) 
+        (let* (
+          [subst (state-sub st)]
+          [unification-info (unify/sub u v subst)]
+          [newly-added (extract-new unification-info subst)]
+              ;;; I should check unification result
          )
     (match newly-added
       ;;; 1. if unification fails, then st just returned
       [#f st]
       ;;; 2. 
-      ['() #f]
+      ['() (neg-unify* rest st)]
       ;;; 3. 
-      [(cons _ _) (state-diseq-update st (lambda (x) (cons newly-added x)))]
-
-    )       
+      [(cons _ _) 
+        (state-diseq-update st (lambda (x) (cons (append newly-added rest) x)))])       
+        )
+      ]
   )
 )
