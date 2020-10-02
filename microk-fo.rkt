@@ -82,6 +82,7 @@
     ((relate thunk _)
      (pause st (thunk)))
     ((== t1 t2) (unify t1 t2 st))
+    ((=/= t1 t2) (neg-unify t1 t2 st))
     ((ex _ gn) (start st gn))
     ))
 
@@ -146,3 +147,4 @@
     )
   )
 )
+

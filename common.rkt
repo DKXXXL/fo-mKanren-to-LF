@@ -14,7 +14,8 @@
   walk*
   unitize-metavar
   reify
-  reify/initial-var)
+  reify/initial-var
+  neg-unify)
 
 ;;; bear with it now.... let me search if there is
 ;;;  extensible record later
@@ -101,9 +102,11 @@
 (define (shadow-idempotent-sub x subst)
   (filter (lambda (pair) (not (equal? (car pair) x))) subst)
 )
-
-(struct state (sub trace direction) #:prefab)
-(define empty-state (state empty-sub '() '()))
+;;; sub -- list of substution 
+;;; diseq -- list of list of subsitution 
+;;;     -- interpreted as conjunction of disjunction of disequality 
+(struct state (sub trace direction diseq) #:prefab)
+(define empty-state (state empty-sub '() '() '()))
 (define-struct-updaters state)
 
 (define (trace-left st)
@@ -167,5 +170,39 @@
       [(cons a b) (cons (um a) (um b))]
       [x x]
     )
+  )
+)
+
+
+;;; subroutine : extract the added substiution
+;;;  or return #f if input is #f 
+;;; 
+(define (extract-new new original)
+  (and new
+    (if (eq? new original)
+    '()
+    (match new 
+      [(cons fst tail) (cons fst (extract-new tail original))])))
+)
+
+
+;;; dis-unification, we try to find the solution
+;;;   for u =/= v
+(define (neg-unify u v st)
+  (let* (
+      [subst (state-sub st)]
+      [unification-info (unify u v st)]
+      [newly-added (extract-new unification-info subst)]
+          ;;; I should check unification result
+         )
+    (match newly-added
+      ;;; 1. if unification fails, then st just returned
+      [#f st]
+      ;;; 2. 
+      ['() #f]
+      ;;; 3. 
+      [(cons _ _) (state-diseq-update st (lambda (x) (cons newly-added x)))]
+
+    )       
   )
 )
