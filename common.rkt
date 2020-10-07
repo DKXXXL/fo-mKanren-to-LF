@@ -15,7 +15,12 @@
   unitize-metavar
   reify
   reify/initial-var
-  neg-unify)
+  neg-unify
+  wrap-state-stream
+  check-asnumber
+  check-asstring
+  check-assymbol
+  )
 
 ;;; bear with it now.... let me search if there is
 ;;;  extensible record later
@@ -105,8 +110,9 @@
 ;;; sub -- list of substution 
 ;;; diseq -- list of list of subsitution 
 ;;;     -- interpreted as conjunction of disjunction of inequality 
-(struct state (sub trace direction diseq) #:prefab)
-(define empty-state (state empty-sub '() '() '()))
+;;; assymbol/asstring/asnumber are all a list of variables
+(struct state (sub trace direction diseq assymbol asstring asnumber) #:prefab)
+(define empty-state (state empty-sub '() '() '() '() '() '()))
 (define-struct-updaters state)
 
 (define (trace-left st)
@@ -137,16 +143,30 @@
 ;;;   (let ((sub (unify/sub u v (state-sub st))))
 ;;;     (and sub (cons (state sub (state-trace st)) #f))))
 
+(define (wrap-state-stream st) (and st (cons st #f)))
+
 
 (define (unify u v st)
   (let* ([sub (unify/sub u v (state-sub st))])
     (and sub
       (let* ([unified-state (state-sub-set st sub)]
              [all-diseq (state-diseq unified-state)]
-             [w/o-diseq (state-diseq-set unified-state '())]
-             [checked-state (foldl neg-unify* w/o-diseq all-diseq)])
-          
-        (and checked-state (cons checked-state #f))))
+             [all-symbol (state-assymbol unified-state)]
+             [all-number (state-asnumber unified-state)]
+             [all-string (state-asstring unified-state)]
+             [state-to-check (state (state-sub unified-state) '() '() '() '() '() '())]
+             )
+
+        ;;;  TODO: short-circuit the possible #f appearing inside foldl
+        (let*
+        ((state-to-check (foldl neg-unify* state-to-check all-diseq))
+         (state-to-check (and state-to-check
+                            (foldl check-assymbol state-to-check all-symbol)))
+         (state-to-check (and state-to-check
+                            (foldl check-asnumber state-to-check all-number)))
+         (state-to-check (and state-to-check
+                            (foldl check-asstring state-to-check all-string))))
+            (wrap-state-stream state-to-check))))
   ))
 
 ;; Reification
@@ -158,6 +178,8 @@
 (define (reified-index index)
   (string->symbol
     (string-append "_." (number->string index))))
+
+;;; initial version of reify, for future reference
 (define (reify tm st)
   (define index -1)
   (walk* tm (let loop ((tm tm) (sub (state-sub st)))
@@ -166,8 +188,37 @@
                     ((var? t)  (set! index (+ 1 index))
                                (extend-sub t (reified-index index) sub))
                     (else      sub)))))
+
+(define (reify-cst tm st)
+  (define index -1)
+  (define everything-to-print 
+    (list tm (state-diseq st)))
+  ;;; we need to fill in the un-restricted value, for example, (== x x)
+  ;;;   it means no restriction is required, and for them, _.0 as value will be ok
+  ;;;   the complicated loop below is to fill-in those un-restricted value
+  (define full-sub 
+    (let loop ((tm everything-to-print) (sub (state-sub st)))
+        (define t (walk tm sub))
+        (cond ((pair? t) (loop (cdr t) (loop (car t) sub)))
+              ((var? t)  (set! index (+ 1 index))
+                          (extend-sub t (reified-index index) sub))
+              (else      sub))))
+  (define tm-result (walk* tm full-sub))
+  (define conj-disj-diseqs 
+    ;;; TODO: pretty print it! 
+    (walk* (state-diseq st) full-sub)
+    )
+  
+  `(,tm-result : ≠ ,conj-disj-diseqs )
+  )           
 (define (reify/initial-var st)
   (reify initial-var st))
+
+;;; reify the variable toggether with the constraints
+;;; 
+(define (reify/initial-var/csts st)
+  (reify/initial-var st)
+)
 
 
 ;; Replace Meta-var inside term with Unit
@@ -236,11 +287,37 @@
 ;;; neg-unify* : given a list of list of pairs, indicating 
 ;;;   conjunction of disjunction of inequality, 
 ;;;    solve them according to the current state
-(define (neg-unify** list-list-u-v st)
-  (match list-list-u-v
-    ['() st]
-    [(cons head tail) 
-      (neg-unify** tail (neg-unify* head st))
-    ]
+;;; (define (neg-unify** list-list-u-v st)
+;;;   (match list-list-u-v
+;;;     ['() st]
+;;;     [(cons head tail) 
+;;;       (neg-unify** tail (neg-unify* head st))
+;;;     ]
+;;;   )
+;;; )
+
+;;; check-assymbol: term x state -> state
+;;; 
+(define (check-assymbol t st)
+  (match (walk* t (state-sub st))
+    [(? symbol?) st]
+    [(var _ index) (state-assymbol-update st (lambda (x) (cons index x)))]
+    [_ #f]
+  )
+)
+
+(define (check-asnumber t st)
+  (match (walk* t (state-sub st))
+    [(? number?) st]
+    [(var _ index) (state-asnumber-update st (lambda (x) (cons index x)) )]
+    [_ #f]
+  )
+)
+
+(define (check-asstring t st)
+  (match (walk* t (state-sub st))
+    [(? string?) st]
+    [(var _ index) (state-asstring-update st (lambda (x) (cons index x)))]
+    [_ #f]
   )
 )

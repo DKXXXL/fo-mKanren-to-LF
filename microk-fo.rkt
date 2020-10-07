@@ -7,6 +7,13 @@
   (struct-out ==)
   (struct-out =/=)
   (struct-out ex)
+  (struct-out forall)
+
+  ;;; type constraint, without dual ?
+  (struct-out symbolo)
+  (struct-out numbero)
+  (struct-out stringo)
+
   (struct-out mplus)
   (struct-out bind)
   (struct-out pause)
@@ -64,6 +71,24 @@
      (fprintf output-port "∀~a. ~a" (ex-varname val) (ex-g val)))]
 )
 
+(struct symbolo (t)
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "symbol? ~a" (symbolo-t val)))]
+)
+
+(struct numbero (t)
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "number? ~a" (numbero-t val)))]
+)
+
+(struct stringo (t)
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "string? ~a" (stringo-t val)))]
+)
+
 ;;; streams
 (struct bind   (bind-s bind-g)          #:prefab)
 (struct mplus  (mplus-s1 mplus-s2)      #:prefab)
@@ -86,6 +111,9 @@
      (pause st (thunk)))
     ((== t1 t2) (unify t1 t2 st))
     ((=/= t1 t2) (neg-unify t1 t2 st))
+    ((symbolo t1) (wrap-state-stream (check-assymbol t1 st)))
+    ((numbero t1) (wrap-state-stream (check-asnumber t1 st)))
+    ((stringo t1) (wrap-state-stream (check-asstring t1 st)))
     ((ex _ gn) (start st gn))
     ))
 
