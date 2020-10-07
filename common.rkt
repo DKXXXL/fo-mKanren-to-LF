@@ -104,7 +104,7 @@
 )
 ;;; sub -- list of substution 
 ;;; diseq -- list of list of subsitution 
-;;;     -- interpreted as conjunction of disjunction of disequality 
+;;;     -- interpreted as conjunction of disjunction of inequality 
 (struct state (sub trace direction diseq) #:prefab)
 (define empty-state (state empty-sub '() '() '()))
 (define-struct-updaters state)
@@ -137,13 +137,15 @@
 ;;;   (let ((sub (unify/sub u v (state-sub st))))
 ;;;     (and sub (cons (state sub (state-trace st)) #f))))
 
-(define (check-against subst disjeq)
-  (void)
-)
 
 (define (unify u v st)
-  (let ((sub (unify/sub u v (state-sub st))))
-    (and sub (cons (state-sub-set st sub) #f))))
+  (let* ([sub (unify/sub u v (state-sub st))]
+         [unified-state (and sub (state-sub-set st sub))]
+         [all-diseq (state-diseq unified-state)]
+         [w/o-diseq (state-diseq-set unified-state '())]
+         [checked-state (foldl neg-unify* st all-diseq)]
+         )
+    unified-state))
 
 ;; Reification
 (define (walk* tm sub)
@@ -196,7 +198,8 @@
   (neg-unify* `((,u . ,v)) st)
 )
 
-;;; 
+;;; neg-unify* : given a list of pairs, indicating 
+;;;   disjunction of inequality, solve them according to the current state
 (define (neg-unify* list-u-v st)
   (match list-u-v
     ['() #f]
@@ -208,14 +211,31 @@
               ;;; I should check unification result
          )
     (match newly-added
-      ;;; 1. if unification fails, then st just returned
+      ;;; 1. if unification fails, then inequality is just satisfied 
+      ;;;     st is directly returned
       [#f st]
-      ;;; 2. 
+      ;;; 2. if unification succeeded, this mean the current state cannot
+      ;;;     satisifies the inequality, let's consider the next possible-inequality
       ['() (neg-unify* rest st)]
-      ;;; 3. 
+      ;;; 3. if unification succeeded with extra condition
+      ;;;     that means inequality should succeed with extra condition
+      ;;;     we lazily put these things together and store into state
       [(cons _ _) 
         (state-diseq-update st (lambda (x) (cons (append newly-added rest) x)))])       
         )
       ]
+  )
+)
+
+
+;;; neg-unify* : given a list of list of pairs, indicating 
+;;;   conjunction of disjunction of inequality, 
+;;;    solve them according to the current state
+(define (neg-unify** list-list-u-v st)
+  (match list-list-u-v
+    ['() st]
+    [(cons head tail) 
+      (neg-unify** tail (neg-unify* head st))
+    ]
   )
 )
