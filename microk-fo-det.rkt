@@ -1,14 +1,7 @@
 #lang racket
 (provide
   (all-from-out "proof-term.rkt")
-  (struct-out disj)
-  (struct-out conj)
-  (struct-out relate)
-  (struct-out ==)
-  (struct-out ex)
-  (struct-out mplus)
-  (struct-out bind)
-  (struct-out pause)
+  (all-from-out "microk-fo.rkt")
   step
   mature
   mature/directed

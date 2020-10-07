@@ -196,12 +196,15 @@
 
 ;;; dis-unification, we try to find the solution
 ;;;   for u =/= v
+;;;   and return a list of state that satisfies the inequalities between u v
 (define (neg-unify u v st)
-  (neg-unify* `((,u . ,v)) st)
+  (let* ([result (neg-unify* (list `(,u . ,v)) st)])
+    (and result (cons result #f)))
 )
 
 ;;; neg-unify* : given a list of pairs, indicating 
 ;;;   disjunction of inequality, solve them according to the current state
+;;;   return a state that satisifies the disjunction of inequalities
 (define (neg-unify* list-u-v st)
   (match list-u-v
     ['() #f]

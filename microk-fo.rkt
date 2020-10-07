@@ -5,6 +5,7 @@
   (struct-out conj)
   (struct-out relate)
   (struct-out ==)
+  (struct-out =/=)
   (struct-out ex)
   (struct-out mplus)
   (struct-out bind)
@@ -54,7 +55,7 @@
 (struct =/= (t1 t2)
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "~a ≠ᴸ ~a" (==-t1 val) (==-t2 val)))]
+     (fprintf output-port "~a ≠ᴸ ~a" (=/=-t1 val) (=/=-t2 val)))]
 )
 
 (struct forall (varname g)
@@ -68,9 +69,11 @@
 (struct mplus  (mplus-s1 mplus-s2)      #:prefab)
 (struct pause  (pause-state pause-goal) #:prefab)
 
-(define (mature? s) (or (not s) (pair? s)))
+(define (mature? s) 
+    (or (not s) (pair? s)))
 (define (mature s)
-  (if (mature? s) s (mature (step s))))
+    (if (mature? s) s (mature (step s))))
+  
 
 (define (start st g)
   (match g
