@@ -139,13 +139,15 @@
 
 
 (define (unify u v st)
-  (let* ([sub (unify/sub u v (state-sub st))]
-         [unified-state (and sub (state-sub-set st sub))]
-         [all-diseq (state-diseq unified-state)]
-         [w/o-diseq (state-diseq-set unified-state '())]
-         [checked-state (foldl neg-unify* st all-diseq)]
-         )
-    unified-state))
+  (let* ([sub (unify/sub u v (state-sub st))])
+    (and sub
+      (let* ([unified-state (state-sub-set st sub)]
+             [all-diseq (state-diseq unified-state)]
+             [w/o-diseq (state-diseq-set unified-state '())]
+             [checked-state (foldl neg-unify* w/o-diseq all-diseq)])
+          
+        (and checked-state (cons checked-state #f))))
+  ))
 
 ;; Reification
 (define (walk* tm sub)
