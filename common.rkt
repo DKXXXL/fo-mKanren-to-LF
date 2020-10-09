@@ -301,7 +301,12 @@
 (define (check-assymbol t st)
   (match (walk* t (state-sub st))
     [(? symbol?) st]
-    [(var _ index) (state-assymbol-update st (lambda (x) (cons index x)))]
+    [(var _ index) 
+        (if (member index (state-assymbol st)) 
+            st
+            (if (or (member index (state-asnumber st)) (member index (state-asstring st)))
+              #f
+              (state-assymbol-update st (lambda (x) (cons index x)))))]
     [_ #f]
   )
 )
@@ -309,7 +314,12 @@
 (define (check-asnumber t st)
   (match (walk* t (state-sub st))
     [(? number?) st]
-    [(var _ index) (state-asnumber-update st (lambda (x) (cons index x)) )]
+    [(var _ index) 
+        (if (member index (state-asnumber st)) 
+            st
+            (if (or (member index (state-assymbol st)) (member index (state-asstring st)))
+              #f
+              (state-asnumber-update st (lambda (x) (cons index x)))))]
     [_ #f]
   )
 )
@@ -317,7 +327,13 @@
 (define (check-asstring t st)
   (match (walk* t (state-sub st))
     [(? string?) st]
-    [(var _ index) (state-asstring-update st (lambda (x) (cons index x)))]
+    [(var _ index) 
+        (if (member index (state-asstring st)) 
+            st
+            (if (or (member index (state-assymbol st)) (member index (state-asnumber st)))
+              #f
+              (state-asstring-update st (lambda (x) (cons index x)))))]
     [_ #f]
   )
 )
+
