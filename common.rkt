@@ -17,9 +17,7 @@
   reify/initial-var
   neg-unify
   wrap-state-stream
-  check-asnumber
-  check-asstring
-  check-assymbol
+  check-as
   )
 
 ;;; bear with it now.... let me search if there is
@@ -111,8 +109,11 @@
 ;;; diseq -- list of list of subsitution 
 ;;;     -- interpreted as conjunction of disjunction of inequality 
 ;;; assymbol/asstring/asnumber are all a list of variables
-(struct state (sub trace direction diseq assymbol asstring asnumber) #:prefab)
-(define empty-state (state empty-sub '() '() '() '() '() '()))
+;;;   to indicate disjoint sets
+;;;   typercd : a dictionary index -> type-encoding 
+;;;     "as disjunction of possible types"
+(struct state (sub trace direction diseq typercd) #:prefab)
+(define empty-state (state empty-sub '() '() '() (hash)))
 (define-struct-updaters state)
 
 (define (trace-left st)
@@ -147,27 +148,32 @@
 
 
 (define (unify u v st)
-  (let* ([sub (unify/sub u v (state-sub st))])
+  (let* ([sub (unify/sub u v (state-sub st))]
+         [htable (state-typercd st)])
     (and sub
       (let* ([unified-state (state-sub-set st sub)]
-             [all-diseq (state-diseq unified-state)]
-             [all-symbol (state-assymbol unified-state)]
-             [all-number (state-asnumber unified-state)]
-             [all-string (state-asstring unified-state)]
-             [state-to-check (state (state-sub unified-state) '() '() '() '() '() '())]
-             )
-
+              ;;;  sub : var -> term
+              ;;;   term -> type
+              ;;;  check
+              [new-subst (extract-new sub (state-sub st))]
+              ;;;  extract newly added variables
+              ;;;  [(u v), (j k)]
+              [new-vars (map car new-subst)]
+              [new-vars-indices (map var-index new-vars)]
+              ;;; TODO: unifies the representation
+              [new-vars-types (map (lambda (x) (hash-ref htable x #f) ) new-vars-indices)]
+              [erased-htable (foldl (lambda (index htable) (hash-remove htable index)) htable new-vars-indices)]
+              [erased-type-state (state-typercd-set unified-state erased-htable)]
+              [checked-type-state (foldl check-as 
+                                         erased-type-state 
+                                         new-vars-types new-vars)]
+              [all-diseq (and checked-type-state 
+                          (state-diseq checked-type-state))])
         ;;;  TODO: short-circuit the possible #f appearing inside foldl
-        (let*
-        ((state-to-check (foldl neg-unify* state-to-check all-diseq))
-         (state-to-check (and state-to-check
-                            (foldl check-assymbol state-to-check all-symbol)))
-         (state-to-check (and state-to-check
-                            (foldl check-asnumber state-to-check all-number)))
-         (state-to-check (and state-to-check
-                            (foldl check-asstring state-to-check all-string))))
-            (wrap-state-stream state-to-check))))
-  ))
+
+        (and all-diseq
+          (wrap-state-stream (foldl neg-unify* checked-type-state all-diseq)))
+  ))))
 
 ;; Reification
 (define (walk* tm sub)
@@ -296,44 +302,23 @@
 ;;;   )
 ;;; )
 
-;;; check-assymbol: term x state -> state
-;;; 
-(define (check-assymbol t st)
-  (match (walk* t (state-sub st))
-    [(? symbol?) st]
-    [(var _ index) 
-        (if (member index (state-assymbol st)) 
-            st
-            (if (or (member index (state-asnumber st)) (member index (state-asstring st)))
-              #f
-              (state-assymbol-update st (lambda (x) (cons index x)))))]
-    [_ #f]
-  )
+;;; check-as: type-predicate x term x state -> state
+;;;  currently it will use predicate as marker
+;;;  if type-predicate == #f, then state unchanged returned
+(define (check-as type? t st)
+  (and st
+    (if type? 
+      (match (walk* t (state-sub st))
+        [(? type?) st]
+        [(var _ index) 
+          ;;; check if there is already typercd for index on symbol
+          (let* ([htable (state-typercd st)]
+                [type-info (hash-ref htable index #f)]
+                )
+            (if type-info
+              (if (eq? type-info type?) st #f)
+              (state-typercd-update st (lambda (x) (hash-set x index type?)))))]
+        [_ #f])
+      st
+    ))
 )
-
-(define (check-asnumber t st)
-  (match (walk* t (state-sub st))
-    [(? number?) st]
-    [(var _ index) 
-        (if (member index (state-asnumber st)) 
-            st
-            (if (or (member index (state-assymbol st)) (member index (state-asstring st)))
-              #f
-              (state-asnumber-update st (lambda (x) (cons index x)))))]
-    [_ #f]
-  )
-)
-
-(define (check-asstring t st)
-  (match (walk* t (state-sub st))
-    [(? string?) st]
-    [(var _ index) 
-        (if (member index (state-asstring st)) 
-            st
-            (if (or (member index (state-assymbol st)) (member index (state-asnumber st)))
-              #f
-              (state-asstring-update st (lambda (x) (cons index x)))))]
-    [_ #f]
-  )
-)
-

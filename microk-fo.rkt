@@ -74,14 +74,28 @@
 (struct symbolo (t)
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "symbol? ~a" (symbolo-t val)))]
+     (fprintf output-port "symbol ~a" (symbolo-t val)))]
 )
+
+(struct not-symbolo (t)
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "not-symbol ~a" (symbolo-t val)))]
+)
+
 
 (struct numbero (t)
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "number? ~a" (numbero-t val)))]
 )
+
+(struct not-numbero (t)
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "number? ~a" (numbero-t val)))]
+)
+
 
 (struct stringo (t)
   #:methods gen:custom-write
@@ -111,9 +125,9 @@
      (pause st (thunk)))
     ((== t1 t2) (unify t1 t2 st))
     ((=/= t1 t2) (neg-unify t1 t2 st))
-    ((symbolo t1) (wrap-state-stream (check-assymbol t1 st)))
-    ((numbero t1) (wrap-state-stream (check-asnumber t1 st)))
-    ((stringo t1) (wrap-state-stream (check-asstring t1 st)))
+    ((symbolo t1) (wrap-state-stream (check-as symbol? t1 st)))
+    ((numbero t1) (wrap-state-stream (check-as number? t1 st)))
+    ((stringo t1) (wrap-state-stream (check-as string? t1 st)))
     ((ex _ gn) (start st gn))
     ))
 
@@ -179,3 +193,16 @@
   )
 )
 
+
+;;; (define (single-rewrite prop)
+;;;   (match g
+;;;     [(disj a a) a]
+;;;     [(conj a a) a]
+;;;   )
+;;; )
+
+;;; (define (prop-simplification prop)
+;;;   (match prop
+;;;     [(disj a a) ]
+;;;   )
+;;; )
