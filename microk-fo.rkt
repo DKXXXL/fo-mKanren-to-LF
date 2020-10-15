@@ -80,28 +80,58 @@
 (struct not-symbolo (t)
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "not-symbol ~a" (symbolo-t val)))]
+     (fprintf output-port "not-symbol ~a" (not-symbolo-t val)))]
 )
 
 
 (struct numbero (t)
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "number? ~a" (numbero-t val)))]
+     (fprintf output-port "number ~a" (numbero-t val)))]
 )
 
 (struct not-numbero (t)
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "number? ~a" (numbero-t val)))]
+     (fprintf output-port "not-number ~a" (not-numbero-t val)))]
 )
 
 
 (struct stringo (t)
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "string? ~a" (stringo-t val)))]
+     (fprintf output-port "string ~a" (stringo-t val)))]
 )
+
+(struct not-stringo (t)
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "not-string ~a" (not-stringo-t val)))]
+)
+
+
+;;; haven't decided introduce or not
+;;;   details in domain-exhausitive check
+(struct pairo (t)
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "not-string ~a" (not-stringo-t val)))]
+)
+
+
+(struct Top ()
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "⊤" (not-stringo-t val)))]
+)
+
+
+(struct Bottom ()
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "⊥" (not-stringo-t val)))]
+)
+
 
 ;;; streams
 (struct bind   (bind-s bind-g)          #:prefab)
@@ -174,12 +204,8 @@
   )
 )
 
-;;; trivially negate the goal
-;;;   not really useful, because on the run, the negate is used
-;;;   on a subsitution map together with some other things
-;;;  I currently don't know how to implement
-;;;  and I think something like forall-bound is needed, but it currenty
-;;;   isn't defined here, and the dual is ugly for it as well
+;;; trivially negate the goal, relies on the fact that
+;;;  we have a dualized goals
 (define (complement g)
   (let ([c complement])
     (match g
@@ -189,20 +215,63 @@
       [(== t1 t2) (=/= t1 t2)]
       [(ex a gn) (forall a (c gn))]
       [(forall a gn) (ex a (c gn))]
+      [(numbero t) (not-numbero t)]
+      [(not-numbero t) (numbero t)]
+      [(stringo t) (not-stringo t)]
+      [(not-stringo t) (stringo t)]
+      [(symbolo t) (not-symbolo t)]
+      [(not-symbolo t) (symbolo t)]
+      [(Top) (Bottom)]
+      [(Bottom) (Top)]
     )
   )
 )
 
 
-;;; (define (single-rewrite prop)
-;;;   (match g
-;;;     [(disj a a) a]
-;;;     [(conj a a) a]
-;;;   )
-;;; )
+;;; following is a none opaque decision procedure for exhaustive domain checking
+;;;   one day it needs to be translate to corresponding LF-term 
+;;;   for credentials
 
-;;; (define (prop-simplification prop)
-;;;   (match prop
-;;;     [(disj a a) ]
-;;;   )
-;;; )
+
+;;; not-symbolo will be translated into (numbero v stringo v pairo)
+(define (remove-neg-by-decidability goal)
+  (void)
+)
+
+;;; simplify goal w.r.t. a domain variable, constant parameters acceptable
+;;;   do nothing on higher-order goal (for example, the ex and forall)
+;;;   higher-order goal is not likely to happen as the answer for each run 
+;;;     doesn't have exists/forall as result
+;;;  this procedure currently is 
+;;; 0. it will directly evaluate the constraints only on constant parameters
+;;;     because they are constants, and every atomic statement now is decidable
+;;; 1. it will first transform each not-TYPEO into a disjunction of TYPEO, 
+;;;     and we will introduce existential quantifier for pairo
+;;; 2. it will then transform into disjunctive normal form, "higher-order goals" (pairo)
+;;;  are just considered as a whole
+;;;     Note: we should be able to control the shape of "higher-order  goals" to make sure
+;;;       it won't be arbitrarily complicated, so that syntactical level simplification can
+;;;       still be effective...
+;;; 3. for each conjunction component, we will do simiplification
+;;;  3.1 by first sort all the constraints -- equality constraint is at the beginning 
+;;;     and then type constraints 
+;;;     and then inequality, and then it is the higher-order goals (pairo)
+;;;  3.2 then we do simplification on each conjunctive component
+;;; 4. then we sort the disjunctive list of conjunction component (and do simplification?)
+;;;   4.1 we don't quite care about the disjunction actually, as long as not all of conjunctive
+;;;   component is bottom, then we should continue the search (domain is non-empty)
+;;;  the main goal is to evaluate the "goal" into Bottom as much as possible
+;;;   it is mainly used for domain exhaustive check
+(define (simplify-wrt goal dv dec-constant-statement)
+  (void)
+)
+;;; simplify list of goal
+;;;  given a list of goals indicating the conjunction of goals
+;;;     each goal has to be atomic (i.e. no conjunction inside)
+;;;    we will do simplification with respect to a single dv (domain-variables)
+;;;   other variables will be considered as constant, and thus they should be 
+;;;     evaluated to Bottom or Top immediately
+;;;     as currently every atomic statement is decidable
+;;;  currently it is at least O(n^2), there is definitely optimization
+;;;    
+
