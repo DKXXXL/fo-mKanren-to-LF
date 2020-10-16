@@ -65,7 +65,7 @@
      (fprintf output-port "~a ≠ᴸ ~a" (=/=-t1 val) (=/=-t2 val)))]
 )
 
-(struct forall (varname g)
+(struct forall (varname domain g)
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "∀~a. ~a" (ex-varname val) (ex-g val)))]
@@ -112,11 +112,11 @@
 
 ;;; haven't decided introduce or not
 ;;;   details in domain-exhausitive check
-(struct pairo (t)
-  #:methods gen:custom-write
-  [(define (write-proc val output-port output-mode)
-     (fprintf output-port "not-string ~a" (not-stringo-t val)))]
-)
+;;; (struct pairo (t)
+;;;   #:methods gen:custom-write
+;;;   [(define (write-proc val output-port output-mode)
+;;;      (fprintf output-port "not-string ~a" (not-stringo-t val)))]
+;;; )
 
 
 (struct Top ()
@@ -133,16 +133,71 @@
 )
 
 
+;;; Denote Goal-EndoFunctor type as
+;;;      (goal -> goal) -> (goal -> goal) -> goal -> goal
+;;; extensible function on pattern matching
+;;;  pretentious "endofunctor" just means it maps goal to goal
+;;; goal-base-endofunctor : (goal -> goal) -> (goal -> goal) -> goal -> goal
+;;;  prev-f will call the one on the past overloading functor
+;;;   extended-f will use the whole composed functor
+;;;  this functor will do nothing but recurse on the tree
+(define (goal-base-endofunctor prev-f extended-f g)
+  (define rec extended-f)
+  (match g
+    [(disj a b) (disj (rec a) (rec b))]
+    [(conj a b) (conj (rec a) (rec b))]
+    [(ex v g) (ex v (rec g))]
+    [(forall v b g) (ex v (rec v) (rec g))]
+    [_ g] ;; otherwise do nothing
+  )
+)
+
+(define (goal-identity g) g)
+
+
+;;; this one basically can help me solve the expression problem
+;;;   I can extend state as I want now  
+;;; [(goal -> goal) -> (goal -> goal) -> goal -> goal] -> (goal -> goal)
+(define (overloading-functor-list endofuncs)
+  (define (overloading-functor-list-with-extf endofuncs extf)
+    (match endofuncs
+      [(cons fst then)
+        (let* ([prev-f (overloading-functor-list-with-extf then extf)])
+          (lambda (g) (fst prev-f extf g))
+        )]
+      ['() goal-identity]
+    )
+  )
+  (define (resultf g)
+    (overloading-functor-list-with-extf endofuncs resultf))
+  resultf
+)
+
 ;;; streams
 (struct bind   (bind-s bind-g)          #:prefab)
 (struct mplus  (mplus-s1 mplus-s2)      #:prefab)
 (struct pause  (pause-state pause-goal) #:prefab)
+
+
+;;; the special stream only used for forall
+;;;   all the possibe results of first-attempt-s
+;;;   will be complemented and intersect with the domain of the bind-g
+;;;   bind-g will have to be a forall goal
+(struct bind-forall   (first-attempt-s bind-g)          #:prefab)
+
 
 (define (mature? s) 
     (or (not s) (pair? s)))
 (define (mature s)
     (if (mature? s) s (mature (step s))))
   
+(define (total-mature s)
+  (match s
+    [(cons a b) (cons a (total-mature b))]
+    [#f #f]
+  )
+)
+
 
 (define (start st g)
   (match g
@@ -159,6 +214,19 @@
     ((numbero t1) (wrap-state-stream (check-as number? t1 st)))
     ((stringo t1) (wrap-state-stream (check-as string? t1 st)))
     ((ex _ gn) (start st gn))
+    ;;; forall is tricky, 
+    ;;;   we first use simplification to
+    ;;;   we first need to consider forall as just another fresh
+    ;;;   and "bind" the complement of result to the nexttime forall as domain
+    ;;;   
+    ((forall var domain goal) 
+      (let* [(domain_ (simplify-wrt domain var (void)))] 
+        (if (equal? domain_ False) 
+          (wrap-state-stream st)
+          (bind-forall (start st (ex var (conj domain goal))) g)
+        )
+      )
+    )
     ))
 
 (define (step s)
@@ -177,6 +245,14 @@
               (step (mplus (pause (car s) g)
                            (bind (cdr s) g))))
              (else (bind s g)))))
+    ;;; bind-forall is a bit complicated
+    ;;;   it will first need to collect all possible solution of
+    ;;;   s, and complement it, and intersect with 
+    ((bind-forall s (forall v domain goal))
+      (let* [] 
+
+      )
+    )
     ((pause st g) (start st g))
     (_            s)))
 
@@ -233,9 +309,16 @@
 ;;;   for credentials
 
 
+;;; the following two requires some design pattern.
+;;;  I am doing too much traversal
+
 ;;; not-symbolo will be translated into (numbero v stringo v pairo)
 (define (remove-neg-by-decidability goal)
-  (void)
+  (define (match-single g)
+    (match g
+      [(not-symbolo x) ]
+    )
+  )
 )
 
 ;;; simplify goal w.r.t. a domain variable, constant parameters acceptable
@@ -275,3 +358,42 @@
 ;;;  currently it is at least O(n^2), there is definitely optimization
 ;;;    
 
+;;; map each label into a higher order goal constructor
+;;; LABEL -> (term -> goal)
+;;;  for example, predicate "number?" will be mapped to numbero
+(define (label-to-goal label)
+  (match label
+    [number? numbero]
+    []
+  )
+)
+
+;;; map a list of labels to disjunctive of goal constructor
+;;; "Set of LABEL" -> (term -> goal)
+;;;  used when typercd encode disjunction of types
+(define (labels-to-goal labels) 
+  ;;; disjunc : (term -> goal) x (term -> goal) -> (term -> goal)
+  (define (disjunc f g) (lambda (term) (disj (f term) (g term))))
+  (define disjunc-id (lambda (term) Bottom))
+  (foldl disjunc disjunc-id (map labels labels)))
+
+;;; this function will translate state into goals
+(define (state-to-goal st)
+  (let* ([sub (state-sub st)]
+         [eqs-goal (foldl (lambda (p g) (conj (== (car p) (cdr p)) g)) 
+                     Top sub)]
+         [diseq (state-diseq st)]
+        ;;;  recall diseq is list of list of pairs
+        ;;;   indicating disjunction of conjunction of inequality
+            [conj-diseq-fold 
+              (lambda (l) (foldl (lambda (p g) (conj (=/= (car p) (cdr p)) g)) Top l))]
+            [disj-conj-diseq-fold
+              (lambda (l) (foldl (lambda (lp g) (disj (conj-diseq-fold lp) g)) Bottom l))]
+         [diseqs-goal (disj-conj-diseq-fold diseq)]
+         [type-dict (state-typercd st)]
+         [type-pairs (hash->list type-dict)]
+         [type-goals (foldl )]
+         )
+
+  )
+)
