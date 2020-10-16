@@ -17,7 +17,9 @@
   reify/initial-var
   neg-unify
   wrap-state-stream
+  check-as-disj
   check-as
+  type-label-top
   )
 
 ;;; bear with it now.... let me search if there is
@@ -105,6 +107,16 @@
 (define (shadow-idempotent-sub x subst)
   (filter (lambda (pair) (not (equal? (car pair) x))) subst)
 )
+
+(define (true? v) (equal? v #t))
+(define (false? v) (equal? v #f))
+;;; (null? '() )
+
+(define type-label-top (list true? false? null? pair? number? string? symbol?))
+;;; TODO: if all of the elements in type set are for the finite, 
+;;;   then inequality might cause trouble  
+;;;   for example, (exists x y z.) they are all different, they are all booleans
+
 ;;; sub -- list of substution 
 ;;; diseq -- list of list of subsitution 
 ;;;     -- interpreted as conjunction of disjunction of inequality 
@@ -112,6 +124,7 @@
 ;;;   to indicate disjoint sets
 ;;;   typercd : a dictionary index -> type-encoding 
 ;;;     "as disjunction of possible types"
+;;;   
 (struct state (sub trace direction diseq typercd) #:prefab)
 (define empty-state (state empty-sub '() '() '() (hash)))
 (define-struct-updaters state)
@@ -164,6 +177,8 @@
               [new-vars-types (map (lambda (x) (hash-ref htable x #f) ) new-vars-indices)]
               [erased-htable (foldl (lambda (index htable) (hash-remove htable index)) htable new-vars-indices)]
               [erased-type-state (state-typercd-set unified-state erased-htable)]
+              ;;; TODO: check-as-disj might have corner 
+              ;;;   case where first element is null
               [checked-type-state (foldl check-as 
                                          erased-type-state 
                                          new-vars-types new-vars)]
@@ -263,7 +278,7 @@
 ;;;   disjunction of inequality, solve them according to the current state
 ;;;   return a state that satisifies the disjunction of inequalities
 (define (neg-unify* list-u-v st)
-  (match list-u-v
+  (match list-u-v 
     ['() #f]
     [(cons (cons u v) rest) 
         (let* (
@@ -271,6 +286,7 @@
           [unification-info (unify/sub u v subst)]
           [newly-added (extract-new unification-info subst)]
               ;;; I should check unification result
+          
          )
     (match newly-added
       ;;; 1. if unification fails, then inequality is just satisfied 
@@ -302,23 +318,27 @@
 ;;;   )
 ;;; )
 
-;;; check-as: type-predicate x term x state -> state
+;;; check-as-disj: List[type-predicate] x term x state -> state
 ;;;  currently it will use predicate as marker
 ;;;  if type-predicate == #f, then state unchanged returned
-(define (check-as type? t st)
-  (and st
-    (if type? 
-      (match (walk* t (state-sub st))
-        [(? type?) st]
+;;;  precondition: type?* is never #f, st is never #f
+(define (check-as-disj type?* t st)
+  (match (walk* t (state-sub st))
         [(var _ index) 
           ;;; check if there is already typercd for index on symbol
           (let* ([htable (state-typercd st)]
-                [type-info (hash-ref htable index #f)]
-                )
+                 [type-info (hash-ref htable index #f)])
             (if type-info
-              (if (eq? type-info type?) st #f)
-              (state-typercd-update st (lambda (x) (hash-set x index type?)))))]
-        [_ #f])
-      st
-    ))
+              ;;; type-info is a set of predicates
+              ;;;  disjunction of type is conflicting
+              (let* ([intersected (set-intersect type-info type?*)])
+                (and (pair? intersected)
+                  (state-typercd-update st (lambda (x) (hash-set x index intersected))))
+              )
+              (state-typercd-update st (lambda (x) (hash-set x index type?*)))))]
+
+        [v (and (ormap (lambda (x?) (x? v)) type?*) st)])
+      
 )
+
+(define (check-as type? t st) (check-as-disj (list type?) t st))

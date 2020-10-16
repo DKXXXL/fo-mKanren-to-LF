@@ -197,7 +197,7 @@
 ;;;   all the possibe results of first-attempt-s
 ;;;   will be complemented and intersect with the domain of the bind-g
 ;;;   bind-g will have to be a forall goal
-(struct bind-forall   (first-attempt-s bind-g)          #:prefab)
+(struct bind-forall   (first-attempt-s dv bind-g)          #:prefab)
 
 
 (define (mature? s) 
@@ -225,8 +225,11 @@
     ((== t1 t2) (unify t1 t2 st))
     ((=/= t1 t2) (neg-unify t1 t2 st))
     ((symbolo t1) (wrap-state-stream (check-as symbol? t1 st)))
+    ((not-symbolo t1) (wrap-state-stream (check-as-disj (remove symbol? type-label-top) t1 st)) )
     ((numbero t1) (wrap-state-stream (check-as number? t1 st)))
+    ((not-numbero t1) (wrap-state-stream (check-as-disj (remove number? type-label-top) t1 st)) )
     ((stringo t1) (wrap-state-stream (check-as string? t1 st)))
+    ((not-stringo t1) (wrap-state-stream (check-as-disj (remove string? type-label-top) t1 st)) )
     ((ex _ gn) (start st gn))
     ;;; forall is tricky, 
     ;;;   we first use simplification to
@@ -237,7 +240,7 @@
       (let* [(domain_ (simplify-wrt domain var (void)))] 
         (if (equal? domain_ False) 
           (wrap-state-stream st)
-          (bind-forall (start st (ex var (conj domain goal))) g)
+          (bind-forall (start st (ex var (conj domain goal))) var goal)
         )
       )
     )
@@ -262,11 +265,13 @@
     ;;; bind-forall is a bit complicated
     ;;;   it will first need to collect all possible solution of
     ;;;   s, and complement it, and intersect with 
-    ((bind-forall s (forall v domain goal))
-      (let* [] 
-
-      )
-    )
+    ((bind-forall s v g)
+     (let ((s (if (mature? s) s (step s))))
+       (cond ((not s) #f)
+             ((pair? s)
+              (step (mplus (pause (car s) g)
+                           (bind-forall (cdr s) v g))))
+             (else (bind-forall s v g)))))
     ((pause st g) (start st g))
     (_            s)))
 
