@@ -173,6 +173,20 @@
   resultf
 )
 
+;;; currently implemented with side-effect,
+;;;   it is another kind of fold but I am bad at recursion scheme
+;;;   basically return all free-variables
+(define (freevar g)
+  (define fvs (mutable-set))
+  ;;; (define (counter prev-f ext-f g)
+  ;;;   (match g
+  ;;;     []
+  ;;;     [_ (prev-f g)]
+  ;;;   )
+  ;;; )
+  (void)
+)
+
 ;;; streams
 (struct bind   (bind-s bind-g)          #:prefab)
 (struct mplus  (mplus-s1 mplus-s2)      #:prefab)
@@ -312,13 +326,20 @@
 ;;; the following two requires some design pattern.
 ;;;  I am doing too much traversal
 
-;;; not-symbolo will be translated into (numbero v stringo v pairo)
-(define (remove-neg-by-decidability goal)
-  (define (match-single g)
+(define (pairo x) (disj (== x '()) (fresh (y z) (== x (cons y z)))))
+(define (boolo x) (disj (== x #t) (== x #f)))
+
+;;; not-symbolo will be translated into (numbero v stringo v pairo v boolo)
+(define remove-neg-by-decidability
+  (define (match-single prev-f ext-f g)
     (match g
-      [(not-symbolo x) ]
+      [(not-symbolo x) (disj (pairo x) (boolo x) (numbero x) (stringo x))]
+      [(not-numbero x) (disj (pairo x) (boolo x) (symbolo x) (stringo x))]
+      [(not-stringo x) (disj (pairo x) (boolo x) (numbero x) (symbolo x))]
+      [_ (prev-f g)]
     )
   )
+  (overloading-functor-list (list match-single goal-base-endofunctor))
 )
 
 ;;; simplify goal w.r.t. a domain variable, constant parameters acceptable
@@ -346,7 +367,17 @@
 ;;;  the main goal is to evaluate the "goal" into Bottom as much as possible
 ;;;   it is mainly used for domain exhaustive check
 (define (simplify-wrt goal dv dec-constant-statement)
-  (void)
+  ;;; we first assume step 0 is ensured -- 
+  ;;;  no statement component has cosntant
+  ;;; step 1:
+  (define goal-removed-neg-type-csts (remove-neg-by-decidability goal))
+
+  ;;; step 2: transform into disjunctive normal form
+  ;;;     that is a list of list of atomic statement
+  (define (match-single-disj-conj prev-f ))
+  ;;; step 3: deal with each conjunction
+  ;;;  step 3.1: sort
+  (define (match-simple-conjunction))
 )
 ;;; simplify list of goal
 ;;;  given a list of goals indicating the conjunction of goals
