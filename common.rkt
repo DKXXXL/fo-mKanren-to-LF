@@ -299,9 +299,38 @@
       ;;;     that means inequality should succeed with extra condition
       ;;;     we lazily put these things together and store into state
       [(cons _ _) 
-        (state-diseq-update st (lambda (x) (cons (append newly-added rest) x)))])       
+        (state-diseq-update st (lambda (x) (cons (append newly-added rest) x)))
+        ])       
         )
       ]
+  )
+)
+
+(define (neg-unify-with-typeinfo* list-u-v st)
+  (define (compute-newly-added u-v)
+    (let* ([subst (state-sub st)]
+           [unification-info (unify/sub (car u-v) (cdr u-v) subst)]
+           [newly-added (extract-new unification-info subst)])
+      newly-added      
+    )
+  )
+
+  (let* ([list-newly-adds-on-each-u-vs (map compute-newly-added list-u-v)]
+         )
+    (if (ormap not list-newly-adds-on-each-u-vs) 
+      st
+      (match (append* list-newly-adds-on-each-u-vs)
+      ['() #f]
+      [(list (cons u #f)) (check-as-disj (remove false? type-label-top) u st)]
+      ;;; TODO: #t, '()
+      ;;;  we need to upgrade inequality into type constraint
+      [_
+       (state-diseq-update st (lambda (x) (cons new-adds-on-all x)))
+      ]
+    )
+  )
+
+
   )
 )
 
@@ -332,6 +361,7 @@
               ;;; type-info is a set of predicates
               ;;;  disjunction of type is conflicting
               (let* ([intersected (set-intersect type-info type?*)])
+              ;;;  TODO: we need to downgrade the type constraints into equality
                 (and (pair? intersected)
                   (state-typercd-update st (lambda (x) (hash-set x index intersected))))
               )
