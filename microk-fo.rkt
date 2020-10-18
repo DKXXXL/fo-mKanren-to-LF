@@ -224,12 +224,12 @@
      (pause st (thunk)))
     ((== t1 t2) (unify t1 t2 st))
     ((=/= t1 t2) (neg-unify t1 t2 st))
-    ((symbolo t1) (wrap-state-stream (check-as symbol? t1 st)))
-    ((not-symbolo t1) (wrap-state-stream (check-as-disj (remove symbol? type-label-top) t1 st)) )
-    ((numbero t1) (wrap-state-stream (check-as number? t1 st)))
-    ((not-numbero t1) (wrap-state-stream (check-as-disj (remove number? type-label-top) t1 st)) )
-    ((stringo t1) (wrap-state-stream (check-as string? t1 st)))
-    ((not-stringo t1) (wrap-state-stream (check-as-disj (remove string? type-label-top) t1 st)) )
+    ((symbolo t1)  (check-as symbol? t1 st))
+    ((not-symbolo t1) (check-as-disj (remove symbol? type-label-top) t1 st)) 
+    ((numbero t1) (check-as number? t1 st))
+    ((not-numbero t1)  (check-as-disj (remove number? type-label-top) t1 st)) 
+    ((stringo t1) (check-as string? t1 st))
+    ((not-stringo t1)  (check-as-disj (remove string? type-label-top) t1 st))
     ((ex _ gn) (start st gn))
     ;;; forall is tricky, 
     ;;;   we first use simplification to
@@ -237,7 +237,7 @@
     ;;;   and "bind" the complement of result to the nexttime forall as domain
     ;;;   
     ((forall var domain goal) 
-      (let* [(domain_ (simplify-wrt domain var (void)))] 
+      (let* [(domain_ (simplify-wrt st domain var (void)))] 
         (if (equal? domain_ False) 
           (wrap-state-stream st)
           (bind-forall (start st (ex var (conj domain goal))) var goal)
@@ -265,13 +265,40 @@
     ;;; bind-forall is a bit complicated
     ;;;   it will first need to collect all possible solution of
     ;;;   s, and complement it, and intersect with 
-    ((bind-forall s v g)
+    ((bind-forall s v (forall v domain goal))
      (let ((s (if (mature? s) s (step s))))
-       (cond ((not s) #f)
-             ((pair? s)
-              (step (mplus (pause (car s) g)
-                           (bind-forall (cdr s) v g))))
-             (else (bind-forall s v g)))))
+       (cond 
+        ;;; unsatisfiable, then the whole is unsatisfiable
+        ((not s) #f)
+        ;;; possible to satisfy! we complement this current requirement/condition
+        ;;;  to initiate the search for the remaining domain
+        ;;;  and the same time, other possible 
+
+        ;;;   to initiate the search for remaining domain is hard: 
+        ;;;   1. we use the result for the previous search, and complement only on v 
+        ;;;       (because all other vars should be fixed)
+        ;;;     1.a but to complement on v, it is hard because state has disjunction of conjunction of inequality
+        ;;;     1.b so we make state "pair s" into "pair s_" s
+        ;;;           .t. (car s_) has only conjunction of inequality about v or just unchanged (if no inequality about v)
+        ;;;           "stream-rearrange-to-first-about"
+        ;;;     1.c then we can take complement -- 
+        ;;;         by first extract info about v from (car s_) into goals "to-complement"
+        ;;;         and then remove info about v from (car s_) into 
+        ;;;   2. after complement, we just conjunction the domain with original forall's domain and (pause st g)
+        ((pair? s)
+            (let* ([s (stream-rearrange-to-first-about v s)] 
+                  ;; now (car s_) must have just one element in disjunction of conjunction of inequality
+                   [to-complement (extract-goal-about v (car s))] ;; type: goal
+                   [complemented-goal (complement to-complement)] ;; type: goal
+                   [v-cleared (clear-about v (car s))] ;; type: state
+                    )
+
+              (step (mplus (pause v-cleared (forall v (conj complemented-goal domain) goal))
+                           (bind-forall (cdr s) v (forall v domain goal)))))) ;;; other possible requirements search
+
+        (else (bind-forall s v (forall v domain goal))))
+
+             ))
     ((pause st g) (start st g))
     (_            s)))
 
@@ -371,7 +398,7 @@
 ;;;   component is bottom, then we should continue the search (domain is non-empty)
 ;;;  the main goal is to evaluate the "goal" into Bottom as much as possible
 ;;;   it is mainly used for domain exhaustive check
-(define (simplify-wrt goal dv dec-constant-statement)
+(define (simplify-wrt st goal dv dec-constant-statement)
   ;;; we first assume step 0 is ensured -- 
   ;;;  no statement component has cosntant
   ;;; step 1:
@@ -433,3 +460,74 @@
 
   )
 )
+
+(define singleton-type-map
+  (hash
+    true? #t
+    false? #f
+    null? '()
+  )
+)
+
+(define (is-singleton-type x) (hash-ref singleton-type-map x #f))
+
+
+;;; check-as-disj: List[type-predicate] x term x state -> Stream[state]
+;;;  currently it will use predicate as marker
+;;;  if type-predicate == #f, then state unchanged returned
+;;;  precondition: type?* is never #f, st is never #f
+(define (check-as-disj type?* t st)
+
+  (define inf-type?* (filter (lambda (x) (not (is-singleton-type x))) type?*))
+
+  (define infinite-type-checked-state ;;; type : stream of state
+    (match (walk* t (state-sub st))
+          [(var _ index) 
+            ;;; check if there is already typercd for index on symbol
+            (let* ([htable (state-typercd st)]
+                   [type-info (hash-ref htable index #f)])
+              (if type-info
+                ;;; type-info is a set of predicates
+                ;;;  disjunction of type is conflicting
+                (let* ([intersected (set-intersect type-info type?*)])
+                ;;;  TODO: when intersected result is actually just pair?, 
+                ;;;    we need to make a substitution
+
+                ;;; if it is empty list then we failed
+                  (match intersected
+                    ['() #f]
+                    ;; this part is very weird... as we can see most fresh is not really existential
+                    ;;;   quantifier because they don't specify scope!!
+                    ;;;  here it is even more complicated ... what is the scope of a b?
+                    ;;;    if we don't know the scope, will it cause problem when generating trace?
+                    [(list pair?) (fresh (a b) (== t (cons a b)))]  
+                    [_  (wrap-state-stream (state-typercd-update st (lambda (x) (hash-set x index intersected))))]
+                    )
+                  
+                )
+                (wrap-state-stream (state-typercd-update st (lambda (x) (hash-set x index type?*)))) ) )]
+
+          [v (and (ormap (lambda (x?) (x? v)) type?*) st)]))
+    
+    (define finite-type-checked-states ;;; list of stream of states
+      (define finite-type-labels (filter is-singleton-type type?*))
+      (define finite-objects (map (lambda (x) (hash-ref singleton-type-map x #f)) finite-type-labels))
+      (map (lambda (obj) (pause st (== t obj))) finite-objects)
+    )
+
+    (define all-type-checked-states
+      (if infinite-type-checked-state
+        (cons (cons infinite-type-checked-state #f) 
+              finite-type-checked-states)
+        finite-type-checked-states
+      )
+    )
+    (match all-type-checked-states
+      ['() #f]
+      [(list x) (cons x #f)]
+      [(cons head rest) (foldl mplus head rest)]
+    )
+    ;;; then we combine into stream of state
+)
+
+(define (check-as type? t st) (check-as-disj (list type?) t st))

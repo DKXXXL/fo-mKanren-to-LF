@@ -20,6 +20,8 @@
   check-as-disj
   check-as
   type-label-top
+  true?
+  false?
   )
 
 ;;; bear with it now.... let me search if there is
@@ -286,8 +288,7 @@
           [unification-info (unify/sub u v subst)]
           [newly-added (extract-new unification-info subst)]
               ;;; I should check unification result
-          
-         )
+          )
     (match newly-added
       ;;; 1. if unification fails, then inequality is just satisfied 
       ;;;     st is directly returned
@@ -347,28 +348,3 @@
 ;;;   )
 ;;; )
 
-;;; check-as-disj: List[type-predicate] x term x state -> state
-;;;  currently it will use predicate as marker
-;;;  if type-predicate == #f, then state unchanged returned
-;;;  precondition: type?* is never #f, st is never #f
-(define (check-as-disj type?* t st)
-  (match (walk* t (state-sub st))
-        [(var _ index) 
-          ;;; check if there is already typercd for index on symbol
-          (let* ([htable (state-typercd st)]
-                 [type-info (hash-ref htable index #f)])
-            (if type-info
-              ;;; type-info is a set of predicates
-              ;;;  disjunction of type is conflicting
-              (let* ([intersected (set-intersect type-info type?*)])
-              ;;;  TODO: we need to downgrade the type constraints into equality
-                (and (pair? intersected)
-                  (state-typercd-update st (lambda (x) (hash-set x index intersected))))
-              )
-              (state-typercd-update st (lambda (x) (hash-set x index type?*)))))]
-
-        [v (and (ormap (lambda (x?) (x? v)) type?*) st)])
-      
-)
-
-(define (check-as type? t st) (check-as-disj (list type?) t st))
