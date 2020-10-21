@@ -238,7 +238,7 @@
     ;;;   
     ((forall var domain goal) 
       (let* [(domain_ (simplify-wrt st domain var))] 
-        (if (equal? domain_ False) 
+        (if (equal? domain_ Bottom) 
           (wrap-state-stream st)
           (bind-forall (start st (ex var (conj domain_ goal))) var goal)
         )
@@ -336,7 +336,7 @@
       [(relate _ _) (raise "User-Relation not supported.")]
       [(== t1 t2) (=/= t1 t2)]
       [(ex a gn) (forall a (c gn))]
-      [(forall a gn) (ex a (c gn))]
+      [(forall v bound gn) (raise "Not supported complement on higher-ranked.") ]
       [(numbero t) (not-numbero t)]
       [(not-numbero t) (numbero t)]
       [(stringo t) (not-stringo t)]
@@ -355,21 +355,21 @@
 ;;;   for credentials
 
 
-(define (pairo x) (disj (== x '()) (fresh (y z) (== x (cons y z)))))
-(define (boolo x) (disj (== x #t) (== x #f)))
+;;; (define (pairo x) (disj (== x '()) (fresh (y z) (== x (cons y z)))))
+;;; (define (boolo x) (disj (== x #t) (== x #f)))
 
 ;;; not-symbolo will be translated into (numbero v stringo v pairo v boolo)
-(define remove-neg-by-decidability
-  (define (match-single prev-f ext-f g)
-    (match g
-      [(not-symbolo x) (disj (pairo x) (boolo x) (numbero x) (stringo x))]
-      [(not-numbero x) (disj (pairo x) (boolo x) (symbolo x) (stringo x))]
-      [(not-stringo x) (disj (pairo x) (boolo x) (numbero x) (symbolo x))]
-      [_ (prev-f g)]
-    )
-  )
-  (overloading-functor-list (list match-single goal-base-endofunctor))
-)
+;;; (define remove-neg-by-decidability
+;;;   (define (match-single prev-f ext-f g)
+;;;     (match g
+;;;       [(not-symbolo x) (disj (pairo x) (boolo x) (numbero x) (stringo x))]
+;;;       [(not-numbero x) (disj (pairo x) (boolo x) (symbolo x) (stringo x))]
+;;;       [(not-stringo x) (disj (pairo x) (boolo x) (numbero x) (symbolo x))]
+;;;       [_ (prev-f g)]
+;;;     )
+;;;   )
+;;;   (overloading-functor-list (list match-single goal-base-endofunctor))
+;;; )
 
 ;;; simplify goal w.r.t. a domain variable, constant parameters acceptable
 ;;;   if satisfiable, then act as identity

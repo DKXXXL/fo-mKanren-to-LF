@@ -27,6 +27,7 @@
 ;;; bear with it now.... let me search if there is
 ;;;  extensible record later
 (require struct-update)
+(require racket/contract)
 
 ;; Logic variables
 (struct var (name index) ;;;#:prefab
@@ -162,8 +163,16 @@
 (define (wrap-state-stream st) (and st (cons st #f)))
 
 
-(define (unify u v st)
+(define (stream? x)
+  (match x
+    [#f #t]
+    [(cons h t) (stream? t)]
+  )
+)
 
+(define (any? _) #t)
+(define/contract (unify u v st)
+  (any? any? state? . -> . stream?)
   ;;; inequality-recheck :: state -> state
   (define (inequality-recheck st)
     (define conj-all-diseq (state-diseq st))
@@ -201,7 +210,7 @@
               ;;;             (state-diseq checked-type-state))]
               )
         ;;;  TODO: short-circuit the possible #f appearing inside foldl
-        (map inequality-recheck checked-type-states)
+        (map-matured-stream inequality-recheck checked-type-states)
   ))))
 
 ;; Reification
@@ -319,36 +328,36 @@
   )
 )
 
-(define (neg-unify-with-typeinfo* list-u-v st)
-  (define (compute-newly-added u-v)
-    (let* ([subst (state-sub st)]
-           [unification-info (unify/sub (car u-v) (cdr u-v) subst)]
-           [newly-added (extract-new unification-info subst)])
-      newly-added      
-    )
-  )
+;;; (define (neg-unify-with-typeinfo* list-u-v st)
+;;;   (define (compute-newly-added u-v)
+;;;     (let* ([subst (state-sub st)]
+;;;            [unification-info (unify/sub (car u-v) (cdr u-v) subst)]
+;;;            [newly-added (extract-new unification-info subst)])
+;;;       newly-added      
+;;;     )
+;;;   )
 
-  (let* ([list-newly-adds-on-each-u-vs (map compute-newly-added list-u-v)]
-         )
-    (if (ormap not list-newly-adds-on-each-u-vs) 
-      st
-      (match (append* list-newly-adds-on-each-u-vs)
-      ['() #f]
-      [(list (cons u #f)) (check-as-disj (remove false? type-label-top) u st)]
-      ;;; TODO: #t, '()
-      ;;;  we need to upgrade inequality into type constraint
-      [_
-       (state-diseq-update st (lambda (x) (cons new-adds-on-all x)))
-      ]
-    )
-  )
-
-
-  )
-)
+;;;   (let* ([list-newly-adds-on-each-u-vs (map compute-newly-added list-u-v)]
+;;;          )
+;;;     (if (ormap not list-newly-adds-on-each-u-vs) 
+;;;       st
+;;;       (match (append* list-newly-adds-on-each-u-vs)
+;;;       ['() #f]
+;;;       [(list (cons u #f)) (check-as-disj (remove false? type-label-top) u st)]
+;;;       ;;; TODO: #t, '()
+;;;       ;;;  we need to upgrade inequality into type constraint
+;;;       [_
+;;;        (state-diseq-update st (lambda (x) (cons new-adds-on-all x)))
+;;;       ]
+;;;     )
+;;;   )
 
 
-;;; neg-unify* : given a list of list of pairs, indicating 
+;;;   )
+;;; )
+
+
+;;; neg-unify** : given a list of list of pairs, indicating 
 ;;;   conjunction of disjunction of inequality, 
 ;;;    solve them according to the current state
 ;;; (define (neg-unify** list-list-u-v st)
@@ -400,7 +409,10 @@
                     ;;;   quantifier because they don't specify scope!!
                     ;;;  here it is even more complicated ... what is the scope of a b?
                     ;;;    if we don't know the scope, will it cause problem when generating trace?
-                    [(list pair?) (fresh (a b) (== t (cons a b)))]  
+                    [(list pair?) 
+                      (let* ([t1 (var/fresh 't1)]
+                             [t2 (var/fresh 't2)])
+                        (state-sub-update st (lambda (sub) (unify/sub t (cons t1 t2) sub))))]  
                     [_   (state-typercd-update st (lambda (x) (hash-set x index intersected)))]
                     )
                   
@@ -409,8 +421,7 @@
 
           [v (and (ormap (lambda (x?) (x? v)) type?*) st)]) )
     
-    ;;; each possible type indicate a different state in the returned list
-    (define finite-type-checked-states ;;; list of states
+
       (define finite-type-labels (filter is-singleton-type type?*))
       (define finite-objects (map (lambda (x) (hash-ref singleton-type-map x #f)) finite-type-labels))
       
@@ -427,6 +438,9 @@
                 (state-sub-update st (lambda (sub) (unify/sub t each-obj sub) )) ) ) ]
           [v (state-sub-update st (lambda (sub) (unify/sub t each-obj sub) )) ])
       )
+
+    ;;; each possible type indicate a different state in the returned list
+    (define finite-type-checked-states ;;; list of states
       (map check-as-object finite-objects)
     )
 
@@ -471,7 +485,7 @@
   (if (equal? type? #f)
     sts
     (fold-matured-stream 
-        append-map-matured-stream 
+        append-matured-stream
         #f 
         (map-matured-stream (lambda (st) (check-as type? t st)) sts))
   )
