@@ -237,10 +237,10 @@
     ;;;   and "bind" the complement of result to the nexttime forall as domain
     ;;;   
     ((forall var domain goal) 
-      (let* [(domain_ (simplify-wrt st domain var (void)))] 
+      (let* [(domain_ (simplify-wrt st domain var))] 
         (if (equal? domain_ False) 
           (wrap-state-stream st)
-          (bind-forall (start st (ex var (conj domain goal))) var goal)
+          (bind-forall (start st (ex var (conj domain_ goal))) var goal)
         )
       )
     )
@@ -277,7 +277,7 @@
         ;;;   to initiate the search for remaining domain is hard: 
         ;;;   1. we use the result for the previous search, and complement only on v 
         ;;;       (because all other vars should be fixed)
-        ;;;     1.a but to complement on v, it is hard because state has disjunction of conjunction of inequality
+        ;;;     1.a but to complement on v, it is hard because state has conjunction of disjunction of inequality
         ;;;     1.b so we make state "pair s" into "pair s_" s
         ;;;           .t. (car s_) has only conjunction of inequality about v or just unchanged (if no inequality about v)
         ;;;           "stream-rearrange-to-first-about"
@@ -355,9 +355,6 @@
 ;;;   for credentials
 
 
-;;; the following two requires some design pattern.
-;;;  I am doing too much traversal
-
 (define (pairo x) (disj (== x '()) (fresh (y z) (== x (cons y z)))))
 (define (boolo x) (disj (== x #t) (== x #f)))
 
@@ -375,90 +372,12 @@
 )
 
 ;;; simplify goal w.r.t. a domain variable, constant parameters acceptable
-;;;   do nothing on higher-order goal (for example, the ex and forall)
-;;;   higher-order goal is not likely to happen as the answer for each run 
-;;;     doesn't have exists/forall as result
-;;;  this procedure currently is 
-;;; 0. it will directly evaluate the constraints only on constant parameters
-;;;     because they are constants, and every atomic statement now is decidable
-;;; 1. it will first transform each not-TYPEO into a disjunction of TYPEO, 
-;;;     and we will introduce existential quantifier for pairo
-;;; 2. it will then transform into disjunctive normal form, "higher-order goals" (pairo)
-;;;  are just considered as a whole
-;;;     Note: we should be able to control the shape of "higher-order  goals" to make sure
-;;;       it won't be arbitrarily complicated, so that syntactical level simplification can
-;;;       still be effective...
-;;; 3. for each conjunction component, we will do simiplification
-;;;  3.1 by first sort all the constraints -- equality constraint is at the beginning 
-;;;     and then type constraints 
-;;;     and then inequality, and then it is the higher-order goals (pairo)
-;;;  3.2 then we do simplification on each conjunctive component
-;;; 4. then we sort the disjunctive list of conjunction component (and do simplification?)
-;;;   4.1 we don't quite care about the disjunction actually, as long as not all of conjunctive
-;;;   component is bottom, then we should continue the search (domain is non-empty)
-;;;  the main goal is to evaluate the "goal" into Bottom as much as possible
-;;;   it is mainly used for domain exhaustive check
-(define (simplify-wrt st goal dv dec-constant-statement)
-  ;;; we first assume step 0 is ensured -- 
-  ;;;  no statement component has cosntant
-  ;;; step 1:
-  (define goal-removed-neg-type-csts (remove-neg-by-decidability goal))
-
-  ;;; step 2: transform into disjunctive normal form
-  ;;;     that is a list of list of atomic statement
-  (define (match-single-disj-conj prev-f ))
-  ;;; step 3: deal with each conjunction
-  ;;;  step 3.1: sort
-  (define (match-simple-conjunction))
-)
-;;; simplify list of goal
-;;;  given a list of goals indicating the conjunction of goals
-;;;     each goal has to be atomic (i.e. no conjunction inside)
-;;;    we will do simplification with respect to a single dv (domain-variables)
-;;;   other variables will be considered as constant, and thus they should be 
-;;;     evaluated to Bottom or Top immediately
-;;;     as currently every atomic statement is decidable
-;;;  currently it is at least O(n^2), there is definitely optimization
-;;;    
-
-;;; map each label into a higher order goal constructor
-;;; LABEL -> (term -> goal)
-;;;  for example, predicate "number?" will be mapped to numbero
-(define (label-to-goal label)
-  (match label
-    [number? numbero]
-    []
-  )
-)
-
-;;; map a list of labels to disjunctive of goal constructor
-;;; "Set of LABEL" -> (term -> goal)
-;;;  used when typercd encode disjunction of types
-(define (labels-to-goal labels) 
-  ;;; disjunc : (term -> goal) x (term -> goal) -> (term -> goal)
-  (define (disjunc f g) (lambda (term) (disj (f term) (g term))))
-  (define disjunc-id (lambda (term) Bottom))
-  (foldl disjunc disjunc-id (map labels labels)))
-
-;;; this function will translate state into goals
-(define (state-to-goal st)
-  (let* ([sub (state-sub st)]
-         [eqs-goal (foldl (lambda (p g) (conj (== (car p) (cdr p)) g)) 
-                     Top sub)]
-         [diseq (state-diseq st)]
-        ;;;  recall diseq is list of list of pairs
-        ;;;   indicating disjunction of conjunction of inequality
-            [conj-diseq-fold 
-              (lambda (l) (foldl (lambda (p g) (conj (=/= (car p) (cdr p)) g)) Top l))]
-            [disj-conj-diseq-fold
-              (lambda (l) (foldl (lambda (lp g) (disj (conj-diseq-fold lp) g)) Bottom l))]
-         [diseqs-goal (disj-conj-diseq-fold diseq)]
-         [type-dict (state-typercd st)]
-         [type-pairs (hash->list type-dict)]
-         [type-goals (foldl )]
-         )
-
-  )
+;;;   if satisfiable, then act as identity
+;;;   otherwise return False
+;;; simplify-wrt : state x goal x var -> goal
+(define (simplify-wrt st goal var) 
+  ;;; just run miniKanren!
+  (void)
 )
 
 (define singleton-type-map
@@ -531,3 +450,30 @@
 )
 
 (define (check-as type? t st) (check-as-disj (list type?) t st))
+
+;;; variable x stream -> stream
+;;;   we will make the first state of the stream into 
+;;;    another stream s.t. the first state is either
+;;;    only contain one disjunction of the previous state
+;;;    or just unchanged but there is no state 
+(define (stream-rearrange-to-first-about v s) 
+  (define s (if (mature? s) s (mature s)))
+  ;;; make sure matured
+  (define s1 (car s))
+  (define s2 (cdr s))
+  ;;; 1. first sort the s1's conjunction of disjunction
+  (void)
+)
+
+;;; getting the goals that is directly translating
+;;;   the state 'st', the goals are all about v
+;;;  var x state -> goal
+(define (extract-goal-about v st)
+  (void)
+)
+
+;;; clear everything about v on st
+;;;  var x state -> state
+(define (clear-about v st)
+  (void)
+)
