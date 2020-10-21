@@ -163,6 +163,13 @@
 
 
 (define (unify u v st)
+
+  ;;; inequality-recheck :: state -> state
+  (define (inequality-recheck st)
+    (define conj-all-diseq (state-diseq st))
+    (foldl neg-unify* st conj-all-diseq)
+  )
+
   (let* ([sub (unify/sub u v (state-sub st))]
          [htable (state-typercd st)])
     (and sub
@@ -181,15 +188,20 @@
               [erased-type-state (state-typercd-set unified-state erased-htable)]
               ;;; TODO: check-as-disj might have corner 
               ;;;   case where first element is null
-              [checked-type-state (foldl check-as 
-                                         erased-type-state 
+              ;;; helper function that do things like flatmap
+              ;;;  check-as-on-each :: type-label  x term x stream[st] -> stream[st]
+              ;;;  erased-type-state :: st  (as initial state)
+              ;;;  new-vars-types :: list of type-label
+              ;;;  new-vars :: list of term
+              ;;; checked-type-states :: matured-stream[st]
+              [checked-type-states (foldl check-as-on-each 
+                                         (wrap-state-stream erased-type-state)
                                          new-vars-types new-vars)]
-              [all-diseq (and checked-type-state 
-                          (state-diseq checked-type-state))])
+              ;;; [all-diseq (and checked-type-state 
+              ;;;             (state-diseq checked-type-state))]
+              )
         ;;;  TODO: short-circuit the possible #f appearing inside foldl
-
-        (and all-diseq
-          (wrap-state-stream (foldl neg-unify* checked-type-state all-diseq)))
+        (map inequality-recheck checked-type-states)
   ))))
 
 ;; Reification
@@ -348,3 +360,119 @@
 ;;;   )
 ;;; )
 
+
+(define singleton-type-map
+  (hash
+    true? #t
+    false? #f
+    null? '()
+  )
+)
+
+(define (is-singleton-type x) (hash-ref singleton-type-map x #f))
+
+
+;;; check-as-disj: List[type-predicate] x term x state -> Stream[state]
+;;;  currently it will use predicate as marker
+;;;  if type-predicate == #f, then state unchanged returned
+;;;  precondition: type?* is never #f, st is never #f
+(define (check-as-disj type?* t st)
+
+  (define inf-type?* (filter (lambda (x) (not (is-singleton-type x))) type?*))
+
+  (define infinite-type-checked-state ;;; type : state
+    (match (walk* t (state-sub st))
+          [(var _ index) 
+            ;;; check if there is already typercd for index on symbol
+            (let* ([htable (state-typercd st)]
+                   [type-info (hash-ref htable index #f)])
+              (if type-info
+                ;;; type-info is a set of predicates
+                ;;;  disjunction of type is conflicting
+                (let* ([intersected (set-intersect type-info type?*)])
+                ;;;  TODO: when intersected result is actually just pair?, 
+                ;;;    we need to make a substitution
+
+                ;;; if it is empty list then we failed
+                  (match intersected
+                    ['() #f]
+                    ;; this part is very weird... as we can see most fresh is not really existential
+                    ;;;   quantifier because they don't specify scope!!
+                    ;;;  here it is even more complicated ... what is the scope of a b?
+                    ;;;    if we don't know the scope, will it cause problem when generating trace?
+                    [(list pair?) (fresh (a b) (== t (cons a b)))]  
+                    [_   (state-typercd-update st (lambda (x) (hash-set x index intersected)))]
+                    )
+                  
+                )
+                 (state-typercd-update st (lambda (x) (hash-set x index type?*)))) ) ]
+
+          [v (and (ormap (lambda (x?) (x? v)) type?*) st)]) )
+    
+    ;;; each possible type indicate a different state in the returned list
+    (define finite-type-checked-states ;;; list of states
+      (define finite-type-labels (filter is-singleton-type type?*))
+      (define finite-objects (map (lambda (x) (hash-ref singleton-type-map x #f)) finite-type-labels))
+      
+      (define (check-as-object each-obj) ;;; state
+        (match (walk* t (state-sub st))
+          [(var _ index) 
+            ;;; check if there is already typercd for index on symbol
+            (let* ([htable (state-typercd st)]
+                   [type-info (hash-ref htable index #f)])
+              (if type-info
+                ;;; type-info is a set of non-empty predicates
+                ;;;  directly conflicting, 
+                #f
+                (state-sub-update st (lambda (sub) (unify/sub t each-obj sub) )) ) ) ]
+          [v (state-sub-update st (lambda (sub) (unify/sub t each-obj sub) )) ])
+      )
+      (map check-as-object finite-objects)
+    )
+
+    (define all-type-checked-states
+      (filter (lambda (x) x) (cons infinite-type-checked-state finite-type-checked-states))
+    )
+    (match all-type-checked-states
+      ['() #f]
+      [_ (foldl cons #f all-type-checked-states)]
+    )
+    ;;; then we combine into stream of state
+)
+
+;;; check-as :: type-label  x term x st -> stream[st]
+(define (check-as type? t st) (check-as-disj (list type?) t st))
+
+(define (map-matured-stream f stream)
+  (match stream
+    [#f #f]
+    [(cons h t) (cons (f h) (map-matured-stream f t))]
+  )
+)
+
+(define (fold-matured-stream binary initial-state stream)
+  (match stream
+    [#f initial-state]
+    [(cons h t) (fold-matured-stream binary (binary h initial-state) t)]
+  )
+)
+
+(define (append-matured-stream a b)
+  (match a 
+    [#f b]
+    [(cons h t) (cons h (append-matured-stream t b))]
+  )
+)
+
+;;; lift check-as onto stream
+;;; check-as-on-each :: type-label  x term x matured-stream[st] -> matured-stream[st]
+;;;  when type-label = #f, we think of it as don't do any check, thus return original stream
+(define (check-as-on-each type? t sts)
+  (if (equal? type? #f)
+    sts
+    (fold-matured-stream 
+        append-map-matured-stream 
+        #f 
+        (map-matured-stream (lambda (st) (check-as type? t st)) sts))
+  )
+)
