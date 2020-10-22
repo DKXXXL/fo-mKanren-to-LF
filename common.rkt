@@ -214,7 +214,8 @@
   ))))
 
 ;; Reification
-(define (walk* tm sub)
+(define/contract (walk* tm sub)
+  (any? pair? . -> . any?)
   (let ((tm (walk tm sub)))
     (if (pair? tm)
         `(,(walk* (car tm) sub) .  ,(walk* (cdr tm) sub))
@@ -369,6 +370,10 @@
 ;;;   )
 ;;; )
 
+(define (state-sub-update-nofalse st f)
+  (define st- (state-sub-update st f))
+  (and (state-sub st-) st-)
+)
 
 (define singleton-type-map
   (hash
@@ -378,8 +383,8 @@
   )
 )
 
-(define (is-singleton-type x) (hash-ref singleton-type-map x #f))
-
+(define (is-singleton-type x) (hash-ref singleton-type-map x 'False))
+(define (not-singleton-type x) (equal? (is-singleton-type x) 'False))
 
 ;;; check-as-disj: List[type-predicate] x term x state -> Stream[state]
 ;;;  currently it will use predicate as marker
@@ -387,15 +392,15 @@
 ;;;  precondition: type?* is never #f, st is never #f
 (define (check-as-disj type?* t st)
 
-  (define inf-type?* (filter (lambda (x) (not (is-singleton-type x))) type?*))
+  (define inf-type?* (filter not-singleton-type type?*))
 
   (define infinite-type-checked-state ;;; type : state
     (match (walk* t (state-sub st))
           [(var _ index) 
             ;;; check if there is already typercd for index on symbol
             (let* ([htable (state-typercd st)]
-                   [type-info (hash-ref htable index #f)])
-              (if type-info
+                   [type-info (hash-ref htable index 'False)])
+              (if (not (equal? type-info 'False))
                 ;;; type-info is a set of predicates
                 ;;;  disjunction of type is conflicting
                 (let* ([intersected (set-intersect type-info type?*)])
@@ -412,7 +417,7 @@
                     [(list pair?) 
                       (let* ([t1 (var/fresh 't1)]
                              [t2 (var/fresh 't2)])
-                        (state-sub-update st (lambda (sub) (unify/sub t (cons t1 t2) sub))))]  
+                        (state-sub-update-nofalse st (lambda (sub) (unify/sub t (cons t1 t2) sub))))]  
                     [_   (state-typercd-update st (lambda (x) (hash-set x index intersected)))]
                     )
                   
@@ -422,26 +427,26 @@
           [v (and (ormap (lambda (x?) (x? v)) type?*) st)]) )
     
 
-      (define finite-type-labels (filter is-singleton-type type?*))
-      (define finite-objects (map (lambda (x) (hash-ref singleton-type-map x #f)) finite-type-labels))
-      
-      (define (check-as-object each-obj) ;;; state
-        (match (walk* t (state-sub st))
-          [(var _ index) 
-            ;;; check if there is already typercd for index on symbol
-            (let* ([htable (state-typercd st)]
-                   [type-info (hash-ref htable index #f)])
-              (if type-info
-                ;;; type-info is a set of non-empty predicates
-                ;;;  directly conflicting, 
-                #f
-                (state-sub-update st (lambda (sub) (unify/sub t each-obj sub) )) ) ) ]
-          [v (state-sub-update st (lambda (sub) (unify/sub t each-obj sub) )) ])
-      )
+    (define finite-type-labels (filter is-singleton-type type?*))
+    (define finite-objects (map (lambda (x) (hash-ref singleton-type-map x #f)) finite-type-labels))
+    
+    (define (check-as-object each-obj st) ;;; state
+      (match (walk* t (state-sub st))
+        [(var _ index) 
+          ;;; check if there is already typercd for index on symbol
+          (let* ([htable (state-typercd st)]
+                  [type-info (hash-ref htable index 'False)])
+            (if (not (equal? type-info 'False))
+              ;;; type-info is a set of non-empty predicates
+              ;;;  directly conflicting, 
+              #f
+              (state-sub-update-nofalse st (lambda (sub) (unify/sub t each-obj sub) )) ) ) ]
+        [v (state-sub-update-nofalse st (lambda (sub) (unify/sub t each-obj sub) )) ])
+    )
 
     ;;; each possible type indicate a different state in the returned list
     (define finite-type-checked-states ;;; list of states
-      (map check-as-object finite-objects)
+      (map (lambda (obj) (check-as-object obj st)) finite-objects)
     )
 
     (define all-type-checked-states

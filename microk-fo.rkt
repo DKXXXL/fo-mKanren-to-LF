@@ -13,6 +13,9 @@
   (struct-out symbolo)
   (struct-out numbero)
   (struct-out stringo)
+  (struct-out not-symbolo)
+  (struct-out not-numbero)
+  (struct-out not-stringo)
 
   (struct-out mplus)
   (struct-out bind)
