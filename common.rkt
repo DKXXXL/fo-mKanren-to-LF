@@ -383,8 +383,11 @@
   )
 )
 
-(define (is-singleton-type x) (hash-ref singleton-type-map x 'False))
-(define (not-singleton-type x) (equal? (is-singleton-type x) 'False))
+(define (is-singleton-type x) 
+  (define k (hash-ref singleton-type-map x 'False)) 
+  (if (equal? k 'False) #f #t)
+  )
+(define (not-singleton-type x) (not (is-singleton-type x)))
 
 ;;; check-as-disj: List[type-predicate] x term x state -> Stream[state]
 ;;;  currently it will use predicate as marker
@@ -403,7 +406,7 @@
               (if (not (equal? type-info 'False))
                 ;;; type-info is a set of predicates
                 ;;;  disjunction of type is conflicting
-                (let* ([intersected (set-intersect type-info type?*)])
+                (let* ([intersected (set-intersect type-info inf-type?*)])
                 ;;;  TODO: when intersected result is actually just pair?, 
                 ;;;    we need to make a substitution
 
@@ -414,7 +417,7 @@
                     ;;;   quantifier because they don't specify scope!!
                     ;;;  here it is even more complicated ... what is the scope of a b?
                     ;;;    if we don't know the scope, will it cause problem when generating trace?
-                    [(list pair?) 
+                    [(? (lambda (x) (and (pair? x) (equal? pair? (car x)) (equal? '() (cdr x)))))
                       (let* ([t1 (var/fresh 't1)]
                              [t2 (var/fresh 't2)])
                         (state-sub-update-nofalse st (lambda (sub) (unify/sub t (cons t1 t2) sub))))]  
