@@ -24,6 +24,8 @@
   all-inf-type-label
   true?
   false?
+  any?
+  ?state?
   )
 
 ;;; bear with it now.... let me search if there is
@@ -184,7 +186,10 @@
   ;;; inequality-recheck :: state -> state
   (define (inequality-recheck st)
     (define conj-all-diseq (state-diseq st))
-    (foldl neg-unify* st conj-all-diseq)
+    (define (neg-unify*-on-corner list-u-v st)
+      (and st (neg-unify* list-u-v st))
+    )
+    (foldl neg-unify*-on-corner st conj-all-diseq)
   )
 
   (let* ([sub (unify/sub u v (state-sub st))]

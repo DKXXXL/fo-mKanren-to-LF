@@ -8,6 +8,8 @@
   (struct-out =/=)
   (struct-out ex)
   (struct-out forall)
+  (struct-out Top)
+  (struct-out Bottom)
 
   ;;; type constraint, without dual ?
   (struct-out symbolo)
@@ -17,13 +19,18 @@
   (struct-out not-numbero)
   (struct-out not-stringo)
 
+
   (struct-out mplus)
   (struct-out bind)
   (struct-out pause)
+  for-all
   step
   mature
   mature?
-  walk*/goal)
+  walk*/goal
+  
+  replace-1-to-0
+  )
 
 (require "common.rkt")
 
@@ -71,7 +78,7 @@
 (struct forall (varname domain g)
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "∀~a. ~a" (ex-varname val) (ex-g val)))]
+     (fprintf output-port "∀~a. ~a" (forall-varname val)  (forall-g val)))]
 )
 
 (struct symbolo (t)
@@ -144,8 +151,8 @@
 ;;;  prev-f will call the one on the past overloading functor
 ;;;   extended-f will use the whole composed functor
 ;;;  this functor will do nothing but recurse on the tree
-(define (goal-base-endofunctor prev-f extended-f g)
-  (define rec extended-f)
+(define (goal-base-endofunctor prev-f rec g)
+  ;;; (define rec extended-f)
   (match g
     [(disj a b) (disj (rec a) (rec b))]
     [(conj a b) (conj (rec a) (rec b))]
@@ -168,11 +175,11 @@
         (let* ([prev-f (overloading-functor-list-with-extf then extf)])
           (lambda (g) (fst prev-f extf g))
         )]
-      ['() goal-identity]
+      ['() (lambda (x) x)]
     )
   )
   (define (resultf g)
-    (overloading-functor-list-with-extf endofuncs resultf))
+    ((overloading-functor-list-with-extf endofuncs resultf) g) )
   resultf
 )
 
@@ -189,6 +196,25 @@
 ;;;   )
 ;;;   (overloading-functor-list (list match-single goal-base-endofunctor))
 ;;; )
+
+
+;;; homomorphism on pair, will respect pair construct
+(define (pair-base-endofunctor prev-f extended-f g)
+  (define rec extended-f)
+  (match g
+    ['() '()]
+    [(cons a b) (cons (rec a) (rec b))]
+    [_ g]
+  )
+)
+;;; example : replace 1 with 0 in an arbitrary list
+(define (replace-1-to-0 k)
+  (define (case1 prev-f extended-f g)
+    (if (equal? g 1) 0 (prev-f g)))
+  
+  ((overloading-functor-list (list case1 pair-base-endofunctor)) k)
+)
+
 
 ;;; currently implemented with side-effect,
 ;;;   it is another kind of fold but I am bad at recursion scheme
@@ -237,8 +263,12 @@
 )
 
 
-(define (start st g)
-  (match g
+;;; run a goal with a given state
+;;; note that when st == #f, the returned stream will always be #f
+(define/contract (start st g)
+  (?state? any? . -> . any?)
+  (and st ;;; always circuit the st
+    (match g
     ((disj g1 g2)
      (step (mplus (pause (trace-left st) g1)
                   (pause (trace-right st) g2))))
@@ -272,13 +302,17 @@
     ;;; 
     ((forall var domain goal) 
       (let* [(domain_ (simplify-wrt st domain var))] 
-        (if (equal? domain_ Bottom) 
+        (if (equal? domain_ (Bottom)) 
           (wrap-state-stream st)
           (bind-forall (start st (ex var (conj domain_ goal))) var (forall var domain goal))
         )
       )
     )
+    ((Top) (wrap-state-stream st))
+    ((Bottom) (wrap-state-stream #f))
     ))
+)
+  
 
 (define (step s)
   (match s
@@ -363,6 +397,7 @@
       [(conj g1 g2) (disj (c g1) (c g2))]
       [(relate _ _) (raise "User-Relation not supported.")]
       [(== t1 t2) (=/= t1 t2)]
+      [(=/= t1 t2) (== t1 t2)]
       [(ex a gn) (forall a (c gn))]
       [(forall v bound gn) (raise "Not supported complement on higher-ranked.") ]
       [(numbero t) (not-numbero t)]
@@ -394,8 +429,12 @@
 ;;; simplify-wrt : state x goal x var -> goal
 (define (simplify-wrt st goal var) 
   ;;; just run miniKanren!
-  (void)
-)
+  (define (first-non-empty-mature stream)
+    (match (mature stream)
+      [#f #f]
+      [(cons #f next) (first-non-empty-mature next)]
+      [v v]))
+  (if (first-non-empty-mature (pause st goal)) goal (Bottom)))
 
 ;;; appearances of nested list
 (define (member-nested v l)
@@ -502,22 +541,23 @@
 ;;; getting the goals that is translating
 ;;;   the state 'st', also goals include the type constraints about v
 ;;;  var x state -> goal
-(define (extract-goal-about v st)
+(define/contract (extract-goal-about v st)
+  (any? state? . -> . any?)
   (define (extract-from-each-subst pair)
       (match pair [(cons l r) (== l r)]))
   
   (define from-subst 
-    (foldl conj Top
+    (foldl conj (Top)
       (map extract-from-each-subst (state-sub st) )))
   
   ;;; stage each (list as) disjunction of inequalities into literal goals
   (define (stage-disj disj-list)
     (define (each-to-diseq p) (=/= (car p) (cdr p)))
-    (foldl disj Bottom (map each-to-diseq disj-list)))
+    (foldl disj (Bottom) (map each-to-diseq disj-list)))
 
   ;;; stage each (list as) conjunction of disjunction of inequalities into literal goals
   (define (stage-conj-disj conj-disj-list)
-    (foldl conj Top (map stage-disj conj-disj-list)))
+    (foldl conj (Top) (map stage-disj conj-disj-list)))
 
   (define from-diseq
     ;;; make a conjunction of disjunction of inequalities
@@ -531,29 +571,20 @@
            [type-labels (hash-ref tyr v '())]
            [type-label-to-goal (lambda (label) ((hash-ref type-label-to-type-goal label (void)) v))]
            [type-csts (map type-label-to-goal type-labels)])
-      (foldl conj Top type-csts)))
+      (foldl conj (Top) type-csts)))
   
   (conj from-subst (conj from-diseq from-typecsts))
-)
-
-;;; homomorphism on pair, will respect pair construct
-(define (pair-base-endofunctor prev-f extended-f g)
-  (define rec extended-f)
-  (match g
-    ['() '()]
-    [(cons a b) (cons (rec a) (rec b))]
-    [_ g]
-  )
 )
 
 
 ;;; clear everything about v on st
 ;;;  var x state -> state
 ;;;   done easily by replace v with a brand new var everywhere in the st
-(define (clear-about v st)
+(define/contract (clear-about v st)
+  (any?  ?state? . -> . ?state?)
+  ;;; (display st)
   (define (literal-replace from after obj)
-    (define (literal-replace-from-after prev-f ext-f obj)
-      (define rec ext-f)
+    (define (literal-replace-from-after prev-f rec obj)
       (match obj
         [(? (lambda (x) (equal? x from))) after]
         ;;; other extended construct -- like state
@@ -566,10 +597,28 @@
             (if at-key (hash-set (hash-remove obj from) after at-key) obj))
           ]
         [_ (prev-f obj)]))
-  
-    ((overloading-functor-list (list literal-replace-from-after pair-base-endofunctor)) obj))
+
+    (define internal-f (overloading-functor-list (list literal-replace-from-after pair-base-endofunctor)))
+    ;;; return the following
+    (internal-f obj))
 
   (let* ([vname (symbol->string (var-name v))]
          [new-v (var/fresh (string->symbol (string-append vname "-dummy")))])
     (literal-replace v new-v st))
 )
+
+;;; will declare variable, and assert goal on all its domain
+(define-syntax for-all
+  (syntax-rules ()
+    ((_ (x ...) g0 gs ...)
+     (let ((x (var/fresh 'x)) ...) (given (x ...) (conj* g0 gs ...)) ))))
+
+;;; given (a series of) variable(s) we will assert the goal on all its possible
+;;;  domain
+;;;   using the original variables
+(define-syntax given
+  (syntax-rules ()
+    ((_ () g) g)
+    ((_ (x xs ...) g)
+      (forall x (Top) (given (xs ...) g)))))
+
