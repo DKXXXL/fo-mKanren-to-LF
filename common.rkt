@@ -18,8 +18,8 @@
   reify/initial-var
   neg-unify
   wrap-state-stream
-  check-as-disj
-  check-as
+  check-as-inf-type-disj
+  check-as-inf-type
   type-label-top
   all-inf-type-label
   true?
@@ -203,10 +203,10 @@
               [new-vars-types (map (lambda (x) (hash-ref htable x #f) ) new-vars-indices)]
               [erased-htable (foldl (lambda (index htable) (hash-remove htable index)) htable new-vars-indices)]
               [erased-type-state (state-typercd-set unified-state erased-htable)]
-              ;;; TODO: check-as-disj might have corner 
+              ;;; TODO: check-as-inf-type-disj might have corner 
               ;;;   case where first element is null
-              [check-as-disj*-c (lambda (type?* t st) (if (and type?* st) (check-as-disj type?* t st) st))]
-              [checked-type-state (foldl check-as-disj*-c
+              [check-as-inf-type-disj*-c (lambda (type?* t st) (if (and type?* st) (check-as-inf-type-disj type?* t st) st))]
+              [checked-type-state (foldl check-as-inf-type-disj*-c
                                          erased-type-state 
                                          new-vars-types new-vars)]
                                          )
@@ -354,11 +354,11 @@
   )
 (define (not-singleton-type x) (not (is-singleton-type x)))
 
-;;; check-as-disj: List[inf-type-predicate] x term x state -> state
+;;; check-as-inf-type-disj: List[inf-type-predicate] x term x state -> state
 ;;;  currently it will use predicate as marker
 ;;;  precondition: type?* is never #f, st is never #f
 ;;;   precondition: type?* \subseteq all-inf-type-label
-(define/contract (check-as-disj type?* t st)
+(define/contract (check-as-inf-type-disj type?* t st)
   (any? any? ?state? . -> . ?state?)
   (define inf-type?* (filter not-singleton-type type?*))
 
@@ -409,13 +409,13 @@
     infinite-type-checked-state
 )
 
-;;; check-as :: inf-type-label  x term x (state or #f) -> (state or #f)
+;;; check-as-inf-type :: inf-type-label  x term x (state or #f) -> (state or #f)
 ;;;  precondition: type? \in all-inf-type-label 
 ;;;  if type-label = #f, then we will just return st
-(define/contract (check-as type? t st) 
+(define/contract (check-as-inf-type type? t st) 
   (any? any? ?state? . -> . ?state?)
   (if (and type? st)
-    (check-as-disj (list type?) t st)
+    (check-as-inf-type-disj (list type?) t st)
     st)
 )
 
@@ -440,15 +440,15 @@
   )
 )
 
-;;; ;;; lift check-as onto stream
-;;; ;;; check-as-on-each :: type-label  x term x matured-stream[st] -> matured-stream[st]
+;;; ;;; lift check-as-inf-type onto stream
+;;; ;;; check-as-inf-type-on-each :: type-label  x term x matured-stream[st] -> matured-stream[st]
 ;;; ;;;  when type-label = #f, we think of it as don't do any check, thus return original stream
-;;; (define (check-as-on-each type? t sts)
+;;; (define (check-as-inf-type-on-each type? t sts)
 ;;;   (if (equal? type? #f)
 ;;;     sts
 ;;;     (fold-matured-stream 
 ;;;         append-matured-stream
 ;;;         #f 
-;;;         (map-matured-stream (lambda (st) (check-as type? t st)) sts))
+;;;         (map-matured-stream (lambda (st) (check-as-inf-type type? t st)) sts))
 ;;;   )
 ;;; )

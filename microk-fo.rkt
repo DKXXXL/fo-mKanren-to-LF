@@ -248,21 +248,21 @@
      (pause st (thunk)))
     ((== t1 t2) (unify t1 t2 st))
     ((=/= t1 t2) (neg-unify t1 t2 st))
-    ((symbolo t1)  (wrap-state-stream (check-as symbol? t1 st)))
+    ((symbolo t1)  (wrap-state-stream (check-as-inf-type symbol? t1 st)))
     ((not-symbolo t1) 
       (mplus 
         (term-finite-type t1 st)
-        (wrap-state-stream (check-as-disj (remove symbol? all-inf-type-label) t1 st)))) 
-    ((numbero t1) (wrap-state-stream (check-as number? t1 st)))
+        (wrap-state-stream (check-as-inf-type-disj (remove symbol? all-inf-type-label) t1 st)))) 
+    ((numbero t1) (wrap-state-stream (check-as-inf-type number? t1 st)))
     ((not-numbero t1)  
       (mplus 
         (term-finite-type t1 st)
-        (wrap-state-stream (check-as-disj (remove number? all-inf-type-label) t1 st)))) 
-    ((stringo t1) (wrap-state-stream (check-as string? t1 st)))
+        (wrap-state-stream (check-as-inf-type-disj (remove number? all-inf-type-label) t1 st)))) 
+    ((stringo t1) (wrap-state-stream (check-as-inf-type string? t1 st)))
     ((not-stringo t1)  
       (mplus 
         (term-finite-type t1 st)
-        (wrap-state-stream (check-as-disj (remove string? all-inf-type-label) t1 st))))
+        (wrap-state-stream (check-as-inf-type-disj (remove string? all-inf-type-label) t1 st))))
     ((ex _ gn) (start st gn))
     ;;; forall is tricky, 
     ;;;   we first use simplification to
