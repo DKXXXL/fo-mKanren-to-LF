@@ -125,7 +125,7 @@
 ;;;     -- interpreted as conjunction of disjunction of inequality 
 ;;; assymbol/asstring/asnumber are all a list of variables
 ;;;   to indicate disjoint sets
-;;;   typercd : a dictionary index -> type-encoding 
+;;;   typercd : a dictionary index -> set of type-encoding 
 ;;;     "as disjunction of possible types"
 ;;;   
 (struct state (sub trace direction diseq typercd) #:prefab)
@@ -329,46 +329,6 @@
   )
 )
 
-;;; (define (neg-unify-with-typeinfo* list-u-v st)
-;;;   (define (compute-newly-added u-v)
-;;;     (let* ([subst (state-sub st)]
-;;;            [unification-info (unify/sub (car u-v) (cdr u-v) subst)]
-;;;            [newly-added (extract-new unification-info subst)])
-;;;       newly-added      
-;;;     )
-;;;   )
-
-;;;   (let* ([list-newly-adds-on-each-u-vs (map compute-newly-added list-u-v)]
-;;;          )
-;;;     (if (ormap not list-newly-adds-on-each-u-vs) 
-;;;       st
-;;;       (match (append* list-newly-adds-on-each-u-vs)
-;;;       ['() #f]
-;;;       [(list (cons u #f)) (check-as-disj (remove false? type-label-top) u st)]
-;;;       ;;; TODO: #t, '()
-;;;       ;;;  we need to upgrade inequality into type constraint
-;;;       [_
-;;;        (state-diseq-update st (lambda (x) (cons new-adds-on-all x)))
-;;;       ]
-;;;     )
-;;;   )
-
-
-;;;   )
-;;; )
-
-
-;;; neg-unify** : given a list of list of pairs, indicating 
-;;;   conjunction of disjunction of inequality, 
-;;;    solve them according to the current state
-;;; (define (neg-unify** list-list-u-v st)
-;;;   (match list-list-u-v
-;;;     ['() st]
-;;;     [(cons head tail) 
-;;;       (neg-unify** tail (neg-unify* head st))
-;;;     ]
-;;;   )
-;;; )
 
 (define (state-sub-update-nofalse st f)
   (define st- (state-sub-update st f))
@@ -382,6 +342,7 @@
     null? '()
   )
 )
+
 
 (define (is-singleton-type x) 
   (define k (hash-ref singleton-type-map x 'False)) 

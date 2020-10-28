@@ -176,6 +176,20 @@
   resultf
 )
 
+;;; example usage
+;;; not-symbolo will be translated into (numbero v stringo v pairo v boolo)
+;;; (define remove-neg-by-decidability
+;;;   (define (match-single prev-f ext-f g)
+;;;     (match g
+;;;       [(not-symbolo x) (disj (pairo x) (boolo x) (numbero x) (stringo x))]
+;;;       [(not-numbero x) (disj (pairo x) (boolo x) (symbolo x) (stringo x))]
+;;;       [(not-stringo x) (disj (pairo x) (boolo x) (numbero x) (symbolo x))]
+;;;       [_ (prev-f g)]
+;;;     )
+;;;   )
+;;;   (overloading-functor-list (list match-single goal-base-endofunctor))
+;;; )
+
 ;;; currently implemented with side-effect,
 ;;;   it is another kind of fold but I am bad at recursion scheme
 ;;;   basically return all free-variables
@@ -239,11 +253,12 @@
     ;;;   we first need to consider forall as just another fresh
     ;;;   and "bind" the complement of result to the nexttime forall as domain
     ;;;   
+    ;;; 
     ((forall var domain goal) 
       (let* [(domain_ (simplify-wrt st domain var))] 
         (if (equal? domain_ Bottom) 
           (wrap-state-stream st)
-          (bind-forall (start st (ex var (conj domain_ goal))) var goal)
+          (bind-forall (start st (ex var (conj domain_ goal))) var (forall var domain goal))
         )
       )
     )
@@ -283,20 +298,32 @@
         ;;;     1.a but to complement on v, it is hard because state has conjunction of disjunction of inequality
         ;;;     1.b so we make state "pair s" into "pair s_" s
         ;;;           .t. (car s_) has only conjunction of inequality about v or just unchanged (if no inequality about v)
-        ;;;           "stream-rearrange-to-first-about"
+        ;;;           "split-diseqs-of-state"
+        ;;;         and also make sure other parts of the inequality list is not relevent to x
         ;;;     1.c then we can take complement -- 
         ;;;         by first extract info about v from (car s_) into goals "to-complement"
         ;;;         and then remove info about v from (car s_) into 
         ;;;   2. after complement, we just conjunction the domain with original forall's domain and (pause st g)
         ((pair? s)
-            (let* ([s (stream-rearrange-to-first-about v s)] 
-                  ;; now (car s_) must have just one element in disjunction of conjunction of inequality
-                   [to-complement (extract-goal-about v (car s))] ;; type: goal
-                   [complemented-goal (complement to-complement)] ;; type: goal
-                   [v-cleared (clear-about v (car s))] ;; type: state
+            (let* ([first-st (car s)]
+                   [split-states (split-diseqs-of-state v first-st)] 
+                  ;;;  now we have a list of state; 
+                  ;;;  and for each state we will get 
+                  ;;;  1. the cleared states about v 2. the corresponding complemented goal 
+                   [extract-complement-goal (lambda (st) (complement (extract-goal-about v st)))]
+                   [clear-state-on-v (lambda (st) (clear-about v st))]
+                  ;;;  now construct a bunch of stream according to those
+                   [new-conj-domains (map extract-complement-goal split-states)]
+                   [new-states (map clear-state-on-v split-states)]
+                   [streams (map (lambda (complemented-goal state) 
+                                  (pause state (forall v (conj complemented-goal domain) goal))) 
+                                    new-conj-domains new-states)]
+                   [converged-streams (foldl mplus #f streams)]
                     )
-
-              (step (mplus (pause v-cleared (forall v (conj complemented-goal domain) goal))
+              ;;; forall x (== x 3) (== x 3)
+              ;;;   forall x (conj (== x 3) (=/= x 3)) (== x 3)
+              ;;;  forall x () (symbolo x) /\ (not-symbolo x)
+              (step (mplus converged-streams
                            (bind-forall (cdr s) v (forall v domain goal)))))) ;;; other possible requirements search
 
         (else (bind-forall s v (forall v domain goal))))
@@ -361,18 +388,7 @@
 ;;; (define (pairo x) (disj (== x '()) (fresh (y z) (== x (cons y z)))))
 ;;; (define (boolo x) (disj (== x #t) (== x #f)))
 
-;;; not-symbolo will be translated into (numbero v stringo v pairo v boolo)
-;;; (define remove-neg-by-decidability
-;;;   (define (match-single prev-f ext-f g)
-;;;     (match g
-;;;       [(not-symbolo x) (disj (pairo x) (boolo x) (numbero x) (stringo x))]
-;;;       [(not-numbero x) (disj (pairo x) (boolo x) (symbolo x) (stringo x))]
-;;;       [(not-stringo x) (disj (pairo x) (boolo x) (numbero x) (symbolo x))]
-;;;       [_ (prev-f g)]
-;;;     )
-;;;   )
-;;;   (overloading-functor-list (list match-single goal-base-endofunctor))
-;;; )
+
 
 ;;; simplify goal w.r.t. a domain variable, constant parameters acceptable
 ;;;   if satisfiable, then act as identity
@@ -383,29 +399,171 @@
   (void)
 )
 
-;;; variable x stream -> stream
-;;;   we will make the first state of the stream into 
-;;;    another stream s.t. the first state is either
-;;;    only contain one disjunction of the previous state
-;;;    or just unchanged but there is no state 
-(define (stream-rearrange-to-first-about v s) 
-  (define s (if (mature? s) s (mature s)))
-  ;;; make sure matured
-  (define s1 (car s))
-  (define s2 (cdr s))
-  ;;; 1. first sort the s1's conjunction of disjunction
-  (void)
+;;; appearances of nested list
+(define (member-nested v l)
+  (match l ['() #f] 
+    [(cons h t) 
+      (or (match h [(? pair?) (member-nested v h)] [_ (equal? h v)]) (member-nested v t))]))
+
+;;; variable x state -> List[state]
+;;;   we will make a given state into a stream of states
+;;;    that has equivalent semantic
+;;;    but also, each conj component in the state will either only about v
+;;;       or not about v at all 
+;;;    (i.e. each disjunct is about v or none of disjunct is about v) 
+(define (split-diseqs-of-state v st) 
+  (define inequalities (state-diseq st))
+  ;;; 1. first sort the conjunction of disjunction
+  ;;; state -> state, that will make conjunction component with appearances of v appear ahead
+
+
+
+  ;;; transform to conjunction of pair of disjunction
+  ;;; i.e. list of pair of list
+
+  ;;;  given a disjuncts, we return a list of disjuncts, where the first element
+  ;;;     is all about v while the second is not
+  ;;;  disjunct = list of inequalities
+  ;;; disjunct -> pair of disjunct
+  ;;; 
+  (define (split-disj disj)
+    (cons
+      (filter (lambda (x) (member-nested v x)) disj)
+      (filter (lambda (x) (not (member-nested v x))) disj)
+    )
+  )
+
+  ;;; given a list of disjunct [A, B, C], return a list of list of disjunct
+  ;;;   as [[split-disj A . 0, split-disj B . 0, split-disj C . 0],
+  ;;;       [split-disj A . 1, split-disj B . 0, split-disj C . 0] ...]
+  ;;; list of disjunction -> list of list of disjunction
+  ;;; conjunction of disjunction -> disjunction of conjunction of disjunction
+  (define (split-disjs disjs)
+    (match disjs
+      ['() (list (list))]
+      [(cons h t) 
+        (match-let* 
+         ([later (split-disjs t)] ;;; list of list of disjunct
+          [(cons has-v no-v) (split-disj h)] ;;; pair of disj
+          ;;;  has-v : disjunct
+          ;;; if any of the has-v/no-v is actually empty, then
+          ;;;   (basically disjunct of empty is False)
+          ;;;   we will have to ignore 
+          [empty '()]
+          [add-has-v (if (null? has-v) 
+                          empty 
+                          (append empty (map (lambda (x) (cons has-v x)) later) ))]
+          [add-no-v (if (null? no-v)
+                        add-has-v
+                        (append empty (map (lambda (x) (cons no-v x)) later) ) )])
+          add-no-v     
+        )
+      ]
+    )
+  )
+
+  (define each-conjunction (split-disjs inequalities))
+  (define all-state (map (lambda (conj) (state-diseq-set st conj)) each-conjunction))
+  
+  ;;; return the list of states
+  all-state
+
+  ;;; now compute the set of conjunctions of disjunctions
+  
 )
+
+;;; (list true? false? null? pair? number? string? symbol?)
+
+(define-syntax fresh
+  (syntax-rules ()
+    ((_ (x ...) g0 gs ...)
+     (let ((x (var/fresh 'x)) ...) (ex-s (x ...) (conj* g0 gs ...))))))
+
+(define type-label-to-type-goal
+  (hash
+    symbol? symbolo
+    pair? (lambda (term) (fresh (y z) (== term (cons y z))))
+    number? numbero
+    string? stringo
+  )
+)
+
 
 ;;; getting the goals that is directly translating
 ;;;   the state 'st', the goals are all about v
 ;;;  var x state -> goal
+;;;   precondition: 
+;;;   state has each disjunction in diseq only about v or not at all about v
 (define (extract-goal-about v st)
-  (void)
+  (define (extract-from-each-subst pair)
+      (match pair [(cons l r) (== l r)]))
+  
+  (define from-subst 
+    (foldl conj Top
+      (map extract-from-each-subst 
+        (filter (lambda (x) (member-nested v x)) (state-sub st)))))
+  
+  ;;; stage each (list as) disjunction of inequalities into literal goals
+  (define (stage-disj disj-list)
+    (define (each-to-diseq p) (=/= (car p) (cdr p)))
+    (foldl disj Bottom (map each-to-diseq disj-list)))
+
+  ;;; stage each (list as) conjunction of disjunction of inequalities into literal goals
+  (define (stage-conj-disj conj-disj-list)
+    (foldl conj Top (map stage-disj conj-disj-list)))
+
+  (define from-diseq
+    ;;; make a conjunction of disjunction of inequalities
+    ;;;   into literal goals
+    (stage-conj-disj (filter (lambda (l) (member-nested v l)) (state-diseq st)) )
+  )
+
+  (define from-typecsts
+    ; just take out the typercd about v
+    ;;; and translate to goals
+    (let* ([tyr (state-typercd st)]
+           [type-labels (hash-ref tyr v '())]
+           [type-label-to-goal (lambda (label) ((hash-ref type-label-to-type-goal label (void)) v))]
+           [type-csts (map type-label-to-goal type-labels)])
+      (foldl conj Top type-csts)))
+  
+  (conj from-subst (conj from-diseq from-typecsts))
 )
+
+;;; homomorphism on pair, will respect pair construct
+(define (pair-base-endofunctor prev-f extended-f g)
+  (define rec extended-f)
+  (match g
+    ['() '()]
+    [(cons a b) (cons (rec a) (rec b))]
+    [_ g]
+  )
+)
+
 
 ;;; clear everything about v on st
 ;;;  var x state -> state
+;;;   done easily by replace v with a brand new var everywhere in the st
 (define (clear-about v st)
-  (void)
+  (define (literal-replace from after obj)
+    (define (literal-replace-from-after prev-f ext-f obj)
+      (define rec extended-f)
+      (match obj
+        [(? (lambda (x) (equal? x from))) after]
+        ;;; other extended construct -- like state
+        ;;;  very untyped...
+        [(state a b c d e) (state (rec a) (rec b) (rec c) (rec d) (rec e))]
+        ;;; or type constraint information,
+        ;;;  we only need to deal with type information
+        [(? hash?) 
+          (let* ([at-key (hash-ref obj from #f)])
+            (if at-key (hash-set (hash-remove obj from) after at-key) obj))
+          ]
+        [_ (prev-f obj)]))
+  
+    ((overloading-functor-list (list literal-replace-from-after pair-base-endofunctor)) obj))
+
+  (let* ([vname (symbol->string (var-name v))]
+         [new-v (var/fresh (string->symbol (string-append vname "-dummy")))])
+    (literal-replace v new-v st))
 )
