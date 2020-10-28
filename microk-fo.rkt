@@ -132,14 +132,14 @@
 (struct Top ()
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "⊤" (not-stringo-t val)))]
+     (fprintf output-port "⊤" ))]
 )
 
 
 (struct Bottom ()
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "⊥" (not-stringo-t val)))]
+     (fprintf output-port "⊥" ))]
 )
 
 
@@ -302,9 +302,10 @@
     ;;; 
     ((forall var domain goal) 
       (let* [(domain_ (simplify-wrt st domain var))] 
-        (if (equal? domain_ (Bottom)) 
-          (wrap-state-stream st)
-          (bind-forall (start st (ex var (conj domain_ goal))) var (forall var domain goal))
+
+        (match domain_
+          [(Bottom) (wrap-state-stream st)]
+          [_ (bind-forall (start st (ex var (conj domain_ goal))) var (forall var domain_ goal))]
         )
       )
     )
