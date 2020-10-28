@@ -7,6 +7,7 @@
   empty-state
   state-sub
   state-direction-set
+  state-diseq-set
   shadow-idempotent-sub
   trace-left
   trace-right
@@ -20,6 +21,7 @@
   check-as-disj
   check-as
   type-label-top
+  all-inf-type-label
   true?
   false?
   )
@@ -116,6 +118,8 @@
 ;;; (null? '() )
 
 (define type-label-top (list true? false? null? pair? number? string? symbol?))
+(define all-inf-type-label (list pair? number? string? symbol?))
+
 ;;; TODO: if all of the elements in type set are for the finite, 
 ;;;   then inequality might cause trouble  
 ;;;   for example, (exists x y z.) they are all different, they are all booleans
@@ -131,6 +135,9 @@
 (struct state (sub trace direction diseq typercd) #:prefab)
 (define empty-state (state empty-sub '() '() '() (hash)))
 (define-struct-updaters state)
+
+;;; we consider #f is the failed state, also one of the state
+(define (?state? obj) (or (equal? obj #f) (state? obj)))
 
 (define (trace-left st)
   (state-trace-update st (lambda (x) (cons 'left x))))
@@ -171,6 +178,7 @@
 )
 
 (define (any? _) #t)
+
 (define/contract (unify u v st)
   (any? any? state? . -> . stream?)
   ;;; inequality-recheck :: state -> state
@@ -197,21 +205,17 @@
               [erased-type-state (state-typercd-set unified-state erased-htable)]
               ;;; TODO: check-as-disj might have corner 
               ;;;   case where first element is null
-              ;;; helper function that do things like flatmap
-              ;;;  check-as-on-each :: type-label  x term x stream[st] -> stream[st]
-              ;;;  erased-type-state :: st  (as initial state)
-              ;;;  new-vars-types :: list of type-label
-              ;;;  new-vars :: list of term
-              ;;; checked-type-states :: matured-stream[st]
-              [checked-type-states (foldl check-as-on-each 
-                                         (wrap-state-stream erased-type-state)
+              [check-as-disj*-c (lambda (type?* t st) (if (and type?* st) (check-as-disj type?* t st) st))]
+              [checked-type-state (foldl check-as-disj*-c
+                                         erased-type-state 
                                          new-vars-types new-vars)]
-              ;;; [all-diseq (and checked-type-state 
-              ;;;             (state-diseq checked-type-state))]
-              )
+                                         )
         ;;;  TODO: short-circuit the possible #f appearing inside foldl
-        (map-matured-stream inequality-recheck checked-type-states)
-  ))))
+
+        (and checked-type-state
+          (wrap-state-stream (inequality-recheck checked-type-state) )))
+  
+  )))
 
 ;; Reification
 (define/contract (walk* tm sub)
@@ -350,15 +354,16 @@
   )
 (define (not-singleton-type x) (not (is-singleton-type x)))
 
-;;; check-as-disj: List[type-predicate] x term x state -> Stream[state]
+;;; check-as-disj: List[inf-type-predicate] x term x state -> state
 ;;;  currently it will use predicate as marker
-;;;  if type-predicate == #f, then state unchanged returned
 ;;;  precondition: type?* is never #f, st is never #f
-(define (check-as-disj type?* t st)
-
+;;;   precondition: type?* \subseteq all-inf-type-label
+(define/contract (check-as-disj type?* t st)
+  (any? any? ?state? . -> . ?state?)
   (define inf-type?* (filter not-singleton-type type?*))
 
   (define infinite-type-checked-state ;;; type : state
+    (and st
     (match (walk* t (state-sub st))
           [(var _ index) 
             ;;; check if there is already typercd for index on symbol
@@ -378,53 +383,41 @@
                     ;;;   quantifier because they don't specify scope!!
                     ;;;  here it is even more complicated ... what is the scope of a b?
                     ;;;    if we don't know the scope, will it cause problem when generating trace?
-                    [(? (lambda (x) (and (pair? x) (equal? pair? (car x)) (equal? '() (cdr x)))))
+                    [(list pair?_)
+                      #:when (equal? pair?_ pair?)
                       (let* ([t1 (var/fresh 't1)]
-                             [t2 (var/fresh 't2)])
-                        (state-sub-update-nofalse st (lambda (sub) (unify/sub t (cons t1 t2) sub))))]  
+                             [t2 (var/fresh 't2)]
+                             [st-unify-updated 
+                                    (state-sub-update-nofalse st 
+                                      (lambda (sub) (unify/sub t (cons t1 t2) sub)))]
+                             [st-tyrcd-updated
+                                    (state-typercd-update st-unify-updated (lambda (tyrcd) (hash-remove tyrcd t))) ]
+                             )
+                        ;;; TODO: recheck this part 
+                        ;;; 1. these two new vars have no good scope info *
+                        ;;; 2. unify/sub doesn't seem to do more checking? ** 
+                        ;;; 3. then we remove type information
+                        st-tyrcd-updated) ]  
                     [_   (state-typercd-update st (lambda (x) (hash-set x index intersected)))]
                     )
                   
                 )
-                 (state-typercd-update st (lambda (x) (hash-set x index type?*)))) ) ]
+                (state-typercd-update st (lambda (x) (hash-set x index type?*)))) ) ]
 
-          [v (and (ormap (lambda (x?) (x? v)) type?*) st)]) )
-    
-
-    (define finite-type-labels (filter is-singleton-type type?*))
-    (define finite-objects (map (lambda (x) (hash-ref singleton-type-map x #f)) finite-type-labels))
-    
-    (define (check-as-object each-obj st) ;;; state
-      (match (walk* t (state-sub st))
-        [(var _ index) 
-          ;;; check if there is already typercd for index on symbol
-          (let* ([htable (state-typercd st)]
-                  [type-info (hash-ref htable index 'False)])
-            (if (not (equal? type-info 'False))
-              ;;; type-info is a set of non-empty predicates
-              ;;;  directly conflicting, 
-              #f
-              (state-sub-update-nofalse st (lambda (sub) (unify/sub t each-obj sub) )) ) ) ]
-        [v (state-sub-update-nofalse st (lambda (sub) (unify/sub t each-obj sub) )) ])
-    )
-
-    ;;; each possible type indicate a different state in the returned list
-    (define finite-type-checked-states ;;; list of states
-      (map (lambda (obj) (check-as-object obj st)) finite-objects)
-    )
-
-    (define all-type-checked-states
-      (filter (lambda (x) x) (cons infinite-type-checked-state finite-type-checked-states))
-    )
-    (match all-type-checked-states
-      ['() #f]
-      [_ (foldl cons #f all-type-checked-states)]
-    )
-    ;;; then we combine into stream of state
+          [v (and (ormap (lambda (x?) (x? v)) inf-type?*) st)]) ))
+    ;;; return the following
+    infinite-type-checked-state
 )
 
-;;; check-as :: type-label  x term x st -> stream[st]
-(define (check-as type? t st) (check-as-disj (list type?) t st))
+;;; check-as :: inf-type-label  x term x (state or #f) -> (state or #f)
+;;;  precondition: type? \in all-inf-type-label 
+;;;  if type-label = #f, then we will just return st
+(define/contract (check-as type? t st) 
+  (any? any? ?state? . -> . ?state?)
+  (if (and type? st)
+    (check-as-disj (list type?) t st)
+    st)
+)
 
 (define (map-matured-stream f stream)
   (match stream
@@ -447,15 +440,15 @@
   )
 )
 
-;;; lift check-as onto stream
-;;; check-as-on-each :: type-label  x term x matured-stream[st] -> matured-stream[st]
-;;;  when type-label = #f, we think of it as don't do any check, thus return original stream
-(define (check-as-on-each type? t sts)
-  (if (equal? type? #f)
-    sts
-    (fold-matured-stream 
-        append-matured-stream
-        #f 
-        (map-matured-stream (lambda (st) (check-as type? t st)) sts))
-  )
-)
+;;; ;;; lift check-as onto stream
+;;; ;;; check-as-on-each :: type-label  x term x matured-stream[st] -> matured-stream[st]
+;;; ;;;  when type-label = #f, we think of it as don't do any check, thus return original stream
+;;; (define (check-as-on-each type? t sts)
+;;;   (if (equal? type? #f)
+;;;     sts
+;;;     (fold-matured-stream 
+;;;         append-matured-stream
+;;;         #f 
+;;;         (map-matured-stream (lambda (st) (check-as type? t st)) sts))
+;;;   )
+;;; )

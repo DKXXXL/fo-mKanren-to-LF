@@ -230,6 +230,13 @@
 )
 
 
+;;; term-finite-type : term x state -> stream
+;;;  this will assert t is either #t, #f, or '()
+(define (term-finite-type t st)
+  (pause st (disj* (== t '()) (== t #t) (== t #f)))
+)
+
+
 (define (start st g)
   (match g
     ((disj g1 g2)
@@ -241,12 +248,21 @@
      (pause st (thunk)))
     ((== t1 t2) (unify t1 t2 st))
     ((=/= t1 t2) (neg-unify t1 t2 st))
-    ((symbolo t1)  (check-as symbol? t1 st))
-    ((not-symbolo t1) (check-as-disj (remove symbol? type-label-top) t1 st)) 
-    ((numbero t1) (check-as number? t1 st))
-    ((not-numbero t1)  (check-as-disj (remove number? type-label-top) t1 st)) 
-    ((stringo t1) (check-as string? t1 st))
-    ((not-stringo t1)  (check-as-disj (remove string? type-label-top) t1 st))
+    ((symbolo t1)  (wrap-state-stream (check-as symbol? t1 st)))
+    ((not-symbolo t1) 
+      (mplus 
+        (term-finite-type t1 st)
+        (wrap-state-stream (check-as-disj (remove symbol? all-inf-type-label) t1 st)))) 
+    ((numbero t1) (wrap-state-stream (check-as number? t1 st)))
+    ((not-numbero t1)  
+      (mplus 
+        (term-finite-type t1 st)
+        (wrap-state-stream (check-as-disj (remove number? all-inf-type-label) t1 st)))) 
+    ((stringo t1) (wrap-state-stream (check-as string? t1 st)))
+    ((not-stringo t1)  
+      (mplus 
+        (term-finite-type t1 st)
+        (wrap-state-stream (check-as-disj (remove string? all-inf-type-label) t1 st))))
     ((ex _ gn) (start st gn))
     ;;; forall is tricky, 
     ;;;   we first use simplification to
@@ -293,37 +309,19 @@
         ;;;  and the same time, other possible 
 
         ;;;   to initiate the search for remaining domain is hard: 
-        ;;;   1. we use the result for the previous search, and complement only on v 
-        ;;;       (because all other vars should be fixed)
-        ;;;     1.a but to complement on v, it is hard because state has conjunction of disjunction of inequality
-        ;;;     1.b so we make state "pair s" into "pair s_" s
-        ;;;           .t. (car s_) has only conjunction of inequality about v or just unchanged (if no inequality about v)
-        ;;;           "split-diseqs-of-state"
-        ;;;         and also make sure other parts of the inequality list is not relevent to x
-        ;;;     1.c then we can take complement -- 
-        ;;;         by first extract info about v from (car s_) into goals "to-complement"
-        ;;;         and then remove info about v from (car s_) into 
-        ;;;   2. after complement, we just conjunction the domain with original forall's domain and (pause st g)
+        ;;;   1. we extract goal from the state
+        ;;;   2. we take its complement
+        ;;;   3. we clear the v information from st
+        ;;;   4. the cleared state and its complement help us on the next search 
         ((pair? s)
-            (let* ([first-st (car s)]
-                   [split-states (split-diseqs-of-state v first-st)] 
-                  ;;;  now we have a list of state; 
-                  ;;;  and for each state we will get 
-                  ;;;  1. the cleared states about v 2. the corresponding complemented goal 
-                   [extract-complement-goal (lambda (st) (complement (extract-goal-about v st)))]
-                   [clear-state-on-v (lambda (st) (clear-about v st))]
-                  ;;;  now construct a bunch of stream according to those
-                   [new-conj-domains (map extract-complement-goal split-states)]
-                   [new-states (map clear-state-on-v split-states)]
-                   [streams (map (lambda (complemented-goal state) 
-                                  (pause state (forall v (conj complemented-goal domain) goal))) 
-                                    new-conj-domains new-states)]
-                   [converged-streams (foldl mplus #f streams)]
+            (let* ([st (car s)]
+                   [complemented-goal (complement (extract-goal-about v st))]
+                   [next-st (clear-about v st)]
                     )
               ;;; forall x (== x 3) (== x 3)
               ;;;   forall x (conj (== x 3) (=/= x 3)) (== x 3)
               ;;;  forall x () (symbolo x) /\ (not-symbolo x)
-              (step (mplus converged-streams
+              (step (mplus (pause next-st (forall v (conj complemented-goal domain) goal))
                            (bind-forall (cdr s) v (forall v domain goal)))))) ;;; other possible requirements search
 
         (else (bind-forall s v (forall v domain goal))))
@@ -474,34 +472,43 @@
 
 ;;; (list true? false? null? pair? number? string? symbol?)
 
-(define-syntax fresh
+(define-syntax fresh_
   (syntax-rules ()
     ((_ (x ...) g0 gs ...)
-     (let ((x (var/fresh 'x)) ...) (ex-s (x ...) (conj* g0 gs ...))))))
+     (let ((x (var/fresh 'x)) ...)  (conj* g0 gs ...)))))
+
+(define-syntax disj*
+  (syntax-rules ()
+    ((_)           fail)
+    ((_ g)         g)
+    ((_ g0 gs ...) (disj g0 (disj* gs ...)))))
+
+(define-syntax conj*
+  (syntax-rules ()
+    ((_)                succeed)
+    ((_ g)              g)
+    ((_ gs ... g-final) (conj (conj* gs ...) g-final))))
 
 (define type-label-to-type-goal
   (hash
     symbol? symbolo
-    pair? (lambda (term) (fresh (y z) (== term (cons y z))))
+    pair? (lambda (term) (fresh_ (y z) (== term (cons y z))))
     number? numbero
     string? stringo
   )
 )
 
 
-;;; getting the goals that is directly translating
-;;;   the state 'st', the goals are all about v
+;;; getting the goals that is translating
+;;;   the state 'st', also goals include the type constraints about v
 ;;;  var x state -> goal
-;;;   precondition: 
-;;;   state has each disjunction in diseq only about v or not at all about v
 (define (extract-goal-about v st)
   (define (extract-from-each-subst pair)
       (match pair [(cons l r) (== l r)]))
   
   (define from-subst 
     (foldl conj Top
-      (map extract-from-each-subst 
-        (filter (lambda (x) (member-nested v x)) (state-sub st)))))
+      (map extract-from-each-subst (state-sub st) )))
   
   ;;; stage each (list as) disjunction of inequalities into literal goals
   (define (stage-disj disj-list)
@@ -515,8 +522,7 @@
   (define from-diseq
     ;;; make a conjunction of disjunction of inequalities
     ;;;   into literal goals
-    (stage-conj-disj (filter (lambda (l) (member-nested v l)) (state-diseq st)) )
-  )
+    (stage-conj-disj (state-diseq st)))
 
   (define from-typecsts
     ; just take out the typercd about v
@@ -547,7 +553,7 @@
 (define (clear-about v st)
   (define (literal-replace from after obj)
     (define (literal-replace-from-after prev-f ext-f obj)
-      (define rec extended-f)
+      (define rec ext-f)
       (match obj
         [(? (lambda (x) (equal? x from))) after]
         ;;; other extended construct -- like state
