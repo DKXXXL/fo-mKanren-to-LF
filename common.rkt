@@ -135,8 +135,8 @@
 ;;;   typercd : a dictionary index -> set of type-encoding 
 ;;;     "as disjunction of possible types"
 ;;;   
-(struct state (sub trace direction diseq typercd) #:prefab)
-(define empty-state (state empty-sub '() '() '() (hash)))
+(struct state (sub scope trace direction diseq typercd) #:prefab)
+(define empty-state (state empty-sub '() '() '() '() (hash)))
 (define-struct-updaters state)
 
 ;;; we consider #f is the failed state, also one of the state

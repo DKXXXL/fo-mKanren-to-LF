@@ -295,7 +295,8 @@
       (mplus 
         (term-finite-type t1 st)
         (wrap-state-stream (check-as-inf-type-disj (remove string? all-inf-type-label) t1 st))))
-    ((ex _ gn) (start st gn))
+    ((ex v gn) 
+      (start (state-scope-update st (lambda (scope) (set-add scope v))) gn))
     ;;; forall is tricky, 
     ;;;   we first use simplification to
     ;;;   we first need to consider forall as just another fresh
@@ -304,12 +305,12 @@
     ;;; 
     ((forall var domain goal) 
       (let* [(domain_ (simplify-wrt st domain var))
-        (k (begin (display var) (display ": domain_: ") (display domain_) (display "\n")))
-        ] 
+             (k (begin (display var) (display ": domain_: ") (display domain_) (display "\n")))
+            ] 
 
         (match domain_
           [(Bottom) (wrap-state-stream st)]
-          [_ (bind-forall (start st (ex var (conj domain_ goal))) var (forall var domain_ goal))]
+          [_ (bind-forall (start st (ex var (conj domain_ goal)))  var (forall var domain_ goal))]
         )
       )
     )
@@ -354,8 +355,12 @@
         ;;;   4. the cleared state and its complement help us on the next search 
         ((pair? s)
             (let* ([st (car s)]
-                   [complemented-goal (complement (extract-goal-about v st))]
-                   [next-st (clear-about v st)]
+                   [current-vars (state-scope st)]
+                  ;;;  TODO: figure out trace!
+                   [st-scoped-w/v (shrink-into (set-add current-vars v) st)]
+                   [st-scoped-w/ov (shrink-into (set-remove current-vars v) st) ]
+                   [complemented-goal (complement (extract-goal-about v st-scoped-w/v))]
+                   [next-st st-scoped-w/ov]
                    [k (begin  (display "next state ") (display next-st) (display "\n search with domain on var ")
                               (display v) (display " in ") (display complemented-goal) (display "\n"))]
                     )
@@ -603,15 +608,72 @@
   (conj from-subst (conj from-diseq from-typecsts))
 )
 
-;;; shrink-from :: var x state -> state
-;;;  it will make state doesn't have var, but remain the same semantic as much as possible
-;;;  
-(define (shrink-from var st)
-  ;;; this algorithm is hard to be sound, the best situation is that we have (var == ...) the form
+;;; replace one var with another
+;;;  var x var x state -> state
+;;;   but won't touch 
+(define/contract (literal-replace from after st)
+  (any? any? state? . -> . state?)
+  (define (literal-replace-from-after prev-f rec obj)
+    (match obj
+      [(? (lambda (x) (equal? x from))) after]
+      ;;; other extended construct -- like state
+      ;;;  very untyped...
+      [(state a b c d e) (state (rec a) (rec b) (rec c) (rec d) (rec e))]
+      ;;; or type constraint information,
+      ;;;  we only need to deal with type information
+
+      ;;; TODO: there is some problem here
+      ;;;   basically it is possible that from will be walked into another var
+      ;;;    that has the correct type constraint information
+      [(? hash?) 
+        (let* ([at-key (hash-ref obj from #f)])
+          (if at-key (hash-set (hash-remove obj from) after at-key) obj))
+        ]
+      [_ (prev-f obj)]))
+
+  (define internal-f (overloading-functor-list (list literal-replace-from-after pair-base-endofunctor)))
+  ;;; return the following
+  (internal-f st))
+
+;;;  a series of shrink into
+;;; shrink-into :: set of var x state -> state
+;;;  it will make state only about vars
+;;;    !!! OVER/UNDER APPROXIMATION !!! can happen here
+;;;   basically we don't really have to have [st] iff [shrink-into .. st]
+;;;    [st] implies [shrink-into .. st] and 
+;;;    [shrink-into .. st] implies [st] are both possibly ok! since we are doing *automated proving*
+;;;      if we strengthen/weaken the condition, but somehow we still can deduce the goal, then we are fine!
+
+(define (shrink-away var-from term-to st)
+  (literal-replace var-from term-to st))
+
+;;; an intuitive version
+(define (shrink-into vars st)
+  ;;; this algorithm is hard to be complete, the best situation is that we have (var == ...) the form
   ;;;  the bad situation is when we have ((cons var ..) == ...) 
   ;;;     in these cases, it is unknown how to deal with them 
-  ;;; 1. first 
-  (void)
+  ;;; 1. first go through each substition, and use each equality to rewrite
+  (define (deal-with-sub st)
+    (match (state-sub st)
+      ['() st]
+      [(cons (cons l r) tail)
+        (let ([st- (state-sub-update st cdr)])
+          (if ((not (member l vars)))
+            ;;; we need to remove existence of l by rewriting
+            (deal-with-sub (shrink-away l r st-))
+            ;;; otherwise we check if r needs to be rewritten into l
+            (if (and (var? r) (not (member r vars)))
+              (deal-with-sub (shrink-away r l st-))
+              ;;; o/w do nothing
+              (state-sub-update (deal-with-sub st-) (lambda (sub) (cons (cons l r) sub)))
+            )
+            
+        ))
+      ]
+    ))
+  ;;; 2. if there is still existence of var other than those in vars, we are in trouble... 
+  ;;;  TODO: fix this problem 
+  (deal-with-sub st)
 )
 
 ;;; clear everything about v on st
@@ -620,25 +682,6 @@
 (define/contract (clear-about v st)
   (any?  ?state? . -> . ?state?)
   ;;; (display st)
-  (define (literal-replace from after obj)
-    (define (literal-replace-from-after prev-f rec obj)
-      (match obj
-        [(? (lambda (x) (equal? x from))) after]
-        ;;; other extended construct -- like state
-        ;;;  very untyped...
-        [(state a b c d e) (state (rec a) (rec b) (rec c) (rec d) (rec e))]
-        ;;; or type constraint information,
-        ;;;  we only need to deal with type information
-        [(? hash?) 
-          (let* ([at-key (hash-ref obj from #f)])
-            (if at-key (hash-set (hash-remove obj from) after at-key) obj))
-          ]
-        [_ (prev-f obj)]))
-
-    (define internal-f (overloading-functor-list (list literal-replace-from-after pair-base-endofunctor)))
-    ;;; return the following
-    (internal-f obj))
-
   (let* ([vname (symbol->string (var-name v))]
          [new-v (var/fresh (string->symbol (string-append vname "D")))]
          [replaced (literal-replace v new-v st)]
