@@ -35,6 +35,9 @@
   )
 
 (require "common.rkt")
+(require errortrace)
+
+(instrumenting-enabled #t)
 
 ;; first-order microKanren
 ;;; goals
@@ -233,7 +236,7 @@
 )
 
 ;;; streams
-(struct bind   (bind-s bind-g)          #:prefab)
+(struct bind   (scope bind-s bind-g)          #:prefab)
 (struct mplus  (mplus-s1 mplus-s2)      #:prefab)
 (struct pause  (pause-state pause-goal) #:prefab)
 
@@ -242,7 +245,7 @@
 ;;;   all the possibe results of first-attempt-s
 ;;;   will be complemented and intersect with the domain of the bind-g
 ;;;   bind-g will have to be a forall goal
-(struct bind-forall   (first-attempt-s dv bind-g)          #:prefab)
+(struct bind-forall   (scope first-attempt-s dv bind-g)          #:prefab)
 
 
 (define (mature? s) 
@@ -275,7 +278,7 @@
      (step (mplus (pause (trace-left st) g1)
                   (pause (trace-right st) g2))))
     ((conj g1 g2)
-     (step (bind (pause st g1) g2)))
+     (step (bind (state-scope st) (pause st g1) g2)))
     ((relate thunk _)
      (pause st (thunk)))
     ((== t1 t2) (unify t1 t2 st))
@@ -310,7 +313,7 @@
 
         (match domain_
           [(Bottom) (wrap-state-stream st)]
-          [_ (bind-forall (start st (ex var (conj domain_ goal)))  var (forall var domain_ goal))]
+          [_ (bind-forall (state-scope st) (start st (ex var (conj domain_ goal)))  var (forall var domain_ goal))]
         )
       )
     )
@@ -329,17 +332,17 @@
               (cons (car s1)
                     (mplus s2 (cdr s1))))
              (else (mplus s2 s1)))))
-    ((bind s g)
+    ((bind scope s g)
      (let ((s (if (mature? s) s (step s))))
        (cond ((not s) #f)
              ((pair? s)
-              (step (mplus (pause (car s) g)
-                           (bind (cdr s) g))))
-             (else (bind s g)))))
+              (step (mplus (pause (state-scope-set (car s) scope) g)
+                           (bind scope (cdr s) g))))
+             (else (bind scope s g)))))
     ;;; bind-forall is a bit complicated
     ;;;   it will first need to collect all possible solution of
     ;;;   s, and complement it, and intersect with 
-    ((bind-forall s v (forall v domain goal))
+    ((bind-forall current-vars s v (forall v domain goal))
      (let ((s (if (mature? s) s (step s))))
        (cond 
         ;;; unsatisfiable, then the whole is unsatisfiable
@@ -355,22 +358,22 @@
         ;;;   4. the cleared state and its complement help us on the next search 
         ((pair? s)
             (let* ([st (car s)]
-                   [current-vars (state-scope st)]
                   ;;;  TODO: figure out trace!
                    [st-scoped-w/v (shrink-into (set-add current-vars v) st)]
                    [st-scoped-w/ov (shrink-into (set-remove current-vars v) st) ]
                    [complemented-goal (complement (extract-goal-about v st-scoped-w/v))]
                    [next-st st-scoped-w/ov]
-                   [k (begin  (display "next state ") (display next-st) (display "\n search with domain on var ")
+                   [k (begin (display " current scope: ")(display current-vars)  
+                              (display "\n next state ") (display next-st) (display "\n search with domain on var ")
                               (display v) (display " in ") (display complemented-goal) (display "\n"))]
                     )
               ;;; forall x (== x 3) (== x 3)
               ;;;   forall x (conj (== x 3) (=/= x 3)) (== x 3)
               ;;;  forall x () (symbolo x) /\ (not-symbolo x)
               (step (mplus (pause next-st (forall v (conj complemented-goal domain) goal))
-                           (bind-forall (cdr s) v (forall v domain goal)))))) ;;; other possible requirements search
+                           (bind-forall current-vars (cdr s) v (forall v domain goal)))))) ;;; other possible requirements search
 
-        (else (bind-forall s v (forall v domain goal))))
+        (else (bind-forall current-vars s v (forall v domain goal))))
 
              ))
     ((pause st g) (start st g))
@@ -618,7 +621,7 @@
       [(? (lambda (x) (equal? x from))) after]
       ;;; other extended construct -- like state
       ;;;  very untyped...
-      [(state a b c d e) (state (rec a) (rec b) (rec c) (rec d) (rec e))]
+      [(state a scope trace direction d e) (state (rec a) scope trace direction (rec d) (rec e))]
       ;;; or type constraint information,
       ;;;  we only need to deal with type information
 
@@ -658,7 +661,7 @@
       ['() st]
       [(cons (cons l r) tail)
         (let ([st- (state-sub-update st cdr)])
-          (if ((not (member l vars)))
+          (if (not (member l vars))
             ;;; we need to remove existence of l by rewriting
             (deal-with-sub (shrink-away l r st-))
             ;;; otherwise we check if r needs to be rewritten into l
@@ -673,7 +676,7 @@
     ))
   ;;; 2. if there is still existence of var other than those in vars, we are in trouble... 
   ;;;  TODO: fix this problem 
-  (deal-with-sub st)
+  (and st (deal-with-sub st))
 )
 
 ;;; clear everything about v on st

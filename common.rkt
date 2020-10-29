@@ -6,9 +6,12 @@
   (struct-out state)
   empty-state
   state-sub
+  state-sub-update
   state-direction-set
   state-diseq-set
   state-diseq-update
+  state-scope-update
+  state-scope-set
   shadow-idempotent-sub
   trace-left
   trace-right
@@ -136,7 +139,7 @@
 ;;;     "as disjunction of possible types"
 ;;;   
 (struct state (sub scope trace direction diseq typercd) #:prefab)
-(define empty-state (state empty-sub '() '() '() '() (hash)))
+(define empty-state (state empty-sub (list initial-var) '() '() '() (hash)))
 (define-struct-updaters state)
 
 ;;; we consider #f is the failed state, also one of the state
