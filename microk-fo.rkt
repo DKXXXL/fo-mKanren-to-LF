@@ -29,6 +29,8 @@
   mature?
   walk*/goal
   
+
+  syntactical-simplify
   replace-1-to-0
   )
 
@@ -39,13 +41,13 @@
 (struct disj   (g1 g2) 
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "~a ∨ ~a" (disj-g1 val) (disj-g2 val)))]
+     (fprintf output-port "(~a ∨ ~a)" (disj-g1 val) (disj-g2 val)))]
 )
 
 (struct conj   (g1 g2)  
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "~a ∧ ~a" (conj-g1 val) (conj-g2 val)))]
+     (fprintf output-port "(~a ∧ ~a)" (conj-g1 val) (conj-g2 val)))]
 )
 (struct relate (thunk description)      ;;;#:prefab
   #:methods gen:custom-write
@@ -132,7 +134,7 @@
 (struct Top ()
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "⊤" ))]
+     (fprintf output-port "T" ))]
 )
 
 
@@ -157,7 +159,7 @@
     [(disj a b) (disj (rec a) (rec b))]
     [(conj a b) (conj (rec a) (rec b))]
     [(ex v g) (ex v (rec g))]
-    [(forall v b g) (ex v (rec v) (rec g))]
+    [(forall v b g) (forall v (rec v) (rec g))]
     [_ g] ;; otherwise do nothing
   )
 )
@@ -301,7 +303,9 @@
     ;;;   
     ;;; 
     ((forall var domain goal) 
-      (let* [(domain_ (simplify-wrt st domain var))] 
+      (let* [(domain_ (simplify-wrt st domain var))
+        (k (begin (display var) (display ": domain_: ") (display domain_) (display "\n")))
+        ] 
 
         (match domain_
           [(Bottom) (wrap-state-stream st)]
@@ -352,6 +356,8 @@
             (let* ([st (car s)]
                    [complemented-goal (complement (extract-goal-about v st))]
                    [next-st (clear-about v st)]
+                   [k (begin  (display "next state ") (display next-st) (display "\n search with domain on var ")
+                              (display v) (display " in ") (display complemented-goal) (display "\n"))]
                     )
               ;;; forall x (== x 3) (== x 3)
               ;;;   forall x (conj (== x 3) (=/= x 3)) (== x 3)
@@ -435,7 +441,27 @@
       [#f #f]
       [(cons #f next) (first-non-empty-mature next)]
       [v v]))
-  (if (first-non-empty-mature (pause st goal)) goal (Bottom)))
+  (if (first-non-empty-mature (pause st goal)) (syntactical-simplify goal) (Bottom)))
+
+;;; some trivial rewrite to make things easier
+(define (syntactical-simplify goal)
+  (define (basic-tactic prev-f rec goal)
+    (define prev-result (prev-f goal))
+    (define singlerewrite 
+      (match prev-result
+        [(conj (Top) x) x]
+        [(conj x (Top)) x]
+        [(disj (Bottom) x) x]
+        [(disj x (Bottom)) x]
+        [(conj x x) x]
+        [(disj x x) x]
+        [_ 'rewrite-failed]
+      )
+    )
+    (if (equal? singlerewrite 'rewrite-failed) prev-result (rec singlerewrite))
+  )
+  ((overloading-functor-list (list basic-tactic goal-base-endofunctor)) goal)
+)
 
 ;;; appearances of nested list
 (define (member-nested v l)
@@ -577,6 +603,16 @@
   (conj from-subst (conj from-diseq from-typecsts))
 )
 
+;;; shrink-from :: var x state -> state
+;;;  it will make state doesn't have var, but remain the same semantic as much as possible
+;;;  
+(define (shrink-from var st)
+  ;;; this algorithm is hard to be sound, the best situation is that we have (var == ...) the form
+  ;;;  the bad situation is when we have ((cons var ..) == ...) 
+  ;;;     in these cases, it is unknown how to deal with them 
+  ;;; 1. first 
+  (void)
+)
 
 ;;; clear everything about v on st
 ;;;  var x state -> state
@@ -604,8 +640,10 @@
     (internal-f obj))
 
   (let* ([vname (symbol->string (var-name v))]
-         [new-v (var/fresh (string->symbol (string-append vname "-dummy")))])
-    (literal-replace v new-v st))
+         [new-v (var/fresh (string->symbol (string-append vname "D")))]
+         [replaced (literal-replace v new-v st)]
+         )
+    replaced )
 )
 
 ;;; will declare variable, and assert goal on all its domain

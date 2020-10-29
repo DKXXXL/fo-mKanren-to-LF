@@ -8,6 +8,7 @@
   state-sub
   state-direction-set
   state-diseq-set
+  state-diseq-update
   shadow-idempotent-sub
   trace-left
   trace-right
