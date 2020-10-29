@@ -167,6 +167,8 @@
   )
 )
 
+
+
 (define (goal-identity g) g)
 
 
@@ -212,6 +214,57 @@
     [_ g]
   )
 )
+
+
+
+;;; homomorphism on pair, except that each "composed node" will translate to "or"
+;;;   it's just mapping pairs into arithmetic
+;;; for example, we have cons and unit in the language of lisp
+;;; now you can basically look at it as another AST
+;;;   now if we map cons to or, '() to Boolean value, then it is a kind of 
+;;;     folding after evaluation
+(define (pair-base-functor op-mapping)
+  (define (pair-base-functor- prev-f extended-f g)
+    (define rec extended-f)
+    (match g
+      ['() (op-mapping '())]
+      [(cons a b) ((op-mapping cons) (rec a) (rec b))]
+      [_ (op-mapping 'default )] ;;; otherwise use op-mapping's default
+    )
+  )
+  pair-base-functor-
+)
+
+
+(define there-is-pair-base-mapping
+  (hash
+    'default #f
+    '() #f
+    cons (lambda (x y) (or x y)) ;; no short-circuting anymore
+  )
+)
+
+;;; mapping every cons to or, '() to false, and others to default-v and fold the result
+(define (there-is-in-pair-base-functor default-v)
+  (define defaulted (hash-set there-is-pair-base-mapping 'default default-v))
+  (pair-base-functor (lambda (x) (hash-ref defaulted x 'NotFound))))
+  
+
+(define (there-is-vars-in var-indices pair-goal)
+  (define (each-case prev-f rec g)
+    (match g
+      [(var _ index) (member index var-indices)]
+      [o/w (prev-f g)]
+    )
+  )
+
+  (define result-f 
+    (overloading-functor-list (list each-case (there-is-in-pair-base-functor #f)))
+  )
+  (result-f pair-goal)
+)
+
+
 ;;; example : replace 1 with 0 in an arbitrary list
 (define (replace-1-to-0 k)
   (define (case1 prev-f extended-f g)
@@ -361,7 +414,7 @@
                   ;;;  TODO: figure out trace!
                    [st-scoped-w/v (shrink-into (set-add current-vars v) st)]
                    [st-scoped-w/ov (shrink-into (set-remove current-vars v) st) ]
-                   [complemented-goal (complement (extract-goal-about v st-scoped-w/v))]
+                   [complemented-goal (syntactical-simplify (complement (extract-goal-about v st-scoped-w/v)))]
                    [next-st st-scoped-w/ov]
                    [k (begin (display " current scope: ")(display current-vars)  
                               (display "\n next state ") (display next-st) (display "\n search with domain on var ")
@@ -676,7 +729,36 @@
     ))
   ;;; 2. if there is still existence of var other than those in vars, we are in trouble... 
   ;;;  TODO: fix this problem 
-  (and st (deal-with-sub st))
+  ;;; 3. incorrectly remove those inside inequalities
+
+  ;;; following will return true if a varaible not mentioend in vars exists
+  (define (there-is-var-out-of-vars pair-goal)
+    (define (each-case prev-f rec g)
+      (match g
+        [(var _ index) (not (member g vars))]
+        [o/w (prev-f g)]
+      )
+    )
+
+    (define result-f 
+      (overloading-functor-list (list each-case (there-is-in-pair-base-functor #f)))
+    )
+    (result-f pair-goal)
+  )
+
+
+  (define (deal-with-diseq conj-disj)
+    ;;; for each disjunction list (of inequalities)
+    ;;;   we filter out those not mentioned in vars 
+    (define (for-each-disj disj-list) 
+      (filter (lambda (inequality) (not (there-is-var-out-of-vars inequality))) disj-list)
+      )
+
+    (filter (lambda (disj) (not (equal? disj '()))) 
+        (map for-each-disj conj-disj))
+  )
+
+  (and st (state-diseq-update (deal-with-sub st) deal-with-diseq))
 )
 
 ;;; clear everything about v on st
