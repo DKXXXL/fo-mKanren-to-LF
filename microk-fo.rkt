@@ -163,11 +163,12 @@
     [(conj a b) (conj (rec a) (rec b))]
     [(ex v g) (ex v (rec g))]
     [(forall v b g) (forall v (rec v) (rec g))]
-    [_ g] ;; otherwise do nothing
+    [_ (prev-f g)] ;; otherwise do nothing
   )
 )
 
 
+(define (identity-endo-functor prev-f rec g) g)
 
 (define (goal-identity g) g)
 
@@ -211,7 +212,7 @@
   (match g
     ['() '()]
     [(cons a b) (cons (rec a) (rec b))]
-    [_ g]
+    [_ (prev-f g)]
   )
 )
 
@@ -270,7 +271,7 @@
   (define (case1 prev-f extended-f g)
     (if (equal? g 1) 0 (prev-f g)))
   
-  ((overloading-functor-list (list case1 pair-base-endofunctor)) k)
+  ((overloading-functor-list (list case1 pair-base-endofunctor  identity-endo-functor)) k)
 )
 
 
@@ -521,7 +522,7 @@
     )
     (if (equal? singlerewrite 'rewrite-failed) prev-result (rec singlerewrite))
   )
-  ((overloading-functor-list (list basic-tactic goal-base-endofunctor)) goal)
+  ((overloading-functor-list (list basic-tactic goal-base-endofunctor  identity-endo-functor)) goal)
 )
 
 ;;; appearances of nested list
@@ -530,72 +531,6 @@
     [(cons h t) 
       (or (match h [(? pair?) (member-nested v h)] [_ (equal? h v)]) (member-nested v t))]))
 
-;;; variable x state -> List[state]
-;;;   we will make a given state into a stream of states
-;;;    that has equivalent semantic
-;;;    but also, each conj component in the state will either only about v
-;;;       or not about v at all 
-;;;    (i.e. each disjunct is about v or none of disjunct is about v) 
-(define (split-diseqs-of-state v st) 
-  (define inequalities (state-diseq st))
-  ;;; 1. first sort the conjunction of disjunction
-  ;;; state -> state, that will make conjunction component with appearances of v appear ahead
-
-
-
-  ;;; transform to conjunction of pair of disjunction
-  ;;; i.e. list of pair of list
-
-  ;;;  given a disjuncts, we return a list of disjuncts, where the first element
-  ;;;     is all about v while the second is not
-  ;;;  disjunct = list of inequalities
-  ;;; disjunct -> pair of disjunct
-  ;;; 
-  (define (split-disj disj)
-    (cons
-      (filter (lambda (x) (member-nested v x)) disj)
-      (filter (lambda (x) (not (member-nested v x))) disj)
-    )
-  )
-
-  ;;; given a list of disjunct [A, B, C], return a list of list of disjunct
-  ;;;   as [[split-disj A . 0, split-disj B . 0, split-disj C . 0],
-  ;;;       [split-disj A . 1, split-disj B . 0, split-disj C . 0] ...]
-  ;;; list of disjunction -> list of list of disjunction
-  ;;; conjunction of disjunction -> disjunction of conjunction of disjunction
-  (define (split-disjs disjs)
-    (match disjs
-      ['() (list (list))]
-      [(cons h t) 
-        (match-let* 
-         ([later (split-disjs t)] ;;; list of list of disjunct
-          [(cons has-v no-v) (split-disj h)] ;;; pair of disj
-          ;;;  has-v : disjunct
-          ;;; if any of the has-v/no-v is actually empty, then
-          ;;;   (basically disjunct of empty is False)
-          ;;;   we will have to ignore 
-          [empty '()]
-          [add-has-v (if (null? has-v) 
-                          empty 
-                          (append empty (map (lambda (x) (cons has-v x)) later) ))]
-          [add-no-v (if (null? no-v)
-                        add-has-v
-                        (append empty (map (lambda (x) (cons no-v x)) later) ) )])
-          add-no-v     
-        )
-      ]
-    )
-  )
-
-  (define each-conjunction (split-disjs inequalities))
-  (define all-state (map (lambda (conj) (state-diseq-set st conj)) each-conjunction))
-  
-  ;;; return the list of states
-  all-state
-
-  ;;; now compute the set of conjunctions of disjunctions
-  
-)
 
 ;;; (list true? false? null? pair? number? string? symbol?)
 
@@ -603,6 +538,12 @@
   (syntax-rules ()
     ((_ (x ...) g0 gs ...)
      (let ((x (var/fresh 'x)) ...)  (conj* g0 gs ...)))))
+
+(define-syntax fresh-var
+  (syntax-rules ()
+    ((_ x)
+     (let ((x (var/fresh 'x)))  x))))
+
 
 (define-syntax disj*
   (syntax-rules ()
@@ -687,7 +628,7 @@
         ]
       [_ (prev-f obj)]))
 
-  (define internal-f (overloading-functor-list (list literal-replace-from-after pair-base-endofunctor)))
+  (define internal-f (overloading-functor-list (list literal-replace-from-after pair-base-endofunctor  identity-endo-functor)))
   ;;; return the following
   (internal-f st))
 
@@ -703,63 +644,175 @@
 (define (shrink-away var-from term-to st)
   (literal-replace var-from term-to st))
 
-;;; an intuitive version
-(define (shrink-into vars st)
-  ;;; this algorithm is hard to be complete, the best situation is that we have (var == ...) the form
-  ;;;  the bad situation is when we have ((cons var ..) == ...) 
-  ;;;     in these cases, it is unknown how to deal with them 
-  ;;; 1. first go through each substition, and use each equality to rewrite
-  (define (deal-with-sub st)
-    (match (state-sub st)
-      ['() st]
-      [(cons (cons l r) tail)
-        (let ([st- (state-sub-update st cdr)])
-          (if (not (member l vars))
-            ;;; we need to remove existence of l by rewriting
-            (deal-with-sub (shrink-away l r st-))
-            ;;; otherwise we check if r needs to be rewritten into l
-            (if (and (var? r) (not (member r vars)))
-              (deal-with-sub (shrink-away r l st-))
-              ;;; o/w do nothing
-              (state-sub-update (deal-with-sub st-) (lambda (sub) (cons (cons l r) sub)))
-            )
-            
-        ))
-      ]
-    ))
-  ;;; 2. if there is still existence of var other than those in vars, we are in trouble... 
-  ;;;  TODO: fix this problem 
-  ;;; 3. incorrectly remove those inside inequalities
-
-  ;;; following will return true if a varaible not mentioend in vars exists
-  (define (there-is-var-out-of-vars pair-goal)
-    (define (each-case prev-f rec g)
-      (match g
-        [(var _ index) (not (member g vars))]
-        [o/w (prev-f g)]
-      )
-    )
-
-    (define result-f 
-      (overloading-functor-list (list each-case (there-is-in-pair-base-functor #f)))
-    )
-    (result-f pair-goal)
-  )
-
-
-  (define (deal-with-diseq conj-disj)
-    ;;; for each disjunction list (of inequalities)
-    ;;;   we filter out those not mentioned in vars 
-    (define (for-each-disj disj-list) 
-      (filter (lambda (inequality) (not (there-is-var-out-of-vars inequality))) disj-list)
-      )
-
-    (filter (lambda (disj) (not (equal? disj '()))) 
-        (map for-each-disj conj-disj))
-  )
-
-  (and st (state-diseq-update (deal-with-sub st) deal-with-diseq))
+;;; [(term, term)] x state -> state
+;;;  unifies each equation one by one
+(define (unifies-equations list-u-v-s st)
+  (void)
 )
+
+(define (shrink-into vars st)
+;;; 0. we first make sure there is no asymmetry on each inequalities
+;;;   0.1 by going through all the inequalities, with cons on one side and var on the other,
+;;;   0.2 we use "sketch" to construct the "frames" of the var (construct-conses)
+;;;   0.3 we unifie these sketches with vars to remove the asymetry of the inequalitie  
+;;; 1. we first use eliminate-cons to remove appearance of every composed term on equalities
+;;; 2. we go through the subst, one by one, if any side of equation has a var not in vars, we use shrink-away/literal to replace
+;;;   At this point, we can finally do shrink-into
+;;; 3. removing those not-wanted var in diseqs by replacing them with True 
+  (define diseqs (state-diseq st))
+
+  (define (construct-conses x)
+    (define rec construct-conses)
+    (match x
+      [(cons a b) (cons (rec a) (rec b))]
+      [_ (fresh-var fpu)]
+    )
+  )
+
+  ;;; use side-effect to record the encountered asymmetry equation
+  (define each-asymmetry-record! '())
+
+  (define (each-asymmetry prev-f rec g)
+    (match g
+      ;;; thiss pattern matching i a bit dangerous
+      ;;; TODO: make equation/inequality into a struct so that pattern-matching can be easier
+      [(cons (var _ _) (cons _ _)) 
+          (let* ([v (car g)]
+                 [composed (cdr g)])
+              (set! each-asymmetry-record! 
+                (cons (cons v (construct-conses composed)) each-asymmetry-record!))
+              g
+                 )]
+      [(cons (cons _ _) (var _ _)) 
+          (let* ([v (cdr g)]
+                 [composed (car g)])
+              (set! each-asymmetry-record! 
+                (cons (cons v (construct-conses composed)) each-asymmetry-record!))
+              g
+                 )]
+      [_ (prev-f g)]
+
+    )
+  )
+
+  (define each-asymmetry-recorder
+    (overloading-functor-list (list each-asymmetry pair-base-endofunctor identity-endo-functor))
+  )
+  (each-asymmetry-recorder diseqs)
+  (define )
+)
+
+;;; tproj :: var x List of ['car, 'cdr] 
+;;; cxr as a path/stack of field projection/query
+(struct tproj (v cxr) #:prefab)
+;;; (struct tcar (term) #:prefab)
+;;; (struct tcdr (term) #:prefab)
+
+(define (tcar t) 
+  (match t 
+    [(cons a b) a]
+    [(tproj x y) (tproj x (cons 'car y))]
+    [(var _ _) (tproj t (list 'car))]
+    [_ (raise "Unexpected Value")]
+  ))
+
+(define (tcdr t) 
+  (match t 
+    [(cons a b) b]
+    [(tproj x y) (tproj x (cons 'cdr y))]
+    [(var _ _) (tproj t (list 'cdr))]
+    [_ (raise "Unexpected Value")]
+  ))
+
+;;; normalize a tproj term so that tproj-v is always a var 
+(define (tproj_ term cxr)
+  
+  ;;; (define (m x) (match x ['car tcar] ['cdr tcdr]))
+  ;;; (define (compose f g) (lambda (x) (f (g x))))
+  ;;; (define mcxr (map m cxr))
+  ;;; (define )
+  (match cxr
+    [(cons 'car rest) (tcar (tproj_ term rest))]
+    [(cons 'cdr rest) (tcdr (tproj_ term rest))]
+    ['() term] 
+  )
+)
+
+;;; given a tproj, we construct a tproj-ectable term for it
+;;;  return the equation for removing the tproj
+;;; tproj -> pair as var, cons/tree of vars
+(define (equation-for-remove-tproj x)
+  ;;; (define field-projection-list (tproj-cxr x))
+  (define (construct-sketch path)
+    (match path
+      [(cons 'car rest)  (cons (construct-sketch rest) (fresh-var fpu))]
+      [(cons 'cdr rest)  (cons (fresh-var fpu) (construct-sketch rest))]
+      ['() (fresh-var fpu)]
+    )
+  )
+  (cons (tproj-v x) (construct-sketch (tproj-cxr x)))
+)
+
+;;; given st x goal -> st x goal
+;;;  with tproj all removed
+(define (eliminate-tproj st goal)
+  ;;; 0. we first collect all occurrence of tproj, collect into a set
+  ;;; 1. we use equation-for-remove-tproj to remove each tproj, 
+  ;;;     and remember what variable each tproj will be mapped to
+  ;;; 2. we then do literal replace to remove tproj occurrences
+  ;;; 3. we use unify-equations to make sure the equations are satisfied
+
+  (define (collect-tproj)
+    (define record! (mutable-set))
+    (define (when-tproj prev-f rec g)
+      (match g
+        [(tproj _ _) (begin (set-add! record! g) g)]
+        [_ (prev-f g)]
+      )
+    )
+
+    (define record-tproj-on-pair-and-goals 
+      (overloading-functor-list (list collect-tproj goal-base-endofunctor pair-base-endofunctor identity-endo-functor)))
+    (record-tproj-on-pair-and-goals (list (state-subst st) (state-diseq st) goal) )
+    (set->list record!)
+  )
+  ;;; the collected tprojs
+  (define all-tprojs (collect-tproj))
+  ;;;  the corresponding equation for each tproj
+  (define removing-equations (map equation-for-remove-tproj all-tprojs))
+  ;;; for each equation ((var y) (cons ...)), originated from  (tproj y ...)
+  ;;;   we record ((tproj y ...), (var ...))
+  (define (tproj-map-to) (map 
+                          (lambda (tproj equ) (cons tproj (tproj_ (car equ) (cdr equ))))
+                           all-tprojs removing-equations))
+  
+)
+
+;;; make sure there is no cons on each side of equation
+;;;  by transforming each equations to two sub equations
+;;; List of pair of terms -> List of pair of terms
+(define (eliminate-cons subs)
+  (define (tcar-eq eq) 
+    (define res (map tcar- eq))
+    (match res [(cons _ (var _)) (cons (cdr res) (car res))] [_ res])
+  )
+  (define (tcdr-eq eq) 
+    (define res (map tcdr- eq))
+    (match res [(cons _ (var _)) (cons (cdr res) (car res))] [_ res])
+  )
+  (define (each-eliminate-cons single-eq) (list (tcar-eq single-eq) (tcdr-eq single-eq)))
+  (match subs
+    [(cons head-eq rest) 
+      (match head-eq 
+        [(cons (cons _ _) _) (append (each-eliminate-cons head-eq) rest)]
+        [(cons _ (cons _ _)) (append (each-eliminate-cons head-eq) rest)]
+        [_ (cons head-eq (eliminate-cons rest))]
+        )
+    ]
+    ['() '()]
+  )
+)
+
 
 ;;; clear everything about v on st
 ;;;  var x state -> state
