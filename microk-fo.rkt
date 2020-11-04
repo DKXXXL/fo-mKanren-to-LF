@@ -42,28 +42,33 @@
 ;; first-order microKanren
 ;;; goals
 (struct disj   (g1 g2) 
+  #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "(~a ∨ ~a)" (disj-g1 val) (disj-g2 val)))]
 )
 
 (struct conj   (g1 g2)  
+  #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "(~a ∧ ~a)" (conj-g1 val) (conj-g2 val)))]
 )
 (struct relate (thunk description)      ;;;#:prefab
+  #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "~a" (relate-description val)))]
 )
-(struct ==     (t1 t2)               
+(struct ==     (t1 t2)
+  #:transparent               
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "~a =ᴸ ~a" (==-t1 val) (==-t2 val)))]
      ;;; L stands for Lisp Elements
 )
 (struct ex     (varname g) 
+  #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "∃~a. ~a" (ex-varname val) (ex-g val)))]
@@ -75,24 +80,28 @@
 ;;; we need implement the first version of complement,
 ;;;   so the complement version of each operation need to be defined
 (struct =/= (t1 t2)
+  #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "~a ≠ᴸ ~a" (=/=-t1 val) (=/=-t2 val)))]
 )
 
 (struct forall (varname domain g)
+  #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "∀~a. ~a" (forall-varname val)  (forall-g val)))]
 )
 
 (struct symbolo (t)
+  #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "symbol ~a" (symbolo-t val)))]
 )
 
 (struct not-symbolo (t)
+  #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "not-symbol ~a" (not-symbolo-t val)))]
@@ -100,12 +109,14 @@
 
 
 (struct numbero (t)
+  #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "number ~a" (numbero-t val)))]
 )
 
 (struct not-numbero (t)
+  #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "not-number ~a" (not-numbero-t val)))]
@@ -113,12 +124,14 @@
 
 
 (struct stringo (t)
+  #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "string ~a" (stringo-t val)))]
 )
 
 (struct not-stringo (t)
+  #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "not-string ~a" (not-stringo-t val)))]
@@ -135,6 +148,7 @@
 
 
 (struct Top ()
+  #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "T" ))]
@@ -142,6 +156,7 @@
 
 
 (struct Bottom ()
+  #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "⊥" ))]
@@ -207,11 +222,13 @@
 
 
 ;;; homomorphism on pair, will respect pair construct
+;;;  will also respect tproj
 (define (pair-base-endofunctor prev-f extended-f g)
   (define rec extended-f)
   (match g
     ['() '()]
     [(cons a b) (cons (rec a) (rec b))]
+    [(tproj tm cxr) (tproj_ (rec tm) cxr)] ;; respect tproj
     [_ (prev-f g)]
   )
 )
@@ -260,7 +277,21 @@
   )
 
   (define result-f 
-    (overloading-functor-list (list each-case (there-is-in-pair-base-functor #f)))
+    (overloading-functor-list (list each-case goal-base-endofunctor (there-is-in-pair-base-functor #f)))
+  )
+  (result-f pair-goal)
+)
+
+(define (there-is-var-not-in var-indices pair-goal)
+  (define (each-case prev-f rec g)
+    (match g
+      [(var _ index) (not (member index var-indices))]
+      [o/w (prev-f g)]
+    )
+  )
+
+  (define result-f 
+    (overloading-functor-list (list each-case goal-base-endofunctor (there-is-in-pair-base-functor #f)))
   )
   (result-f pair-goal)
 )
@@ -411,7 +442,8 @@
         ;;;   3. we clear the v information from st
         ;;;   4. the cleared state and its complement help us on the next search 
         ((pair? s)
-            (let* ([st (car s)]
+            (match-let* 
+                  ([st (car s)]
                   ;;;  TODO: figure out trace!
                    [st-scoped-w/v (shrink-into (set-add current-vars v) st)]
                    [st-scoped-w/ov (shrink-into (set-remove current-vars v) st) ]
@@ -647,7 +679,7 @@
 ;;; [(term, term)] x state -> state
 ;;;  unifies each equation one by one
 (define (unifies-equations list-u-v-s st)
-  (void)
+  (foldl (lambda (eq st) (car (unify (car eq) (cdr eq) st))) st list-u-v-s)
 )
 
 (define (shrink-into vars st)
@@ -655,9 +687,10 @@
 ;;;   0.1 by going through all the inequalities, with cons on one side and var on the other,
 ;;;   0.2 we use "sketch" to construct the "frames" of the var (construct-conses)
 ;;;   0.3 we unifie these sketches with vars to remove the asymetry of the inequalitie  
-;;; 1. we first use eliminate-cons to remove appearance of every composed term on equalities
+;;; 1. we first use unmentioned-exposed-form 
+;;;     to remove asymmetry form of equation, i.e. the unmentioned var in a composed structure
 ;;; 2. we go through the subst, one by one, if any side of equation has a var not in vars, we use shrink-away/literal to replace
-;;;   At this point, we can finally do shrink-into
+;;;   At this point, we are finally doing shrink-into
 ;;; 3. removing those not-wanted var in diseqs by replacing them with True 
   (define diseqs (state-diseq st))
 
@@ -699,7 +732,67 @@
     (overloading-functor-list (list each-asymmetry pair-base-endofunctor identity-endo-functor))
   )
   (each-asymmetry-recorder diseqs)
-  (define )
+  (define each-asymmetry-record each-asymmetry-record!)
+  ;;; step 0.3 
+  (define st-symmetric-on-diseqs (unifies-equations each-asymmetry-record st))
+  ;;; now the diseqs have same AST height on each side
+  (define subst-st-symmetric-on-diseqs (state-sub st))
+  (define remove-asym-on-subst (unmentioned-exposed-form vars subst-st-symmetric-on-diseqs))
+  (define st-symmetry-everywhere (state-subst-set st-symmetric-on-diseqs remove-asym-on-subst))
+  ;;; step 2: now go through each equation in subst, doing real shrinking
+  (define (eliminate-unmentioned-var-in-subst st)
+    (define current-subst (state-subst st))
+    
+    (if (equal? current-subst '())
+      st
+      (let*
+        ([fst-eq (car current-subst)]
+         [next-st (state-sub-update st cdr)])
+        (match fst-eq
+          [(cons (var a b) rhs)
+            #:when (not (member (var a b) vars))
+            (eliminate-unmentioned-var-in-subst (shrink-away (var a b) rhs next-st))]
+          ;;; lhs must be a var that is also mentioned, 
+          ;;;   then by post-condition of "unmentioned-exposed-form",
+          ;;;   we know the rhs must all be mentioned
+          ;;; TODO: so actually the following clause can be ignored 
+          [(cons lhs (var a b))
+            #:when (not (member (var a b) vars))
+            (eliminate-unmentioned-var-in-subst (shrink-away (var a b) lhs next-st))]
+          [_
+            (state-subst-update 
+              (lambda (x) (cons fst-eq x))
+              (eliminate-unmentioned-var-in-subst next-st))
+          ]
+      ))
+    )
+  )
+
+  (define st-removed-unmentioned-in-subst (eliminate-unmentioned-var-in-subst st-symmetry-everywhere))
+
+  ;;; precondition: each inequalties only have var on both sides
+  (define (eliminate-unmentioned-var-in-diseq diseq)
+    (define (not-list x)
+      (not (or (equal? x '()) (pair? x))))
+    (define (each-inequality prev-f rec g)
+      (match g
+        ;;; this pattern matching is a bit dangerous
+        ;;; TODO: make equation/inequality into a struct so that pattern-matching can be easier
+        [(cons (var _ _) (var _ _))
+          #:when (there-is-var-not-in vars g) 
+          (Top)]
+        [_ (prev-f g)]
+      )
+    )
+
+    (define deal-with-inequalities
+      (overloading-functor-list (list each-inequality pair-base-endofunctor identity-endo-functor))
+    )
+    (deal-with-inequalities diseq)
+  )
+
+  (state-diseq-update deal-with-inequalities st-removed-unmentioned-in-subst)
+
 )
 
 ;;; tproj :: var x List of ['car, 'cdr] 
@@ -782,9 +875,21 @@
   (define removing-equations (map equation-for-remove-tproj all-tprojs))
   ;;; for each equation ((var y) (cons ...)), originated from  (tproj y ...)
   ;;;   we record ((tproj y ...), (var ...))
-  (define (tproj-map-to) (map 
-                          (lambda (tproj equ) (cons tproj (tproj_ (car equ) (cdr equ))))
-                           all-tprojs removing-equations))
+  ;;; (define tproj-map-to (map 
+  ;;;                         (lambda (tproj equ) (cons tproj (tproj_ (car equ) (cdr equ))))
+  ;;;                          all-tprojs removing-equations))
+  (define tproj-mapped-to 
+    (map (lambda (tproj-info equ) (tproj_ (cdr equ) (tproj-cxr tproj-info))) 
+          all-tprojs removing-equations))
+  ;;; we have for each (tproj y ..) a var v standing for it in the context of removing equations
+  ;;; (define tproj-hash-map (make-hash tproj-map-to))
+
+  (define tproj-replaced-st
+    (foldl (lambda (ttproj v st) (literal-replace ttproj v st)) st all-tprojs tproj-mapped-to))
+
+  (define tproj-replaced-goal
+    (foldl (lambda (ttproj v g) (literal-replace ttproj v g)) goal all-tprojs tproj-mapped-to))
+  
   
 )
 
@@ -793,19 +898,23 @@
 ;;; List of pair of terms -> List of pair of terms
 (define (eliminate-cons subs)
   (define (tcar-eq eq) 
-    (define res (map tcar- eq))
+    (define res (map tcar eq))
     (match res [(cons _ (var _)) (cons (cdr res) (car res))] [_ res])
   )
   (define (tcdr-eq eq) 
-    (define res (map tcdr- eq))
+    (define res (map tcdr eq))
     (match res [(cons _ (var _)) (cons (cdr res) (car res))] [_ res])
   )
   (define (each-eliminate-cons single-eq) (list (tcar-eq single-eq) (tcdr-eq single-eq)))
   (match subs
     [(cons head-eq rest) 
       (match head-eq 
-        [(cons (cons _ _) _) (append (each-eliminate-cons head-eq) rest)]
-        [(cons _ (cons _ _)) (append (each-eliminate-cons head-eq) rest)]
+        [(cons (cons _ _) rhs) 
+          #:when (not (pair? rhs))
+            (append (each-eliminate-cons head-eq) rest)]
+        [(cons lhs (cons _ _))
+          #:when (not (pair? lhs)) 
+            (append (each-eliminate-cons head-eq) rest)]
         [_ (cons head-eq (eliminate-cons rest))]
         )
     ]
@@ -813,6 +922,80 @@
   )
 )
 
+
+(define (tcar-eq eq) 
+  (define res (map tcar eq))
+  (match res 
+    [(cons (var _ _) _) res]
+    [(cons _ (var _ _)) (cons (cdr res) (car res))] 
+    [_ res])
+)
+(define (tcdr-eq eq) 
+  (define res (map tcdr eq))
+  (match res 
+    [(cons (var _ _) _) res]
+    [(cons _ (var _ _)) (cons (cdr res) (car res))] 
+    [_ res])
+)
+
+;;; given a set of equation (lhs must be var)
+;;;  return an equivalent set of equation (lhs must be var)
+;;;  s.t. the returned set won't have a equation like below
+;;; (mentioned-var = (cons ... unmentioned-var ...))
+;;; i.e. if one-side is mentioned var, then the other-side must be all mentioned
+(define (unmentioned-exposed-form mentioned-vars eqs)
+  (define (each-eliminate-cons single-eq) (list (tcar-eq single-eq) (tcdr-eq single-eq)))
+  ;;; given one eq
+  ;;;  return a list of eqs equivalent
+  ;;;  and make sure in unmentioned-exposed-form 
+  (define (single-unmentioned-exposed-form eq)
+    (define fst (car eq))
+    (define snd (cde eq))
+    (define is-unexposed-form
+      (and (member fst mentioned-vars)
+           (there-is-var-not-in mentioned-vars snd)))
+    (define cons-at-right
+      (pair? snd))
+    (define is-simple-form
+      (and (var? fst) (var? snd)))
+    (if is-unexposed-form
+      ;;; the following is quite twisted... 
+      ;;; basically there are too many preconditions 
+      (if simple-form 
+        (list (cons snd fst))
+        (if cons-at-right 
+          (eliminate-conses (each-eliminate-cons eq)) 
+          (raise "Unexpected Equation Form")))
+      (list eq)
+    )
+  )
+)
+
+;;; given a set of equations (lhs doesn't have to be variable)
+;;;  return an equivalent set of equations (lhs must be variable)
+(define (eliminate-conses eqs)
+  (define (each-eli-eq single-eq)
+    ;;; won't stop if either side has cons
+    (match single-eq
+      [(cons (tproj _ _) (tproj _ _)) 
+        (raise "Cannot Eliminate Conses if there is no conses")]
+      [(cons (cons _ _) _) (eliminate-conses (list (tcar-eq single-eq) (tcdr-eq single-eq)))]
+      [(cons _ (cons _ _)) (eliminate-conses (list (tcar-eq single-eq) (tcdr-eq single-eq)))]
+      [_ (list single-eq)] ;; 
+    )
+  )
+
+  (define (lhs-must-var eq)
+    (match eq
+      [(cons (var _ _) _) eq]
+      [(cons _ (var _ _)) (cons (car eq) (cdr eq))]
+      [_ (raise "Not A proper substution-form Equation!")]
+    )
+  )
+  (map lhs-must-var 
+    (foldl append '() 
+      (map each-eli-eq eqs)))
+)
 
 ;;; clear everything about v on st
 ;;;  var x state -> state

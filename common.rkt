@@ -39,6 +39,7 @@
 
 ;; Logic variables
 (struct var (name index) ;;;#:prefab
+  #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "~a#~a" (var-name val) (var-index val)))]
