@@ -448,7 +448,7 @@
                    [st-scoped-w/v (shrink-into (set-add current-vars v) st)]
                    [st-scoped-w/ov (shrink-into (set-remove current-vars v) st) ]
                    [complemented-goal (syntactical-simplify (complement (extract-goal-about v st-scoped-w/v)))]
-                   [next-st st-scoped-w/ov]
+                   [(cons next-st cgoal) (eliminate-tproj st-scoped-w/ov complemented-goal)]
                    [k (begin (display " current scope: ")(display current-vars)  
                               (display "\n next state ") (display next-st) (display "\n search with domain on var ")
                               (display v) (display " in ") (display complemented-goal) (display "\n"))]
@@ -456,7 +456,7 @@
               ;;; forall x (== x 3) (== x 3)
               ;;;   forall x (conj (== x 3) (=/= x 3)) (== x 3)
               ;;;  forall x () (symbolo x) /\ (not-symbolo x)
-              (step (mplus (pause next-st (forall v (conj complemented-goal domain) goal))
+              (step (mplus (pause next-st (forall v (conj cgoal domain) goal))
                            (bind-forall current-vars (cdr s) v (forall v domain goal)))))) ;;; other possible requirements search
 
         (else (bind-forall current-vars s v (forall v domain goal))))
@@ -639,12 +639,16 @@
 
 ;;; replace one var with another
 ;;;  var x var x state -> state
-;;;   but won't touch 
+;;;   but will only touch the type constraint 
+;;;    s.t. after's type will be intersected with from's type constraint
+;;;           if both after and from are variables
 (define/contract (literal-replace from after st)
   (any? any? state? . -> . state?)
   (define (literal-replace-from-after prev-f rec obj)
     (match obj
-      [(? (lambda (x) (equal? x from))) after]
+      [x 
+        #:when (equal? x from) 
+        after]
       ;;; other extended construct -- like state
       ;;;  very untyped...
       [(state a scope trace direction d e) (state (rec a) scope trace direction (rec d) (rec e))]
@@ -660,7 +664,7 @@
         ]
       [_ (prev-f obj)]))
 
-  (define internal-f (overloading-functor-list (list literal-replace-from-after pair-base-endofunctor  identity-endo-functor)))
+  (define internal-f (overloading-functor-list (list literal-replace-from-after pair-base-endofunctor goal-base-endofunctor identity-endo-functor)))
   ;;; return the following
   (internal-f st))
 
@@ -890,6 +894,11 @@
   (define tproj-replaced-goal
     (foldl (lambda (ttproj v g) (literal-replace ttproj v g)) goal all-tprojs tproj-mapped-to))
   
+  (define tproj-removed-st
+    (unifies-equations removing-equations tproj-replaced-st)
+  )
+
+  `(,tproj-removed-st . ,tproj-replaced-goal)
   
 )
 
