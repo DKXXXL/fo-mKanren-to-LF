@@ -268,12 +268,23 @@
   (pair-base-functor (lambda (x) (hash-ref defaulted x 'NotFound))))
   
 
-(define (there-is-vars-in var-indices pair-goal)
+;;; (define (there-is-vars-in var-indices pair-goal)
+;;;   (define (each-case prev-f rec g)
+;;;     (match g
+;;;       [(var _ index) (member index var-indices)]
+;;;       [o/w (prev-f g)]
+;;;     )
+;;;   )
+
+;;;   (define result-f 
+;;;     (overloading-functor-list (list each-case goal-base-endofunctor (there-is-in-pair-base-functor #f)))
+;;;   )
+;;;   (result-f pair-goal)
+;;; )
+
+(define (there-is things pair-goal)
   (define (each-case prev-f rec g)
-    (match g
-      [(var _ index) (member index var-indices)]
-      [o/w (prev-f g)]
-    )
+    (if (member g things) #t (prev-f g))
   )
 
   (define result-f 
@@ -282,10 +293,10 @@
   (result-f pair-goal)
 )
 
-(define (there-is-var-not-in var-indices pair-goal)
+(define (there-is-var-not-in vars pair-goal)
   (define (each-case prev-f rec g)
     (match g
-      [(var _ index) (not (member index var-indices))]
+      [(var _ index) (not (member g vars))]
       [o/w (prev-f g)]
     )
   )
@@ -449,9 +460,13 @@
                    [st-scoped-w/ov (shrink-into (set-remove current-vars v) st) ]
                    [complemented-goal (syntactical-simplify (complement (extract-goal-about v st-scoped-w/v)))]
                    [(cons next-st cgoal) (eliminate-tproj st-scoped-w/ov complemented-goal)]
-                   [k (begin (display " current scope: ")(display current-vars)  
-                              (display "\n next state ") (display next-st) (display "\n search with domain on var ")
-                              (display v) (display " in ") (display complemented-goal) (display "\n"))]
+                   [k (begin  (display " st: ")(display st)
+                              (display "\n st-scoped-w/v: ")(display st-scoped-w/v) 
+                             (display "\n st-scoped-w/ov: ")(display st-scoped-w/ov)
+                              (display "\n complemented goal: ")(display st-scoped-w/ov)
+                              (display "\n next state ") (display next-st) 
+                              (display "\n search with domain on var ")
+                              (display v) (display " in ") (display cgoal) (display "\n"))]
                     )
               ;;; forall x (== x 3) (== x 3)
               ;;;   forall x (conj (== x 3) (=/= x 3)) (== x 3)
@@ -613,7 +628,13 @@
   
   ;;; stage each (list as) disjunction of inequalities into literal goals
   (define (stage-disj disj-list)
-    (define (each-to-diseq p) (=/= (car p) (cdr p)))
+    (define (each-to-diseq p) 
+      (if (pair? p) 
+        (=/= (car p) (cdr p))
+        (if (equal? p (Top))
+          p 
+          (raise "Unexpected Value"))
+        ))
     (foldl disj (Bottom) (map each-to-diseq disj-list)))
 
   ;;; stage each (list as) conjunction of disjunction of inequalities into literal goals
@@ -765,8 +786,8 @@
             (eliminate-unmentioned-var-in-subst (shrink-away (var a b) lhs next-st))]
           [_
             (state-sub-update 
-              (lambda (x) (cons fst-eq x))
-              (eliminate-unmentioned-var-in-subst next-st))
+              (eliminate-unmentioned-var-in-subst next-st)
+              (lambda (x) (cons fst-eq x)))
           ]
       ))
     )
@@ -795,7 +816,20 @@
     (deal-with-inequalities diseq)
   )
 
-  (state-diseq-update eliminate-unmentioned-var-in-diseq st-removed-unmentioned-in-subst)
+  ;;; given the diseq list
+  ;;;   filter out those Top inside
+  (define (filter-out-Top-in-disj conj-disj-diseq)
+    ;;; 
+    (filter (lambda (x) (not (there-is (list (Top)) x)) ) conj-disj-diseq)
+  )
+
+  (state-diseq-update  
+    st-removed-unmentioned-in-subst 
+    (lambda (x) (filter-out-Top-in-disj (eliminate-unmentioned-var-in-diseq x))))
+  
+  ;;; (state-diseq-update  
+  ;;;   st-removed-unmentioned-in-subst 
+  ;;;   (lambda (x)  (eliminate-unmentioned-var-in-diseq x)))
 
 )
 
@@ -869,7 +903,7 @@
     )
 
     (define record-tproj-on-pair-and-goals 
-      (overloading-functor-list (list collect-tproj goal-base-endofunctor pair-base-endofunctor identity-endo-functor)))
+      (overloading-functor-list (list when-tproj goal-base-endofunctor pair-base-endofunctor identity-endo-functor)))
     (record-tproj-on-pair-and-goals (list (state-sub st) (state-diseq st) goal) )
     (set->list record!)
   )
