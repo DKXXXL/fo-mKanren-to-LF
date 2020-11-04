@@ -658,13 +658,14 @@
   (conj from-subst (conj from-diseq from-typecsts))
 )
 
+
 ;;; replace one var with another
 ;;;  var x var x state -> state
 ;;;   but will only touch the type constraint 
 ;;;    s.t. after's type will be intersected with from's type constraint
 ;;;           if both after and from are variables
 (define/contract (literal-replace from after st)
-  (any? any? state? . -> . state?)
+  (any? any? any? . -> . any?)
   (define (literal-replace-from-after prev-f rec obj)
     (match obj
       [x 
@@ -761,7 +762,7 @@
   ;;; step 0.3 
   (define st-symmetric-on-diseqs (unifies-equations each-asymmetry-record st))
   ;;; now the diseqs have same AST height on each side
-  (define subst-st-symmetric-on-diseqs (state-sub st))
+  (define subst-st-symmetric-on-diseqs (state-sub st-symmetric-on-diseqs))
   (define remove-asym-on-subst (unmentioned-exposed-form vars subst-st-symmetric-on-diseqs))
   (define st-symmetry-everywhere (state-sub-set st-symmetric-on-diseqs remove-asym-on-subst))
   ;;; step 2: now go through each equation in subst, doing real shrinking
@@ -805,7 +806,7 @@
         ;;; TODO: make equation/inequality into a struct so that pattern-matching can be easier
         [(cons (var _ _) (var _ _))
           #:when (there-is-var-not-in vars g) 
-          (Top)]
+          'removed]
         [_ (prev-f g)]
       )
     )
@@ -818,14 +819,18 @@
 
   ;;; given the diseq list
   ;;;   filter out those Top inside
-  (define (filter-out-Top-in-disj conj-disj-diseq)
+  (define (filter-out-removed-in-disj conj-disj-diseq)
     ;;; 
-    (filter (lambda (x) (not (there-is (list (Top)) x)) ) conj-disj-diseq)
+    (define (remove-removed-symbol disj-list)
+      (filter (lambda (x) (not (equal? x 'removed))) disj-list)
+    )
+    (filter (lambda (x) (not (equal? x '()))) 
+      (map remove-removed-symbol conj-disj-diseq))
   )
 
   (state-diseq-update  
     st-removed-unmentioned-in-subst 
-    (lambda (x) (filter-out-Top-in-disj (eliminate-unmentioned-var-in-diseq x))))
+    (lambda (x) (filter-out-removed-in-disj (eliminate-unmentioned-var-in-diseq x))))
   
   ;;; (state-diseq-update  
   ;;;   st-removed-unmentioned-in-subst 
@@ -967,14 +972,14 @@
 
 
 (define (tcar-eq eq) 
-  (define res (map tcar eq))
+  (define res `(,(tcar (car eq)) . ,(tcar (cdr eq))))
   (match res 
     [(cons (var _ _) _) res]
     [(cons _ (var _ _)) (cons (cdr res) (car res))] 
     [_ res])
 )
 (define (tcdr-eq eq) 
-  (define res (map tcdr eq))
+  (define res `(,(tcdr (car eq)) . ,(tcdr (cdr eq))))
   (match res 
     [(cons (var _ _) _) res]
     [(cons _ (var _ _)) (cons (cdr res) (car res))] 
