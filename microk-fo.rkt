@@ -742,10 +742,10 @@
   ;;; now the diseqs have same AST height on each side
   (define subst-st-symmetric-on-diseqs (state-sub st))
   (define remove-asym-on-subst (unmentioned-exposed-form vars subst-st-symmetric-on-diseqs))
-  (define st-symmetry-everywhere (state-subst-set st-symmetric-on-diseqs remove-asym-on-subst))
+  (define st-symmetry-everywhere (state-sub-set st-symmetric-on-diseqs remove-asym-on-subst))
   ;;; step 2: now go through each equation in subst, doing real shrinking
   (define (eliminate-unmentioned-var-in-subst st)
-    (define current-subst (state-subst st))
+    (define current-subst (state-sub st))
     
     (if (equal? current-subst '())
       st
@@ -764,7 +764,7 @@
             #:when (not (member (var a b) vars))
             (eliminate-unmentioned-var-in-subst (shrink-away (var a b) lhs next-st))]
           [_
-            (state-subst-update 
+            (state-sub-update 
               (lambda (x) (cons fst-eq x))
               (eliminate-unmentioned-var-in-subst next-st))
           ]
@@ -795,7 +795,7 @@
     (deal-with-inequalities diseq)
   )
 
-  (state-diseq-update deal-with-inequalities st-removed-unmentioned-in-subst)
+  (state-diseq-update eliminate-unmentioned-var-in-diseq st-removed-unmentioned-in-subst)
 
 )
 
@@ -870,7 +870,7 @@
 
     (define record-tproj-on-pair-and-goals 
       (overloading-functor-list (list collect-tproj goal-base-endofunctor pair-base-endofunctor identity-endo-functor)))
-    (record-tproj-on-pair-and-goals (list (state-subst st) (state-diseq st) goal) )
+    (record-tproj-on-pair-and-goals (list (state-sub st) (state-diseq st) goal) )
     (set->list record!)
   )
   ;;; the collected tprojs
@@ -959,7 +959,7 @@
   ;;;  and make sure in unmentioned-exposed-form 
   (define (single-unmentioned-exposed-form eq)
     (define fst (car eq))
-    (define snd (cde eq))
+    (define snd (cdr eq))
     (define is-unexposed-form
       (and (member fst mentioned-vars)
            (there-is-var-not-in mentioned-vars snd)))
@@ -970,7 +970,7 @@
     (if is-unexposed-form
       ;;; the following is quite twisted... 
       ;;; basically there are too many preconditions 
-      (if simple-form 
+      (if is-simple-form 
         (list (cons snd fst))
         (if cons-at-right 
           (eliminate-conses (each-eliminate-cons eq)) 
@@ -978,6 +978,8 @@
       (list eq)
     )
   )
+  (foldl append '()
+    (map single-unmentioned-exposed-form eqs))
 )
 
 ;;; given a set of equations (lhs doesn't have to be variable)

@@ -6,6 +6,7 @@
   (struct-out state)
   empty-state
   state-sub
+  state-sub-set
   state-sub-update
   state-direction-set
   state-diseq-set
