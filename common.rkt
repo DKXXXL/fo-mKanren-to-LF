@@ -166,6 +166,7 @@
 (define type-label-top (list true? false? null? pair? number? string? symbol?))
 (define all-inf-type-label (list pair? number? string? symbol?))
 
+
 ;;; TODO: if all of the elements in type set are for the finite, 
 ;;;   then inequality might cause trouble  
 ;;;   for example, (exists x y z.) they are all different, they are all booleans

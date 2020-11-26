@@ -54,6 +54,20 @@
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "(~a ∧ ~a)" (conj-g1 val) (conj-g2 val)))]
 )
+
+(define succeed (== #t #t))
+(define fail    (== #f #t))
+(define-syntax conj*
+  (syntax-rules ()
+    ((_)                succeed)
+    ((_ g)              g)
+    ((_ gs ... g-final) (conj (conj* gs ...) g-final))))
+(define-syntax disj*
+  (syntax-rules ()
+    ((_)           fail)
+    ((_ g)         g)
+    ((_ g0 gs ...) (disj g0 (disj* gs ...)))))
+
 (struct relate (thunk description)      ;;;#:prefab
   #:transparent
   #:methods gen:custom-write
@@ -139,7 +153,7 @@
 
 ;;; typeinfo is a set of type-symbol
 ;;; indicating t is union of these type
-;;;   this goal is usually not used
+;;;   this goal is usually not interfaced to the user
 (struct type-constraint (t typeinfo)
   #:transparent
   #:methods gen:custom-write
@@ -458,6 +472,9 @@
       (mplus 
         (term-finite-type t1 st)
         (wrap-state-stream (check-as-inf-type-disj (remove string? all-inf-type-label) t1 st))))
+
+    ((type-constraint t types)
+      (wrap-state-stream (check-as-inf-type-disj types t st)))
     ((ex v gn) 
       (start (state-scope-update st (lambda (scope) (set-add scope v))) gn))
     ;;; forall is tricky, 
@@ -853,10 +870,27 @@
   each-asymmetry-record!
 )
 
+;;; var -> goal
+;;;   a bunch of goal asserts v is of finite type
+(define (is-of-finite-type v)
+  (disj* (== v #t) (== v #f) (== v '()))
+)
 ;;; given the st, we will break down a bunch of v's domain by the domain axiom
-;;;  return an equivalent stream of states s.t. v is pair in one state and not pair in the other
+;;;  return an equivalent stream of states s.t. v is pair in one state and not pair in the others
 (define (pair-or-not-pair-by-axiom vs st)
-  (void)
+  (define (decides-pair-goal v) 
+    (disj* 
+       (type-constraint v (list pair?)) 
+       (type-constraint v (remove pair? all-inf-type-label))
+       (is-of-finite-type v)
+    ))
+  (define axioms-on-each 
+    (map decides-pair-goal vs))
+  
+  (define conj-axioms
+    (foldl conj (Top) axioms-on-each))
+  
+  (start st conj-axioms)
 )
 
 ;;; return an equivalent stream of state, given a state
@@ -1219,7 +1253,7 @@
 (define (domain-enforcement-goal goal)
   (define all-tprojs (collect-tprojs goal))
   ;;; var x goal -> goal
-  (define (force-as-pair v g) (conj g (type-constraint v (set pair?))))
+  (define (force-as-pair v g) (conj g (type-constraint v (list pair?))))
   (foldl (lambda (tp g) (force-as-pair (tproj-v tp) g)) g all-tprojs)
 )
 
