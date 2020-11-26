@@ -734,9 +734,12 @@
 
 ;;; replace one var with another
 ;;;  var x var x state -> state
-;;;   but will only touch the type constraint 
+;;;   but will barely touch the type constraint 
 ;;;    s.t. after's type will be intersected with from's type constraint
 ;;;           if both after and from are variables
+;;;    it will respect pair, goal, state-sub
+;;;   i.e. when state is involved, 
+;;;       the "after" will be replaced by (walk* sub replace)
 (define/contract (literal-replace from after st)
   (any? any? any? . -> . any?)
   (define (literal-replace-from-after prev-f rec obj)
@@ -746,7 +749,8 @@
         after]
       ;;; other extended construct -- like state
       ;;;  very untyped...
-      [(state a scope trace direction d e) (state (rec a) scope trace direction (rec d) (rec e))]
+      [(state a scope trace direction d e) 
+        (state (rec a) scope trace direction (rec d) (rec e))]
       ;;; or type constraint information,
       ;;;  we only need to deal with type information
 
@@ -1193,9 +1197,47 @@
   (unmention-remove-everywhere (state-sub st) (state-sub-set st '()))
 )
 
-(define (domain-enforcement))
+(define (domain-enforcement-st))
+(define (domain-enforcement-goal))
 
+(define (state->goal st)
+  (define eqs (map (lambda (eq) (== (car eq) (cdr eq))) (state-sub st)))
+  (define types)
+  (define (disjunct-diseqs ls) 
+    (define all-eqs (map (lambda (eq) (=/= (car eq) (cdr eq))) ls))
+    (foldl disj (Top) all-eqs))
+  (define diseqs ())
+  (syntactical-simplify (conj (eqs types) disj))
+)
 
+;;; given a state with only conjunction, we go through and take out all the
+;;;   atomic proposition
+(define (conj-state->set-of-goals st)
+  (define eqs (list->set (map (lambda (eq) (== (car eq) (cdr eq))) (state-sub st))))
+  (define diseqs (list->set (map (lambda (l) (car l)) (state-diseq st))))
+  (define types)
+  (set-union eqs (set-union diseqs types))
+)
+
+;;; given compositions of DS where there is tproj appearances
+;;;  return a hashtable that maps each tproj term to a new var
+(define (collect-tprojs anything)
+
+)
+
+;;; anything (most likely pairs of goals) -> anything x List of equation
+;;;   will remove every tproj, 
+;;;    an gives a set of equation explaining the remove
+;;;  for example (tproj x car) == k
+;;;    will transform to (a == k) and a list of equation [(x (cons a b))]
+(define (eliminate-tproj-and-record anything)
+  (define all-tprojs (collect-tprojs returned-content))
+  (define all-tproj-removing-eqs (map equation-for-remove-tproj all-tprojs))
+  ;;; then we do huge literal-replace
+  ;;;  the literal-replace respects 
+  (define tproj-removed )
+  (cons tproj-removed all-tproj-removing-eqs)
+)
 
 
 ;;; given a state, and the scope with the set of vars should be considered fixed
@@ -1205,12 +1247,14 @@
 ;;; precondition: 
 ;;;    st is in conjunction form (i.e. there is no disjunction in diseq)
 ;;;    st is in non-asymmretic form (i.e. no (var ..) =/= (cons ...))
-;;;    st in
+;;;    st is in unmentioned-substed-form, where mentioned var are scope + var
 (define (relative-complement st scope var)
 ;;; 1. we first transform st into unmentioned-exposed-form
 ;;;     i.e. introduce tproj for unmentioned var,
 ;;;           and note that the forall-domain-var is part of mentioned var 
 ;;; 2. we then do global subst on those unmentioned
+;;; 2.5 then we do DomainEnforcement-Goal, basically every existence of term (tproj x)
+;;;         has to introduce type constraint x \in Pair
 ;;; 3. we then make sure all existence unmentioned (in diseq) will be replaced by true
 ;;; 4. we then really do relative-complement,
 ;;;  4.1 by first translate the state into set(conjunction) of atomic prop
@@ -1222,32 +1266,47 @@
 ;;;  4.4 we again use DomainEnforcement-Goal on each of them
 ;;;  4.5 we translate the set into big disjunction
   (define mentioned-vars (set-add scope var))
-  (define unmentioned-exposed-subst (unmentioned-exposed-form mentioned-vars (state-sub st)))
+  ;;; (define unmentioned-exposed-subst (unmentioned-exposed-form mentioned-vars (state-sub st)))
   ;;; Step 1 done
   ;;; this will literally remove the appearances of unmentioned var
   ;;;  according to eqs, except for those inside subst of st
-  (define (unmention-remove-everywhere eqs st)
-    ;;; (define eqs (state-sub st))
-    (if (equal? eqs '())
-      st
-      (match (car eqs)
-        [(cons v rhs)
-          #:when (not (member v mentioned-vars))
-          (unmention-remove (cdr eqs) (literal-replace v rhs st))]
-        [(cons v rhs)
-          (unmention-remove (cdr eqs) st)]
-      )
-    ))
+  
 
-  (define unmention-removed-eq-st 
-    (state-sub-set 
-      (unmention-remove-everywhere unmentioned-exposed-subst (state-sub-set st '())))
-      unmentioned-exposed-subst)
+  (define unmention-substed-st st)
   ;;; Step 2 done
-
-  (define unmention-remove-otherplaces-st
-
+  (define domain-enforced-st (domain-enforcement-st st))
+  ;;;  we remove none-substed appearances of unmentioned var
+  (define unmentioned-removed-st
+    (let* ([diseqs (state-diseq domain-enforced-st)]
+           [new-diseq (filter (lambda (p) (not (there-is-var-not-in mentioned-vars p))) diseqs)] ;; diseqs must be list of singleton list of thing
+           [type-rcd-lst (hash->list (state-typercd domain-enforced-st))]
+           [new-typercd-lst (filter (lambda (v) (not (there-is-var-not-in mentioned-vars v))) type-rcd)]
+           [new-typercd (make-hash new-typercd-lst)])
+    (state-diseq-set 
+      (state-typercd-set domain-enforced-st new-typercd)
+      new-diseq)))
+  ;;; Step 3 done
+  (define atomics-of-states (conj-state->set-of-goals unmentioned-removed-st))
+  (define atomics-of-var-related ())
+  (define atomics-of-var-unrelated ())
+  (define complemented-atomics-of-var-related ())
+  (define domain-enforced-complemented-atomics-of-var-related ())
+  ;;; we are almost done but we need to remove tproj
+  (define conj-unrelated (syntactical-simplify (foldl conj (Top) atomics-of-var-unrelated)))
+  (define disj-related (syntactical-simplify (foldl disj (Bottom) domain-enforced-complemented-atomics-of-var-related)))
+  (define returned-content (conj conj-unrelated disj-related))
+  
+  (define tproj-eliminated (eliminate-tproj-and-record returned-content))
+  (define tproj-eliminated-content (car tproj-eliminated))
+  (define tproj-eliminated-evidence (cdr tproj-eliminated))
+  (define tproj-eliminated-evidence-goal
+    (foldl conj (Top)
+      (map (lambda (x) (== (car x) (cdr x))) tproj-eliminated-evidence)
+    )
   )
+
+  (conj tproj-eliminated-evidence-goal tproj-eliminated-content)
+
 )
 
 
@@ -1258,6 +1317,25 @@
 ;;; precondition: 
 ;;;   st is in conjunction form (i.e. there is no disjunction in diseq)
 ;;;   st is in non-asymmretic form (i.e. no (var ..) =/= (cons ...))
+;;;    st is in unmentioned-substed-form, where mentioned var are scope + var
 (define (shrink-away st scope var)
-
+  (define mentioned-vars scope)
+  (define domain-enforced-st (domain-enforcement-st st))
+  ;;;  we remove none-substed appearances of unmentioned var
+  (define unmentioned-removed-st
+    (let* ([diseqs (state-diseq domain-enforced-st)]
+           [new-diseq (filter (lambda (p) (not (there-is-var-not-in mentioned-vars p))) diseqs)] ;; diseqs must be list of singleton list of thing
+           [type-rcd-lst (hash->list (state-typercd domain-enforced-st))]
+           [new-typercd-lst (filter (lambda (v) (not (there-is-var-not-in mentioned-vars v))) type-rcd)]
+           [new-typercd (make-hash new-typercd-lst)])
+    (state-diseq-set 
+      (state-typercd-set domain-enforced-st new-typercd)
+      new-diseq)))
+  ;;; then we eliminate tproj
+  (define tproj-eliminated (eliminate-tproj-and-record returned-content))
+  (define tproj-eliminated-content (car tproj-eliminated))
+  (define tproj-eliminated-evidence (cdr tproj-eliminated))
+  (state-sub-update 
+    tproj-eliminated-content
+    (lambda x (append tproj-eliminated-evidence x)))
 )
