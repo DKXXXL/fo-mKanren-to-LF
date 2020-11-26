@@ -335,7 +335,51 @@
 (struct bind   (scope bind-s bind-g)          #:prefab)
 (struct mplus  (mplus-s1 mplus-s2)      #:prefab)
 (struct pause  (pause-state pause-goal) #:prefab)
+(struct mapped-stream (f stream) #:prefab)
+;;; f :: state -> stream of states
+;;; mapped-stream f (cons a s) = mplus (f a) (mapped-stream f s)
+(struct to-dnf (state mark) #:prefab)
+;;; semantically there is or in the "state"
+;;;   this will lift the "or"s into stream
+;;;   at the current stage, mark is used for pointing to
+;;;     the disj component
 
+;;; since a state has semantic of disjunction
+;;;  we transform it into DNF and we should be able to index each disjunct component
+;;; 
+(define (get-state-DNF-range st)
+  (define conjs (state-diseq st))
+  (map length conjs)
+)
+
+(define (get-state-DNF-initial-index st)
+  (define conjs (state-diseq st))
+  (map (lambda (x) 0) conjs)
+)
+
+;;; return #f if there is no next
+;;; precondition: length l == length range
+(define (index-incremenent-by-one l range)
+  (match (cons l range)
+    ['() #f]
+    [((cons a s) (cons r t))
+      (if (< (+ 1 a) r)
+        (cons (+ 1 a) s)
+        (cons 0 (index-incremenent-by-one s t)))]
+  )
+)
+
+
+(define (get-state-DNF-next-index st index)
+  (define range (get-state-DNF-range st))
+  (index-incremenent-by-one index range))
+
+
+(define (get-state-DNF-by-index st index)
+  (define conjs (state-diseq st))
+  (define indexed-conjs (map (lambda (disjs pos) (list (list-ref disjs pos))) conjs index))
+  (state-diseq-update st indexed-conjs)
+)
 
 ;;; the special stream only used for forall
 ;;;   all the possibe results of first-attempt-s
@@ -356,6 +400,16 @@
   )
 )
 
+;;; given a stream of states, 
+;;;   return another stream of states 
+;;;   make sure there is no disjunction in meaning of each state and 
+;;;     all the disjunction are lifted to mplus
+(define (TO-DNF stream)
+  (mapped-stream (lambda (st) (to-dnf st (get-state-DNF-initial-index st))) stream))
+
+(define (TO-NON-Asymmetric stream)
+  (mapped-stream remove-assymetry-in-diseq stream)
+)
 
 ;;; term-finite-type : term x state -> stream
 ;;;  this will assert t is either #t, #f, or '()
@@ -409,7 +463,10 @@
 
         (match domain_
           [(Bottom) (wrap-state-stream st)]
-          [_ (bind-forall (state-scope st) (start st (ex var (conj domain_ goal)))  var (forall var domain_ goal))]
+          [_ (bind-forall (state-scope st) 
+                          (TO-DNF (TO-NON-Asymmetric (start st (ex var (conj domain_ goal)))))  
+                          var 
+                          (forall var domain_ goal))]
         )
       )
     )
@@ -435,6 +492,22 @@
               (step (mplus (pause (state-scope-set (car s) scope) g)
                            (bind scope (cdr s) g))))
              (else (bind scope s g)))))
+    ((to-dnf st mark)
+      ;;; mark is the index
+      (and mark
+        (( 1 2 ) (3 4)) -> ((1) (3)) ((1) (4)) ((2) (3)) ((2) (4)) #f
+          (let ([ret (get-state-DNF-by-index st mark)]
+                [next-mark (get-state-DNF-next-index st mark)])
+            (cons ret (to-dnf st next-mark)))))
+
+    ((mapped-stream f stream)
+      ;;; TODO: recheck this part .. it might be not correct searching strategy
+      (let ((s (if (mature? stream) stream (step stream))))
+        (cond ((not s) #f)
+              ((pair? s)
+                (step (mplus (f (car s))
+                             (mapped-stream f (cdr s)))))
+              (else (mapped-stream f s)))))
     ;;; bind-forall is a bit complicated
     ;;;   it will first need to collect all possible solution of
     ;;;   s, and complement it, and intersect with 
@@ -462,7 +535,7 @@
                    [(cons next-st cgoal) (eliminate-tproj st-scoped-w/ov complemented-goal)]
                    [k (begin  (display " st: ")(display st)
                               (display "\n st-scoped-w/v: ")(display st-scoped-w/v) 
-                             (display "\n st-scoped-w/ov: ")(display st-scoped-w/ov)
+                              (display "\n st-scoped-w/ov: ")(display st-scoped-w/ov)
                               (display "\n complemented goal: ")(display st-scoped-w/ov)
                               (display "\n next state ") (display next-st) 
                               (display "\n search with domain on var ")
@@ -708,29 +781,11 @@
   (foldl (lambda (eq st) (car (unify (car eq) (cdr eq) st))) st list-u-v-s)
 )
 
-(define (shrink-into vars st)
-;;; 0. we first make sure there is no asymmetry on each inequalities
-;;;   0.1 by going through all the inequalities, with cons on one side and var on the other,
-;;;   0.2 we use "sketch" to construct the "frames" of the var (construct-conses)
-;;;   0.3 we unifie these sketches with vars to remove the asymetry of the inequalitie  
-;;; 1. we first use unmentioned-exposed-form 
-;;;     to remove asymmetry form of equation, i.e. the unmentioned var in a composed structure
-;;; 2. we go through the subst, one by one, if any side of equation has a var not in vars, we use shrink-away/literal to replace
-;;;   At this point, we are finally doing shrink-into
-;;; 3. removing those not-wanted var in diseqs by replacing them with True 
-  (define diseqs (state-diseq st))
+;;; return a set of vars, indicating that those vars, "s" are in the
+;;;  form of "s =/= (cons ...)", and thus we need to break down s themselves
+(define (record-vars-on-asymmetry-in-diseq st)
 
-  (define (construct-conses x)
-    (define rec construct-conses)
-    (match x
-      [(cons a b) (cons (rec a) (rec b))]
-      [_ (fresh-var fpu)]
-    )
-  )
-
-  ;;; use side-effect to record the encountered asymmetry equation
   (define each-asymmetry-record! '())
-
   (define (each-asymmetry prev-f rec g)
     (match g
       ;;; thiss pattern matching i a bit dangerous
@@ -757,8 +812,45 @@
   (define each-asymmetry-recorder
     (overloading-functor-list (list each-asymmetry pair-base-endofunctor identity-endo-functor))
   )
-  (each-asymmetry-recorder diseqs)
-  (define each-asymmetry-record each-asymmetry-record!)
+  (each-asymmetry-recorder (state-diseq st))
+  each-asymmetry-record!
+)
+
+;;; given the st, we will break down a bunch of v's domain by the domain axiom
+;;;  return an equivalent stream of states s.t. v is pair in one state and not pair in the other
+(define (pair-or-not-pair-by-axiom vs st)
+  (void)
+)
+
+;;; return an equivalent stream of state, given a state
+;;;  but in each state, there is no assymetric disequality
+;;;     i.e. (var s) =/= (cons ...)
+(define (remove-assymetry-in-diseq st)
+  (define asymmetric-vars (record-vars-on-asymmetry-in-diseq st))
+  (if (equal? (length asymmetric-vars) 0)
+    (wrap-state-stream st)
+    (mapped-stream remove-assymetry-in-diseq (pair-or-not-pair-by-axiom asymmetric-vars st))))
+
+(define (shrink-into vars st)
+;;; 0. we first make sure there is no asymmetry on each inequalities
+;;;   0.1 by going through all the inequalities, with cons on one side and var on the other,
+;;;   0.2 we record the var,   
+;;; 1. we then use unmentioned-exposed-form 
+;;;     to remove asymmetry form of equation, i.e. the unmentioned var in a composed structure
+;;; 2. we go through the subst, one by one, if any side of equation has a var not in vars, we use shrink-away/literal to replace
+;;;   At this point, we are finally doing shrink-into
+;;; 3. removing those not-wanted var in diseqs by replacing them with True 
+  (define diseqs (state-diseq st))
+
+  (define (construct-conses x)
+    (define rec construct-conses)
+    (match x
+      [(cons a b) (cons (rec a) (rec b))]
+      [_ (fresh-var fpu)]
+    )
+  )
+
+  (define each-asymmetry-record (record-vars-on-asymmetry-in-diseq st))
   ;;; step 0.3 
   (define st-symmetric-on-diseqs (unifies-equations each-asymmetry-record st))
   ;;; now the diseqs have same AST height on each side
@@ -1075,3 +1167,97 @@
     ((_ (x xs ...) g)
       (forall x (Top) (given (xs ...) g)))))
 
+;;; given a state, we 
+(define (not-mention-means-always-True st mentioned)
+
+)
+
+
+;;; given a state in unmentioned-exposed-form
+;;;   return a state, where unmentioned-var are replaced as much as possible
+;;;     "as much as" is because there are cases that unmentioned-var
+;;;     has no relationship with other vars, so cannot be eliminated
+(define (unmentioned-substed-form mentioned-vars st)
+  (define (unmention-remove-everywhere eqs st)
+    ;;; (define eqs (state-sub st))
+    (if (equal? eqs '())
+      st
+      (match (car eqs)
+        [(cons v rhs)
+          #:when (not (member v mentioned-vars))
+          (unmention-remove (cdr eqs) (literal-replace v (walk rhs (cdr eqs)) st))]
+        [(cons v rhs)
+          (unmention-remove (cdr eqs) st)]
+      )
+    ))
+  (unmention-remove-everywhere (state-sub st) (state-sub-set st '()))
+)
+
+(define (domain-enforcement))
+
+
+
+
+;;; given a state, and the scope with the set of vars should be considered fixed
+;;;  return a goal/proposition that
+;;;   is the complement the domain of var in the state
+;;;   other variables not mentioned in scope and var should be dealt with properly
+;;; precondition: 
+;;;    st is in conjunction form (i.e. there is no disjunction in diseq)
+;;;    st is in non-asymmretic form (i.e. no (var ..) =/= (cons ...))
+;;;    st in
+(define (relative-complement st scope var)
+;;; 1. we first transform st into unmentioned-exposed-form
+;;;     i.e. introduce tproj for unmentioned var,
+;;;           and note that the forall-domain-var is part of mentioned var 
+;;; 2. we then do global subst on those unmentioned
+;;; 3. we then make sure all existence unmentioned (in diseq) will be replaced by true
+;;; 4. we then really do relative-complement,
+;;;  4.1 by first translate the state into set(conjunction) of atomic prop
+;;;  4.1.5 then we do DomainEnforcement-Goal, basically every existence of term (tproj x)
+;;;         has to introduce type constraint x \in Pair
+;;;  4.2 we then only keep those with 'var' mentioned
+;;;  4.3 we then take syntactical complement on (each of) them, 
+;;;     and the set of atomic prop will be interpreted as disjunctions of atomic prop
+;;;  4.4 we again use DomainEnforcement-Goal on each of them
+;;;  4.5 we translate the set into big disjunction
+  (define mentioned-vars (set-add scope var))
+  (define unmentioned-exposed-subst (unmentioned-exposed-form mentioned-vars (state-sub st)))
+  ;;; Step 1 done
+  ;;; this will literally remove the appearances of unmentioned var
+  ;;;  according to eqs, except for those inside subst of st
+  (define (unmention-remove-everywhere eqs st)
+    ;;; (define eqs (state-sub st))
+    (if (equal? eqs '())
+      st
+      (match (car eqs)
+        [(cons v rhs)
+          #:when (not (member v mentioned-vars))
+          (unmention-remove (cdr eqs) (literal-replace v rhs st))]
+        [(cons v rhs)
+          (unmention-remove (cdr eqs) st)]
+      )
+    ))
+
+  (define unmention-removed-eq-st 
+    (state-sub-set 
+      (unmention-remove-everywhere unmentioned-exposed-subst (state-sub-set st '())))
+      unmentioned-exposed-subst)
+  ;;; Step 2 done
+
+  (define unmention-remove-otherplaces-st
+
+  )
+)
+
+
+;;; given a state, and the scope with the set of vars should be considered fixed
+;;;   return a state that : 
+;;;     we shrink the existence of vars to scope 
+;;;     other variables not mentioned in scope and var should be dealt with properly
+;;; precondition: 
+;;;   st is in conjunction form (i.e. there is no disjunction in diseq)
+;;;   st is in non-asymmretic form (i.e. no (var ..) =/= (cons ...))
+(define (shrink-away st scope var)
+
+)
