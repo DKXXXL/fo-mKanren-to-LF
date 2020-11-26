@@ -495,7 +495,6 @@
     ((to-dnf st mark)
       ;;; mark is the index
       (and mark
-        (( 1 2 ) (3 4)) -> ((1) (3)) ((1) (4)) ((2) (3)) ((2) (4)) #f
           (let ([ret (get-state-DNF-by-index st mark)]
                 [next-mark (get-state-DNF-next-index st mark)])
             (cons ret (to-dnf st next-mark)))))
@@ -529,22 +528,28 @@
             (match-let* 
                   ([st (car s)]
                   ;;;  TODO: figure out trace!
-                   [st-scoped-w/v (shrink-into (set-add current-vars v) st)]
-                   [st-scoped-w/ov (shrink-into (set-remove current-vars v) st) ]
-                   [complemented-goal (syntactical-simplify (complement (extract-goal-about v st-scoped-w/v)))]
-                   [(cons next-st cgoal) (eliminate-tproj st-scoped-w/ov complemented-goal)]
+                   [unmentioned-exposed-st (unmentioned-exposed-form st)]
+                   [unmention-substed-st (unmentioned-substed-form unmentioned-exposed-st)]
+                   [relative-complemented-goal (relative-complement st current-vars v)]
+                   [shrinked-st (shrink-away st current-vars v)]
+                  ;;;  [st-scoped-w/v (shrink-into (set-add current-vars v) st)]
+                  ;;;  [st-scoped-w/ov (shrink-into (set-remove current-vars v) st) ]
+                  ;;;  [complemented-goal (syntactical-simplify (complement (extract-goal-about v st-scoped-w/v)))]
+                  ;;;  [(cons next-st cgoal) (eliminate-tproj st-scoped-w/ov complemented-goal)]
                    [k (begin  (display " st: ")(display st)
-                              (display "\n st-scoped-w/v: ")(display st-scoped-w/v) 
-                              (display "\n st-scoped-w/ov: ")(display st-scoped-w/ov)
-                              (display "\n complemented goal: ")(display st-scoped-w/ov)
-                              (display "\n next state ") (display next-st) 
-                              (display "\n search with domain on var ")
-                              (display v) (display " in ") (display cgoal) (display "\n"))]
+                              ;;; (display "\n st-scoped-w/v: ")(display st-scoped-w/v) 
+                              ;;; (display "\n st-scoped-w/ov: ")(display st-scoped-w/ov)
+                              ;;; (display "\n complemented goal: ")(display st-scoped-w/ov)
+                              ;;; (display "\n next state ") (display next-st) 
+                              ;;; (display "\n search with domain on var ")
+                              ;;; (display v) (display " in ") (display cgoal) 
+                              (display "\n"))
+                              ]
                     )
               ;;; forall x (== x 3) (== x 3)
               ;;;   forall x (conj (== x 3) (=/= x 3)) (== x 3)
               ;;;  forall x () (symbolo x) /\ (not-symbolo x)
-              (step (mplus (pause next-st (forall v (conj cgoal domain) goal))
+              (step (mplus (pause shrinked-st (forall v (conj relative-complemented-goal domain) goal))
                            (bind-forall current-vars (cdr s) v (forall v domain goal)))))) ;;; other possible requirements search
 
         (else (bind-forall current-vars s v (forall v domain goal))))
@@ -739,7 +744,7 @@
 ;;;           if both after and from are variables
 ;;;    it will respect pair, goal, state-sub
 ;;;   i.e. when state is involved, 
-;;;       the "after" will be replaced by (walk* sub replace)
+;;;       the "after" will be replaced by (walk* after sub)
 (define/contract (literal-replace from after st)
   (any? any? any? . -> . any?)
   (define (literal-replace-from-after prev-f rec obj)
@@ -750,7 +755,9 @@
       ;;; other extended construct -- like state
       ;;;  very untyped...
       [(state a scope trace direction d e) 
-        (state (rec a) scope trace direction (rec d) (rec e))]
+        (let* ([new-sub (rec a)]
+               [rec (lambda (any) (literal-replace from (walk* after new-sub) any)) ])
+          (state new-sub scope trace direction (rec d) (rec e)))]
       ;;; or type constraint information,
       ;;;  we only need to deal with type information
 
@@ -758,9 +765,14 @@
       ;;;   basically it is possible that from will be walked into another var
       ;;;    that has the correct type constraint information
       [(? hash?) 
-        (let* ([at-key (hash-ref obj from #f)])
-          (if at-key (hash-set (hash-remove obj from) after at-key) obj))
-        ]
+        ;;; type-constraint!
+        (let* ([at-key (hash-ref obj from #f)]
+               [pre-exists (hash-ref obj after #f)])
+          (if (and at-key pre-exists) 
+            ;;; if already exists, then doing intersection
+            (hash-set (hash-remove obj from) after (set-intersect at-key pre-exists) )
+            ;;; otherwise 
+            (if at-key (hash-set (hash-remove obj from) after at-key) obj)))]
       [_ (prev-f obj)]))
 
   (define internal-f (overloading-functor-list (list literal-replace-from-after pair-base-endofunctor goal-base-endofunctor identity-endo-functor)))
@@ -1197,8 +1209,25 @@
   (unmention-remove-everywhere (state-sub st) (state-sub-set st '()))
 )
 
-(define (domain-enforcement-st))
-(define (domain-enforcement-goal))
+
+
+;;; DomainEnforcement -- basically currently make sure if term (tproj x car) appear
+;;;   then x is of type pair
+(define (domain-enforcement-st st)
+  (define all-tprojs (collect-tprojs st))
+  ;;; var x state -> state
+  (define (force-as-pair v st) (void))
+  (foldl (lambda (tp st) (force-as-pair (tproj-v tp) st)) st all-tprojs)
+)
+
+;;; similar as above, but it deal with goal and returns goal
+;;;  TODO: duplicate code: but abstract it away doesn't quite make interpretable sense
+(define (domain-enforcement-goal goal)
+  (define all-tprojs (collect-tprojs st))
+  ;;; var x state -> state
+  (define (force-as-pair v st) (void))
+  (foldl (lambda (tp st) (force-as-pair (tproj-v tp) st)) st all-tprojs)
+)
 
 (define (state->goal st)
   (define eqs (map (lambda (eq) (== (car eq) (cdr eq))) (state-sub st)))
