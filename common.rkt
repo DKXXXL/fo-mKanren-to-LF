@@ -17,6 +17,8 @@
   state-diseq-update
   state-scope-update
   state-scope-set
+  state-typercd-cst-add
+  state-typercd-set
   shadow-idempotent-sub
   trace-left
   trace-right

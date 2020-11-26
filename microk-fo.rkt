@@ -386,7 +386,7 @@
 (define (index-incremenent-by-one l range)
   (match (cons l range)
     ['() #f]
-    [((cons a s) (cons r t))
+    [(cons (cons a s) (cons r t))
       (if (< (+ 1 a) r)
         (cons (+ 1 a) s)
         (cons 0 (index-incremenent-by-one s t)))]
@@ -698,17 +698,7 @@
      (let ((x (var/fresh 'x)))  x))))
 
 
-(define-syntax disj*
-  (syntax-rules ()
-    ((_)           fail)
-    ((_ g)         g)
-    ((_ g0 gs ...) (disj g0 (disj* gs ...)))))
 
-(define-syntax conj*
-  (syntax-rules ()
-    ((_)                succeed)
-    ((_ g)              g)
-    ((_ gs ... g-final) (conj (conj* gs ...) g-final))))
 
 (define type-label-to-type-goal
   (hash
@@ -826,8 +816,8 @@
 ;;;    [shrink-into .. st] implies [st] are both possibly ok! since we are doing *automated proving*
 ;;;      if we strengthen/weaken the condition, but somehow we still can deduce the goal, then we are fine!
 
-(define (shrink-away var-from term-to st)
-  (literal-replace var-from term-to st))
+;;; (define (shrink-away var-from term-to st)
+;;;   (literal-replace var-from term-to st))
 
 ;;; [(term, term)] x state -> state
 ;;;  unifies each equation one by one
@@ -838,8 +828,7 @@
 ;;; return a set of vars, indicating that those vars, "s" are in the
 ;;;  form of "s =/= (cons ...)", and thus we need to break down s themselves
 (define (record-vars-on-asymmetry-in-diseq st)
-
-  (define each-asymmetry-record! '())
+  (define each-asymmetry-record! (set))
   (define (each-asymmetry prev-f rec g)
     (match g
       ;;; thiss pattern matching i a bit dangerous
@@ -847,15 +836,13 @@
       [(cons (var _ _) (cons _ _)) 
           (let* ([v (car g)]
                  [composed (cdr g)])
-              (set! each-asymmetry-record! 
-                (cons (cons v (construct-conses composed)) each-asymmetry-record!))
+              (set-add! each-asymmetry-record! v)
               g
                  )]
       [(cons (cons _ _) (var _ _)) 
           (let* ([v (cdr g)]
                  [composed (car g)])
-              (set! each-asymmetry-record! 
-                (cons (cons v (construct-conses composed)) each-asymmetry-record!))
+              (set-add! each-asymmetry-record! v)
               g
                  )]
       [_ (prev-f g)]
@@ -867,7 +854,7 @@
     (overloading-functor-list (list each-asymmetry pair-base-endofunctor identity-endo-functor))
   )
   (each-asymmetry-recorder (state-diseq st))
-  each-asymmetry-record!
+  (set->list each-asymmetry-record!)
 )
 
 ;;; var -> goal
@@ -902,104 +889,6 @@
     (wrap-state-stream st)
     (mapped-stream remove-assymetry-in-diseq (pair-or-not-pair-by-axiom asymmetric-vars st))))
 
-(define (shrink-into vars st)
-;;; 0. we first make sure there is no asymmetry on each inequalities
-;;;   0.1 by going through all the inequalities, with cons on one side and var on the other,
-;;;   0.2 we record the var,   
-;;; 1. we then use unmentioned-exposed-form 
-;;;     to remove asymmetry form of equation, i.e. the unmentioned var in a composed structure
-;;; 2. we go through the subst, one by one, if any side of equation has a var not in vars, we use shrink-away/literal to replace
-;;;   At this point, we are finally doing shrink-into
-;;; 3. removing those not-wanted var in diseqs by replacing them with True 
-  (define diseqs (state-diseq st))
-
-  (define (construct-conses x)
-    (define rec construct-conses)
-    (match x
-      [(cons a b) (cons (rec a) (rec b))]
-      [_ (fresh-var fpu)]
-    )
-  )
-
-  (define each-asymmetry-record (record-vars-on-asymmetry-in-diseq st))
-  ;;; step 0.3 
-  (define st-symmetric-on-diseqs (unifies-equations each-asymmetry-record st))
-  ;;; now the diseqs have same AST height on each side
-  (define subst-st-symmetric-on-diseqs (state-sub st-symmetric-on-diseqs))
-  (define remove-asym-on-subst (unmentioned-exposed-form vars subst-st-symmetric-on-diseqs))
-  (define st-symmetry-everywhere (state-sub-set st-symmetric-on-diseqs remove-asym-on-subst))
-  ;;; step 2: now go through each equation in subst, doing real shrinking
-  (define (eliminate-unmentioned-var-in-subst st)
-    (define current-subst (state-sub st))
-    
-    (if (equal? current-subst '())
-      st
-      (let*
-        ([fst-eq (car current-subst)]
-         [next-st (state-sub-update st cdr)])
-        (match fst-eq
-          [(cons (var a b) rhs)
-            #:when (not (member (var a b) vars))
-            (eliminate-unmentioned-var-in-subst (shrink-away (var a b) rhs next-st))]
-          ;;; lhs must be a var that is also mentioned, 
-          ;;;   then by post-condition of "unmentioned-exposed-form",
-          ;;;   we know the rhs must all be mentioned
-          ;;; TODO: so actually the following clause can be ignored 
-          [(cons lhs (var a b))
-            #:when (not (member (var a b) vars))
-            (eliminate-unmentioned-var-in-subst (shrink-away (var a b) lhs next-st))]
-          [_
-            (state-sub-update 
-              (eliminate-unmentioned-var-in-subst next-st)
-              (lambda (x) (cons fst-eq x)))
-          ]
-      ))
-    )
-  )
-
-  (define st-removed-unmentioned-in-subst (eliminate-unmentioned-var-in-subst st-symmetry-everywhere))
-
-  ;;; precondition: each inequalties only have var on both sides
-  (define (eliminate-unmentioned-var-in-diseq diseq)
-    (define (not-list x)
-      (not (or (equal? x '()) (pair? x))))
-    (define (each-inequality prev-f rec g)
-      (match g
-        ;;; this pattern matching is a bit dangerous
-        ;;; TODO: make equation/inequality into a struct so that pattern-matching can be easier
-        [(cons (var _ _) (var _ _))
-          #:when (there-is-var-not-in vars g) 
-          'removed]
-        [_ (prev-f g)]
-      )
-    )
-
-    (define deal-with-inequalities
-      (overloading-functor-list (list each-inequality pair-base-endofunctor identity-endo-functor))
-    )
-    (deal-with-inequalities diseq)
-  )
-
-  ;;; given the diseq list
-  ;;;   filter out those Top inside
-  (define (filter-out-removed-in-disj conj-disj-diseq)
-    ;;; 
-    (define (remove-removed-symbol disj-list)
-      (filter (lambda (x) (not (equal? x 'removed))) disj-list)
-    )
-    (filter (lambda (x) (not (equal? x '()))) 
-      (map remove-removed-symbol conj-disj-diseq))
-  )
-
-  (state-diseq-update  
-    st-removed-unmentioned-in-subst 
-    (lambda (x) (filter-out-removed-in-disj (eliminate-unmentioned-var-in-diseq x))))
-  
-  ;;; (state-diseq-update  
-  ;;;   st-removed-unmentioned-in-subst 
-  ;;;   (lambda (x)  (eliminate-unmentioned-var-in-diseq x)))
-
-)
 
 ;;; tproj :: var x List of ['car, 'cdr] 
 ;;; cxr as a path/stack of field projection/query
@@ -1033,22 +922,8 @@
   ;;; 2. we then do literal replace to remove tproj occurrences
   ;;; 3. we use unify-equations to make sure the equations are satisfied
 
-  (define (collect-tproj)
-    (define record! (mutable-set))
-    (define (when-tproj prev-f rec g)
-      (match g
-        [(tproj _ _) (begin (set-add! record! g) g)]
-        [_ (prev-f g)]
-      )
-    )
-
-    (define record-tproj-on-pair-and-goals 
-      (overloading-functor-list (list when-tproj goal-base-endofunctor pair-base-endofunctor identity-endo-functor)))
-    (record-tproj-on-pair-and-goals (list (state-sub st) (state-diseq st) goal) )
-    (set->list record!)
-  )
   ;;; the collected tprojs
-  (define all-tprojs (collect-tproj))
+  (define all-tprojs (collect-tprojs st))
   ;;;  the corresponding equation for each tproj
   (define removing-equations (map equation-for-remove-tproj all-tprojs))
   ;;; for each equation ((var y) (cons ...)), originated from  (tproj y ...)
@@ -1210,10 +1085,11 @@
     ((_ (x xs ...) g)
       (forall x (Top) (given (xs ...) g)))))
 
-;;; given a state, we 
-(define (not-mention-means-always-True st mentioned)
+;;; ;;; given a state, we 
+;;; (define (not-mention-means-always-True st mentioned)
 
-)
+;;; )
+
 
 
 ;;; given a state in unmentioned-exposed-form
@@ -1228,9 +1104,9 @@
       (match (car eqs)
         [(cons v rhs)
           #:when (not (member v mentioned-vars))
-          (unmention-remove (cdr eqs) (literal-replace v (walk rhs (cdr eqs)) st))]
+          (unmention-remove-everywhere (cdr eqs) (literal-replace v (walk* rhs (cdr eqs)) st))]
         [(cons v rhs)
-          (unmention-remove (cdr eqs) st)]
+          (unmention-remove-everywhere (cdr eqs) st)]
       )
     ))
   (unmention-remove-everywhere (state-sub st) (state-sub-set st '()))
@@ -1254,7 +1130,7 @@
   (define all-tprojs (collect-tprojs goal))
   ;;; var x goal -> goal
   (define (force-as-pair v g) (conj g (type-constraint v (list pair?))))
-  (foldl (lambda (tp g) (force-as-pair (tproj-v tp) g)) g all-tprojs)
+  (foldl (lambda (tp g) (force-as-pair (tproj-v tp) g)) goal all-tprojs)
 )
 
 ;;; (define (state->goal st)
@@ -1291,7 +1167,7 @@
   (define result-f 
     (overloading-functor-list (list each-case goal-base-endofunctor (there-is-in-pair-base-functor #f)))
   )
-  (result-f pair-goal)
+  (result-f anything)
   result
 
 )
@@ -1302,7 +1178,7 @@
 ;;;  for example (tproj x car) == k
 ;;;    will transform to (a == k) and a list of equation [(x (cons a b))]
 (define (eliminate-tproj-return-record anything)
-  (define all-tprojs (collect-tprojs returned-content))
+  (define all-tprojs (collect-tprojs anything))
   (define all-tproj-removing-eqs (map equation-for-remove-tproj all-tprojs))
   ;;; then we do huge literal-replace
   ;;;  the literal-replace respects 
@@ -1348,7 +1224,7 @@
     (let* ([diseqs (state-diseq domain-enforced-st)]
            [new-diseq (filter (lambda (p) (not (there-is-var-not-in mentioned-vars p))) diseqs)] ;; diseqs must be list of singleton list of thing
            [type-rcd-lst (hash->list (state-typercd domain-enforced-st))]
-           [new-typercd-lst (filter (lambda (v) (not (there-is-var-not-in mentioned-vars v))) type-rcd)]
+           [new-typercd-lst (filter (lambda (v) (not (there-is-var-not-in mentioned-vars v))) type-rcd-lst)]
            [new-typercd (make-hash new-typercd-lst)])
     (state-diseq-set 
       (state-typercd-set domain-enforced-st new-typercd)
@@ -1399,13 +1275,13 @@
     (let* ([diseqs (state-diseq domain-enforced-st)]
            [new-diseq (filter (lambda (p) (not (there-is-var-not-in mentioned-vars p))) diseqs)] ;; diseqs must be list of singleton list of thing
            [type-rcd-lst (hash->list (state-typercd domain-enforced-st))]
-           [new-typercd-lst (filter (lambda (v) (not (there-is-var-not-in mentioned-vars v))) type-rcd)]
+           [new-typercd-lst (filter (lambda (v) (not (there-is-var-not-in mentioned-vars v))) type-rcd-lst)]
            [new-typercd (make-hash new-typercd-lst)])
     (state-diseq-set 
       (state-typercd-set domain-enforced-st new-typercd)
       new-diseq)))
   ;;; then we eliminate tproj
-  (define tproj-eliminated (eliminate-tproj-return-record returned-content))
+  (define tproj-eliminated (eliminate-tproj-return-record unmentioned-removed-st))
   (define tproj-eliminated-content (car tproj-eliminated))
   (define tproj-eliminated-evidence (cdr tproj-eliminated))
   (unifies-equations tproj-eliminated-evidence tproj-eliminated-content)
