@@ -138,6 +138,14 @@
 )
 
 
+(struct type-constraint (t typeinfo)
+  #:transparent
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "type-constraint ~a ~a" (type-constraint-t val) (type-constraint-typeinfo val)))]
+)
+
+
 ;;; haven't decided introduce or not
 ;;;   details in domain-exhausitive check
 ;;; (struct pairo (t)
@@ -268,13 +276,13 @@
   (pair-base-functor (lambda (x) (hash-ref defaulted x 'NotFound))))
   
 
-;;; (define (there-is-vars-in var-indices pair-goal)
-;;;   (define (each-case prev-f rec g)
-;;;     (match g
-;;;       [(var _ index) (member index var-indices)]
-;;;       [o/w (prev-f g)]
-;;;     )
-;;;   )
+(define (there-is-var-in vars pair-goal)
+  (define (each-case prev-f rec g)
+    (match g
+      [(var _ index) (member g vars)]
+      [o/w (prev-f g)]
+    )
+  )
 
 ;;;   (define result-f 
 ;;;     (overloading-functor-list (list each-case goal-base-endofunctor (there-is-in-pair-base-functor #f)))
@@ -737,6 +745,10 @@
 )
 
 
+(define/contract (literal-replace* mapping st)
+  (hash? any? . -> . any?)
+)
+
 ;;; replace one var with another
 ;;;  var x var x state -> state
 ;;;   but will barely touch the type constraint 
@@ -745,8 +757,7 @@
 ;;;    it will respect pair, goal, state-sub
 ;;;   i.e. when state is involved, 
 ;;;       the "after" will be replaced by (walk* after sub)
-(define/contract (literal-replace from after st)
-  (any? any? any? . -> . any?)
+(define (literal-replace from after st)
   (define (literal-replace-from-after prev-f rec obj)
     (match obj
       [x 
@@ -1216,7 +1227,8 @@
 (define (domain-enforcement-st st)
   (define all-tprojs (collect-tprojs st))
   ;;; var x state -> state
-  (define (force-as-pair v st) (void))
+  (define (force-as-pair v st) 
+    (state-typercd-cst-add st v pair?))
   (foldl (lambda (tp st) (force-as-pair (tproj-v tp) st)) st all-tprojs)
 )
 
@@ -1224,27 +1236,29 @@
 ;;;  TODO: duplicate code: but abstract it away doesn't quite make interpretable sense
 (define (domain-enforcement-goal goal)
   (define all-tprojs (collect-tprojs st))
-  ;;; var x state -> state
-  (define (force-as-pair v st) (void))
+  ;;; var x goal -> goal
+  (define (force-as-pair v g) (conj g (type-constraint v (set pair?))))
   (foldl (lambda (tp st) (force-as-pair (tproj-v tp) st)) st all-tprojs)
 )
 
-(define (state->goal st)
-  (define eqs (map (lambda (eq) (== (car eq) (cdr eq))) (state-sub st)))
-  (define types)
-  (define (disjunct-diseqs ls) 
-    (define all-eqs (map (lambda (eq) (=/= (car eq) (cdr eq))) ls))
-    (foldl disj (Top) all-eqs))
-  (define diseqs ())
-  (syntactical-simplify (conj (eqs types) disj))
-)
+;;; (define (state->goal st)
+;;;   (define eqs (map (lambda (eq) (== (car eq) (cdr eq))) (state-sub st)))
+;;;   (define types)
+;;;   (define (disjunct-diseqs ls) 
+;;;     (define all-eqs (map (lambda (eq) (=/= (car eq) (cdr eq))) ls))
+;;;     (foldl disj (Top) all-eqs))
+;;;   (define diseqs ())
+;;;   (syntactical-simplify (conj (eqs types) disj))
+;;; )
 
 ;;; given a state with only conjunction, we go through and take out all the
 ;;;   atomic proposition
 (define (conj-state->set-of-goals st)
   (define eqs (list->set (map (lambda (eq) (== (car eq) (cdr eq))) (state-sub st))))
   (define diseqs (list->set (map (lambda (l) (car l)) (state-diseq st))))
-  (define types)
+  (define types 
+    (let* ([typ-infos (hash->list (state-typercd st))])
+      (map (lambda (term-type) (type-constraint (car term-type) (cdr term-type))) typ-infos)))
   (set-union eqs (set-union diseqs types))
 )
 
@@ -1259,12 +1273,12 @@
 ;;;    an gives a set of equation explaining the remove
 ;;;  for example (tproj x car) == k
 ;;;    will transform to (a == k) and a list of equation [(x (cons a b))]
-(define (eliminate-tproj-and-record anything)
+(define (eliminate-tproj-return-record anything)
   (define all-tprojs (collect-tprojs returned-content))
   (define all-tproj-removing-eqs (map equation-for-remove-tproj all-tprojs))
   ;;; then we do huge literal-replace
   ;;;  the literal-replace respects 
-  (define tproj-removed )
+  (define tproj-removed (literal-replace* (make-hash all-tproj-removing-eqs) anything))
   (cons tproj-removed all-tproj-removing-eqs)
 )
 
@@ -1316,16 +1330,18 @@
       new-diseq)))
   ;;; Step 3 done
   (define atomics-of-states (conj-state->set-of-goals unmentioned-removed-st))
-  (define atomics-of-var-related ())
-  (define atomics-of-var-unrelated ())
-  (define complemented-atomics-of-var-related ())
-  (define domain-enforced-complemented-atomics-of-var-related ())
+  (define atomics-of-var-related (filter (lambda (x) (there-is-var-in (set var) x)) atomics-of-states))
+  (define atomics-of-var-unrelated (filter (lambda (x) (not (there-is-var-in (set var) x))) atomics-of-states) )
+  (define complemented-atomics-of-var-related 
+    (map complement atomics-of-var-related))
+  (define domain-enforced-complemented-atomics-of-var-related 
+    (map domain-enforced-goal complemented-atomics-of-var-related))
   ;;; we are almost done but we need to remove tproj
   (define conj-unrelated (syntactical-simplify (foldl conj (Top) atomics-of-var-unrelated)))
   (define disj-related (syntactical-simplify (foldl disj (Bottom) domain-enforced-complemented-atomics-of-var-related)))
   (define returned-content (conj conj-unrelated disj-related))
   
-  (define tproj-eliminated (eliminate-tproj-and-record returned-content))
+  (define tproj-eliminated (eliminate-tproj-return-record returned-content))
   (define tproj-eliminated-content (car tproj-eliminated))
   (define tproj-eliminated-evidence (cdr tproj-eliminated))
   (define tproj-eliminated-evidence-goal
@@ -1361,7 +1377,7 @@
       (state-typercd-set domain-enforced-st new-typercd)
       new-diseq)))
   ;;; then we eliminate tproj
-  (define tproj-eliminated (eliminate-tproj-and-record returned-content))
+  (define tproj-eliminated (eliminate-tproj-return-record returned-content))
   (define tproj-eliminated-content (car tproj-eliminated))
   (define tproj-eliminated-evidence (cdr tproj-eliminated))
   (state-sub-update 

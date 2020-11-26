@@ -177,6 +177,17 @@
 
 (define (wrap-state-stream st) (and st (cons st #f)))
 
+;;; state x var x (set of) typeinfo -> state
+(define (state-typercd-cst-add st v type-info)
+  (define typerc (state-typercd st))
+  (define type-info (if (set? type-info) type-info (set type-info)))
+  (define org (hash-ref typerc v #f))
+  (define new-type-info 
+    (if org 
+    (hash-set typerc v (set-intersect org type-info))
+    (hash-set typerc v type-info)))
+  (state-typercd-set st typerc)
+)
 
 (define (stream? x)
   (match x
