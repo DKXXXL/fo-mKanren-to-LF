@@ -747,6 +747,43 @@
 
 (define/contract (literal-replace* mapping st)
   (hash? any? . -> . any?)
+  (define (hash-table-add added htable)
+    (define key (car added))
+    (define value (cdr added))
+    (define org (hash-ref htable key #f))
+    (if org 
+      (hash-set htable key (set-intersect org value))
+      (hash-set htable key value))
+  )
+
+  (define (literal-replace-from-after prev-f rec obj)
+    (match obj
+      [x 
+        #:when (hash-ref x mapping #f) 
+        (hash-ref x mapping #f)]
+      ;;; other extended construct -- like state
+      ;;;  very untyped...
+      [(state a scope trace direction d e) 
+        (let* ([new-sub (rec a)]
+               [old-hash-list (hash->list mapping)]
+               [new-hash-list (map (lambda (x) (cons (car x) (walk* (cdr x) new-sub))) old-hash-list)]
+               [new-mapping (make-hash new-hash-list)]
+               [rec (lambda (any) (literal-replace* new-mapping any)) ])
+          (state new-sub scope trace direction (rec d) (rec e)))]
+      ;;; or type constraint information,
+      ;;;  we only need to deal with type information
+
+
+      [(? hash?) 
+        ;;; type-constraint!
+        (let* ([type-infos (hash->list obj)]
+               [new-type-infos (rec type-infos)])
+          (foldl hash-table-add (hash) new-type-infos) ) ]
+      [_ (prev-f obj)]))
+
+  (define internal-f (overloading-functor-list (list literal-replace-from-after pair-base-endofunctor goal-base-endofunctor identity-endo-functor)))
+  ;;; return the following
+  (internal-f st)
 )
 
 ;;; replace one var with another
@@ -758,37 +795,7 @@
 ;;;   i.e. when state is involved, 
 ;;;       the "after" will be replaced by (walk* after sub)
 (define (literal-replace from after st)
-  (define (literal-replace-from-after prev-f rec obj)
-    (match obj
-      [x 
-        #:when (equal? x from) 
-        after]
-      ;;; other extended construct -- like state
-      ;;;  very untyped...
-      [(state a scope trace direction d e) 
-        (let* ([new-sub (rec a)]
-               [rec (lambda (any) (literal-replace from (walk* after new-sub) any)) ])
-          (state new-sub scope trace direction (rec d) (rec e)))]
-      ;;; or type constraint information,
-      ;;;  we only need to deal with type information
-
-      ;;; TODO: there is some problem here
-      ;;;   basically it is possible that from will be walked into another var
-      ;;;    that has the correct type constraint information
-      [(? hash?) 
-        ;;; type-constraint!
-        (let* ([at-key (hash-ref obj from #f)]
-               [pre-exists (hash-ref obj after #f)])
-          (if (and at-key pre-exists) 
-            ;;; if already exists, then doing intersection
-            (hash-set (hash-remove obj from) after (set-intersect at-key pre-exists) )
-            ;;; otherwise 
-            (if at-key (hash-set (hash-remove obj from) after at-key) obj)))]
-      [_ (prev-f obj)]))
-
-  (define internal-f (overloading-functor-list (list literal-replace-from-after pair-base-endofunctor goal-base-endofunctor identity-endo-functor)))
-  ;;; return the following
-  (internal-f st))
+  (literal-replace* (hash from after) st))
 
 ;;;  a series of shrink into
 ;;; shrink-into :: set of var x state -> state
@@ -1380,7 +1387,5 @@
   (define tproj-eliminated (eliminate-tproj-return-record returned-content))
   (define tproj-eliminated-content (car tproj-eliminated))
   (define tproj-eliminated-evidence (cdr tproj-eliminated))
-  (state-sub-update 
-    tproj-eliminated-content
-    (lambda x (append tproj-eliminated-evidence x)))
+  (unifies-equations tproj-eliminated-evidence tproj-eliminated-content)
 )
