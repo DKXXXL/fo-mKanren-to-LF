@@ -137,7 +137,9 @@
      (fprintf output-port "not-string ~a" (not-stringo-t val)))]
 )
 
-
+;;; typeinfo is a set of type-symbol
+;;; indicating t is union of these type
+;;;   this goal is usually not used
 (struct type-constraint (t typeinfo)
   #:transparent
   #:methods gen:custom-write
@@ -284,11 +286,11 @@
     )
   )
 
-;;;   (define result-f 
-;;;     (overloading-functor-list (list each-case goal-base-endofunctor (there-is-in-pair-base-functor #f)))
-;;;   )
-;;;   (result-f pair-goal)
-;;; )
+  (define result-f 
+    (overloading-functor-list (list each-case goal-base-endofunctor (there-is-in-pair-base-functor #f)))
+  )
+  (result-f pair-goal)
+)
 
 (define (there-is things pair-goal)
   (define (each-case prev-f rec g)
@@ -538,8 +540,9 @@
                   ;;;  TODO: figure out trace!
                    [unmentioned-exposed-st (unmentioned-exposed-form st)]
                    [unmention-substed-st (unmentioned-substed-form unmentioned-exposed-st)]
-                   [relative-complemented-goal (relative-complement st current-vars v)]
-                   [shrinked-st (shrink-away st current-vars v)]
+                   [domain-enforced-st (domain-enforcement-st st)]
+                   [relative-complemented-goal (relative-complement domain-enforced-st current-vars v)]
+                   [shrinked-st (shrink-away domain-enforced-st current-vars v)]
                   ;;;  [st-scoped-w/v (shrink-into (set-add current-vars v) st)]
                   ;;;  [st-scoped-w/ov (shrink-into (set-remove current-vars v) st) ]
                   ;;;  [complemented-goal (syntactical-simplify (complement (extract-goal-about v st-scoped-w/v)))]
@@ -966,39 +969,11 @@
 
 ;;; tproj :: var x List of ['car, 'cdr] 
 ;;; cxr as a path/stack of field projection/query
-(struct tproj (v cxr) #:prefab)
+;;; (struct tproj (v cxr) #:prefab)
 ;;; (struct tcar (term) #:prefab)
 ;;; (struct tcdr (term) #:prefab)
 
-(define (tcar t) 
-  (match t 
-    [(cons a b) a]
-    [(tproj x y) (tproj x (cons 'car y))]
-    [(var _ _) (tproj t (list 'car))]
-    [_ (raise "Unexpected Value")]
-  ))
 
-(define (tcdr t) 
-  (match t 
-    [(cons a b) b]
-    [(tproj x y) (tproj x (cons 'cdr y))]
-    [(var _ _) (tproj t (list 'cdr))]
-    [_ (raise "Unexpected Value")]
-  ))
-
-;;; normalize a tproj term so that tproj-v is always a var 
-(define (tproj_ term cxr)
-  
-  ;;; (define (m x) (match x ['car tcar] ['cdr tcdr]))
-  ;;; (define (compose f g) (lambda (x) (f (g x))))
-  ;;; (define mcxr (map m cxr))
-  ;;; (define )
-  (match cxr
-    [(cons 'car rest) (tcar (tproj_ term rest))]
-    [(cons 'cdr rest) (tcdr (tproj_ term rest))]
-    ['() term] 
-  )
-)
 
 ;;; given a tproj, we construct a tproj-ectable term for it
 ;;;  return the equation for removing the tproj
@@ -1242,10 +1217,10 @@
 ;;; similar as above, but it deal with goal and returns goal
 ;;;  TODO: duplicate code: but abstract it away doesn't quite make interpretable sense
 (define (domain-enforcement-goal goal)
-  (define all-tprojs (collect-tprojs st))
+  (define all-tprojs (collect-tprojs goal))
   ;;; var x goal -> goal
   (define (force-as-pair v g) (conj g (type-constraint v (set pair?))))
-  (foldl (lambda (tp st) (force-as-pair (tproj-v tp) st)) st all-tprojs)
+  (foldl (lambda (tp g) (force-as-pair (tproj-v tp) g)) g all-tprojs)
 )
 
 ;;; (define (state->goal st)
@@ -1270,8 +1245,20 @@
 )
 
 ;;; given compositions of DS where there is tproj appearances
-;;;  return a hashtable that maps each tproj term to a new var
+;;;  return a set of all tprojs
 (define (collect-tprojs anything)
+  (define result (set))
+  (define (each-case prev-f rec g)
+    (match g
+      [(tproj _ _) (set-add! result g)] ;; local side-effect
+      [o/w (prev-f g)]
+    )
+  )
+  (define result-f 
+    (overloading-functor-list (list each-case goal-base-endofunctor (there-is-in-pair-base-functor #f)))
+  )
+  (result-f pair-goal)
+  result
 
 )
 
@@ -1298,12 +1285,9 @@
 ;;;    st is in conjunction form (i.e. there is no disjunction in diseq)
 ;;;    st is in non-asymmretic form (i.e. no (var ..) =/= (cons ...))
 ;;;    st is in unmentioned-substed-form, where mentioned var are scope + var
+;;;    st is domain-enforced
 (define (relative-complement st scope var)
-;;; 1. we first transform st into unmentioned-exposed-form
-;;;     i.e. introduce tproj for unmentioned var,
-;;;           and note that the forall-domain-var is part of mentioned var 
-;;; 2. we then do global subst on those unmentioned
-;;; 2.5 then we do DomainEnforcement-Goal, basically every existence of term (tproj x)
+;;; 2.5 first we do DomainEnforcement-Goal, basically every existence of term (tproj x)
 ;;;         has to introduce type constraint x \in Pair
 ;;; 3. we then make sure all existence unmentioned (in diseq) will be replaced by true
 ;;; 4. we then really do relative-complement,
@@ -1322,9 +1306,9 @@
   ;;;  according to eqs, except for those inside subst of st
   
 
-  (define unmention-substed-st st)
+  ;;; (define unmention-substed-st st)
   ;;; Step 2 done
-  (define domain-enforced-st (domain-enforcement-st st))
+  (define domain-enforced-st st)
   ;;;  we remove none-substed appearances of unmentioned var
   (define unmentioned-removed-st
     (let* ([diseqs (state-diseq domain-enforced-st)]
@@ -1342,10 +1326,12 @@
   (define complemented-atomics-of-var-related 
     (map complement atomics-of-var-related))
   (define domain-enforced-complemented-atomics-of-var-related 
-    (map domain-enforced-goal complemented-atomics-of-var-related))
+    (map domain-enforcement-goal complemented-atomics-of-var-related))
   ;;; we are almost done but we need to remove tproj
-  (define conj-unrelated (syntactical-simplify (foldl conj (Top) atomics-of-var-unrelated)))
-  (define disj-related (syntactical-simplify (foldl disj (Bottom) domain-enforced-complemented-atomics-of-var-related)))
+  (define conj-unrelated 
+    (syntactical-simplify (foldl conj (Top) atomics-of-var-unrelated)))
+  (define disj-related 
+    (syntactical-simplify (foldl disj (Bottom) domain-enforced-complemented-atomics-of-var-related)))
   (define returned-content (conj conj-unrelated disj-related))
   
   (define tproj-eliminated (eliminate-tproj-return-record returned-content))
@@ -1370,9 +1356,10 @@
 ;;;   st is in conjunction form (i.e. there is no disjunction in diseq)
 ;;;   st is in non-asymmretic form (i.e. no (var ..) =/= (cons ...))
 ;;;    st is in unmentioned-substed-form, where mentioned var are scope + var
+;;;   st is domain-enforced
 (define (shrink-away st scope var)
   (define mentioned-vars scope)
-  (define domain-enforced-st (domain-enforcement-st st))
+  (define domain-enforced-st st)
   ;;;  we remove none-substed appearances of unmentioned var
   (define unmentioned-removed-st
     (let* ([diseqs (state-diseq domain-enforced-st)]

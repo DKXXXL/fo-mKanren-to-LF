@@ -4,6 +4,10 @@
   initial-var
   var/fresh
   (struct-out state)
+  (struct-out tproj)
+  tcar
+  tcdr
+  tproj_
   empty-state
   state-sub
   state-sub-set
@@ -57,6 +61,7 @@
 ;; return the maximum existing var-id, unless it is 0
 
 
+
 (let ((index 0))
   (begin 
     (set! var/fresh     
@@ -66,6 +71,39 @@
     (set! var-reset!
       (lambda () (set! index 0)))
     (set! var-number (lambda () index))  
+  )
+)
+
+(struct tproj (v cxr) #:prefab)
+
+
+(define (tcar t) 
+  (match t 
+    [(cons a b) a]
+    [(tproj x y) (tproj x (cons 'car y))]
+    [(var _ _) (tproj t (list 'car))]
+    [_ (raise "Unexpected Value")]
+  ))
+
+(define (tcdr t) 
+  (match t 
+    [(cons a b) b]
+    [(tproj x y) (tproj x (cons 'cdr y))]
+    [(var _ _) (tproj t (list 'cdr))]
+    [_ (raise "Unexpected Value")]
+  ))
+
+;;; normalize a tproj term so that tproj-v is always a var 
+(define (tproj_ term cxr)
+  
+  ;;; (define (m x) (match x ['car tcar] ['cdr tcdr]))
+  ;;; (define (compose f g) (lambda (x) (f (g x))))
+  ;;; (define mcxr (map m cxr))
+  ;;; (define )
+  (match cxr
+    [(cons 'car rest) (tcar (tproj_ term rest))]
+    [(cons 'cdr rest) (tcdr (tproj_ term rest))]
+    ['() term] 
   )
 )
 
@@ -243,9 +281,11 @@
 (define/contract (walk* tm sub)
   (any? pair? . -> . any?)
   (let ((tm (walk tm sub)))
-    (if (pair? tm)
-        `(,(walk* (car tm) sub) .  ,(walk* (cdr tm) sub))
-        tm)))
+    (match tm
+      [(cons a b) (cons (walk* a sub) (walk* b sub))]
+      [(tproj x cxr) (tproj_ (walk* x) cxr)]
+      [_ tm]
+    )))
 (define (reified-index index)
   (string->symbol
     (string-append "_." (number->string index))))
