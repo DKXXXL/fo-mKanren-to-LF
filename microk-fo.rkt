@@ -450,11 +450,11 @@
 ;;;   make sure there is no disjunction in meaning of each state and 
 ;;;     all the disjunction are lifted to mplus
 (define (TO-DNF stream)
-  (display "TO-DNF computing \n")
+  ;;; (display "TO-DNF computing \n")
   (mapped-stream (lambda (st) (to-dnf st (get-state-DNF-initial-index st))) stream))
 
 (define (TO-NON-Asymmetric stream)
-  (display "TO-NON-Asymmetric computing \n")
+  ;;; (display "TO-NON-Asymmetric computing \n")
   (mapped-stream remove-assymetry-in-diseq stream)
 )
 
@@ -580,13 +580,12 @@
                    [current-vars (list->set current-vars)]
                   ;;;  TODO: figure out trace!
                    [mentioned-var (set-add current-vars v)]
-                   [k (display "unmentioned-exposed-st not computed \n")]
                    [unmentioned-exposed-st (unmentioned-exposed-form mentioned-var st)]
-                   [k (display "unmentioned-exposed-st computed \n")]
+                   
                    [unmention-substed-st (unmentioned-substed-form mentioned-var unmentioned-exposed-st)]
-                   [k (display "unmention-substed-st computed \n")]
+                   
                    [domain-enforced-st (domain-enforcement-st st)]
-                   [k (display "domain-enforcement-st computed \n")]
+                   
                    [relative-complemented-goal (relative-complement domain-enforced-st current-vars v)]
                    [shrinked-st (shrink-away domain-enforced-st current-vars v)]
                   ;;;  [st-scoped-w/v (shrink-into (set-add current-vars v) st)]
@@ -808,7 +807,6 @@
       ;;;  very untyped...
       [(state a scope trace direction d e) 
         (let* ([new-sub (rec a)]
-               [k (begin (display "new-sub: ") (display new-sub) (display "\n"))]
                [old-hash-list (hash->list mapping)]
                [new-hash-list 
                 (map (lambda (x) (cons (car x) (walk* (cdr x) new-sub))) old-hash-list)]
@@ -917,9 +915,7 @@
 ;;;     i.e. (var s) =/= (cons ...)
 (define (remove-assymetry-in-diseq st)
   (define asymmetric-vars (record-vars-on-asymmetry-in-diseq st))
-  (display "inside remove-assymetry-in-diseq st:")
-  (display st)
-  (display "\n")
+  
   (if (equal? (length asymmetric-vars) 0)
     (wrap-state-stream st)
     (mapped-stream remove-assymetry-in-diseq (pair-or-not-pair-by-axiom asymmetric-vars st))))
@@ -1289,14 +1285,14 @@
     (syntactical-simplify (foldl conj (Top) atomics-of-var-unrelated)))
   (define disj-related 
     (foldl disj (Bottom) domain-enforced-complemented-atomics-of-var-related))
-  (define disj-related-
-    (if (equal? disj-related (Bottom))
-      (Top)
-      disj-related
-    )
-  )
+  ;;; (define disj-related-
+  ;;;   (if (equal? disj-related (Bottom))
+  ;;;     (Top)
+  ;;;     disj-related
+  ;;;   )
+  ;;; )
 
-  (define returned-content (conj conj-unrelated disj-related-))
+  (define returned-content (conj conj-unrelated disj-related))
   
   (define tproj-eliminated (eliminate-tproj-return-record returned-content))
   (define tproj-eliminated-content (car tproj-eliminated))
