@@ -28,6 +28,10 @@
   mature
   mature?
   walk*/goal
+
+  there-is-var-in
+  there-is-var-not-in
+  freevar
   
 
   syntactical-simplify
@@ -39,34 +43,6 @@
 
 (instrumenting-enabled #t)
 
-;; first-order microKanren
-;;; goals
-(struct disj   (g1 g2) 
-  #:transparent
-  #:methods gen:custom-write
-  [(define (write-proc val output-port output-mode)
-     (fprintf output-port "(~a ∨ ~a)" (disj-g1 val) (disj-g2 val)))]
-)
-
-(struct conj   (g1 g2)  
-  #:transparent
-  #:methods gen:custom-write
-  [(define (write-proc val output-port output-mode)
-     (fprintf output-port "(~a ∧ ~a)" (conj-g1 val) (conj-g2 val)))]
-)
-
-(define succeed (== #t #t))
-(define fail    (== #f #t))
-(define-syntax conj*
-  (syntax-rules ()
-    ((_)                succeed)
-    ((_ g)              g)
-    ((_ gs ... g-final) (conj (conj* gs ...) g-final))))
-(define-syntax disj*
-  (syntax-rules ()
-    ((_)           fail)
-    ((_ g)         g)
-    ((_ g0 gs ...) (disj g0 (disj* gs ...)))))
 
 (struct relate (thunk description)      ;;;#:prefab
   #:transparent
@@ -154,6 +130,7 @@
 ;;; typeinfo is a set of type-symbol
 ;;; indicating t is union of these type
 ;;;   this goal is usually not interfaced to the user
+
 (struct type-constraint (t typeinfo)
   #:transparent
   #:methods gen:custom-write
@@ -187,6 +164,36 @@
 )
 
 
+;; first-order microKanren
+;;; goals
+(struct disj   (g1 g2) 
+  #:transparent
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "(~a ∨ ~a)" (disj-g1 val) (disj-g2 val)))]
+)
+
+(struct conj   (g1 g2)  
+  #:transparent
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "(~a ∧ ~a)" (conj-g1 val) (conj-g2 val)))]
+)
+
+(define succeed (Top))
+(define fail    (Bottom))
+(define-syntax conj*
+  (syntax-rules ()
+    ((_)                succeed)
+    ((_ g)              g)
+    ((_ gs ... g-final) (conj (conj* gs ...) g-final))))
+(define-syntax disj*
+  (syntax-rules ()
+    ((_)           fail)
+    ((_ g)         g)
+    ((_ g0 gs ...) (disj g0 (disj* gs ...)))))
+
+
 ;;; Denote Goal-EndoFunctor type as
 ;;;      (goal -> goal) -> (goal -> goal) -> goal -> goal
 ;;; extensible function on pattern matching
@@ -198,6 +205,26 @@
 (define (goal-base-endofunctor prev-f rec g)
   ;;; (define rec extended-f)
   (match g
+    [(disj a b) (disj (rec a) (rec b))]
+    [(conj a b) (conj (rec a) (rec b))]
+    [(ex v g) (ex v (rec g))]
+    [(forall v b g) (forall v (rec v) (rec g))]
+    [_ (prev-f g)] ;; otherwise do nothing
+  )
+)
+
+(define (goal-term-base-endofunctor prev-f rec g)
+  ;;; (define rec extended-f)
+  (match g
+    [(== x y) (== (rec x) (rec y))]
+    [(=/= x y) (=/= (rec x) (rec y))]
+    [(symbolo x) (symbolo (rec x))]
+    [(not-symbolo x) (not-symbolo (rec x))]
+    [(numbero x) (numbero (rec x))]
+    [(not-numbero x) (not-numbero (rec x))]
+    [(stringo x) (stringo (rec x))]
+    [(not-stringo x) (not-stringo (rec x))]
+    [(type-constraint x types) (type-constraint (rec x) types)]
     [(disj a b) (disj (rec a) (rec b))]
     [(conj a b) (conj (rec a) (rec b))]
     [(ex v g) (ex v (rec g))]
@@ -292,43 +319,29 @@
   (pair-base-functor (lambda (x) (hash-ref defaulted x 'NotFound))))
   
 
-(define (there-is-var-in vars pair-goal)
-  (define (each-case prev-f rec g)
-    (match g
-      [(var _ index) (member g vars)]
-      [o/w (prev-f g)]
-    )
-  )
-
-  (define result-f 
-    (overloading-functor-list (list each-case goal-base-endofunctor (there-is-in-pair-base-functor #f)))
-  )
-  (result-f pair-goal)
+(define/contract (there-is-var-in vars pair-goal)
+  (set? any? . -> . boolean?)
+  (define all-fvs (freevar pair-goal))
+  (not (set-empty? (set-intersect vars all-fvs)))
 )
 
-(define (there-is things pair-goal)
-  (define (each-case prev-f rec g)
-    (if (member g things) #t (prev-f g))
-  )
+;;; (define/contract (there-is things pair-goal)
+;;;   (set? any? . -> . boolean?)
+;;;   (define (each-case prev-f rec g)
+;;;     (if (set-member? things g) #t (prev-f g))
+;;;   )
 
-  (define result-f 
-    (overloading-functor-list (list each-case goal-base-endofunctor (there-is-in-pair-base-functor #f)))
-  )
-  (result-f pair-goal)
-)
+;;;   (define result-f 
+;;;     (overloading-functor-list (list each-case goal-base-endofunctor (there-is-in-pair-base-functor #f)))
+;;;   )
+;;;   (result-f pair-goal)
+;;; )
 
-(define (there-is-var-not-in vars pair-goal)
-  (define (each-case prev-f rec g)
-    (match g
-      [(var _ index) (not (member g vars))]
-      [o/w (prev-f g)]
-    )
-  )
-
-  (define result-f 
-    (overloading-functor-list (list each-case goal-base-endofunctor (there-is-in-pair-base-functor #f)))
-  )
-  (result-f pair-goal)
+(define/contract (there-is-var-not-in vars pair-goal)
+  (set? any? . -> . boolean?)
+  (define all-fvs (freevar pair-goal))
+  (set-subtract! all-fvs vars)
+  (not (set-empty? all-fvs))
 )
 
 
@@ -346,13 +359,19 @@
 ;;;   basically return all free-variables
 (define (freevar g)
   (define fvs (mutable-set))
-  ;;; (define (counter prev-f ext-f g)
-  ;;;   (match g
-  ;;;     []
-  ;;;     [_ (prev-f g)]
-  ;;;   )
-  ;;; )
-  (void)
+  (define (counter prev-f ext-f g)
+    (match g
+      [(var _ _) (begin (set-add! fvs g) g)]
+      [o/w (prev-f g)]
+    )
+  )
+  
+  (define result-f 
+    (overloading-functor-list (list counter goal-term-base-endofunctor pair-base-endofunctor identity-endo-functor))
+  )
+
+  (result-f g)
+  fvs
 )
 
 ;;; streams
@@ -385,11 +404,13 @@
 ;;; precondition: length l == length range
 (define (index-incremenent-by-one l range)
   (match (cons l range)
-    ['() #f]
+    [(cons '() '()) #f]
     [(cons (cons a s) (cons r t))
       (if (< (+ 1 a) r)
         (cons (+ 1 a) s)
-        (cons 0 (index-incremenent-by-one s t)))]
+        (let* ([up-level (index-incremenent-by-one s t)])
+          (and up-level
+            (cons 0 up-level))))]
   )
 )
 
@@ -402,7 +423,7 @@
 (define (get-state-DNF-by-index st index)
   (define conjs (state-diseq st))
   (define indexed-conjs (map (lambda (disjs pos) (list (list-ref disjs pos))) conjs index))
-  (state-diseq-update st indexed-conjs)
+  (state-diseq-set st indexed-conjs)
 )
 
 ;;; the special stream only used for forall
@@ -429,9 +450,11 @@
 ;;;   make sure there is no disjunction in meaning of each state and 
 ;;;     all the disjunction are lifted to mplus
 (define (TO-DNF stream)
+  (display "TO-DNF computing \n")
   (mapped-stream (lambda (st) (to-dnf st (get-state-DNF-initial-index st))) stream))
 
 (define (TO-NON-Asymmetric stream)
+  (display "TO-NON-Asymmetric computing \n")
   (mapped-stream remove-assymetry-in-diseq stream)
 )
 
@@ -449,8 +472,8 @@
   (and st ;;; always circuit the st
     (match g
     ((disj g1 g2)
-     (step (mplus (pause (trace-left st) g1)
-                  (pause (trace-right st) g2))))
+     (step (mplus (pause st g1)
+                  (pause st g2))))
     ((conj g1 g2)
      (step (bind (state-scope st) (pause st g1) g2)))
     ((relate thunk _)
@@ -491,7 +514,7 @@
         (match domain_
           [(Bottom) (wrap-state-stream st)]
           [_ (bind-forall (state-scope st) 
-                          (TO-DNF (TO-NON-Asymmetric (start st (ex var (conj domain_ goal)))))  
+                          (TO-DNF (TO-NON-Asymmetric (pause st (ex var (conj domain_ goal)))))  
                           var 
                           (forall var domain_ goal))]
         )
@@ -554,10 +577,16 @@
         ((pair? s)
             (match-let* 
                   ([st (car s)]
+                   [current-vars (list->set current-vars)]
                   ;;;  TODO: figure out trace!
-                   [unmentioned-exposed-st (unmentioned-exposed-form st)]
-                   [unmention-substed-st (unmentioned-substed-form unmentioned-exposed-st)]
+                   [mentioned-var (set-add current-vars v)]
+                   [k (display "unmentioned-exposed-st not computed \n")]
+                   [unmentioned-exposed-st (unmentioned-exposed-form mentioned-var st)]
+                   [k (display "unmentioned-exposed-st computed \n")]
+                   [unmention-substed-st (unmentioned-substed-form mentioned-var unmentioned-exposed-st)]
+                   [k (display "unmention-substed-st computed \n")]
                    [domain-enforced-st (domain-enforcement-st st)]
+                   [k (display "domain-enforcement-st computed \n")]
                    [relative-complemented-goal (relative-complement domain-enforced-st current-vars v)]
                    [shrinked-st (shrink-away domain-enforced-st current-vars v)]
                   ;;;  [st-scoped-w/v (shrink-into (set-add current-vars v) st)]
@@ -565,8 +594,9 @@
                   ;;;  [complemented-goal (syntactical-simplify (complement (extract-goal-about v st-scoped-w/v)))]
                   ;;;  [(cons next-st cgoal) (eliminate-tproj st-scoped-w/ov complemented-goal)]
                    [k (begin  (display " st: ")(display st)
-                              ;;; (display "\n st-scoped-w/v: ")(display st-scoped-w/v) 
-                              ;;; (display "\n st-scoped-w/ov: ")(display st-scoped-w/ov)
+                              (display "\n shrinked-st: ")(display shrinked-st) 
+                              (display "\n relative-complemented-goal: ")(display relative-complemented-goal)
+                              (display "\n unmention-substed-st: ")(display unmention-substed-st)
                               ;;; (display "\n complemented goal: ")(display st-scoped-w/ov)
                               ;;; (display "\n next state ") (display next-st) 
                               ;;; (display "\n search with domain on var ")
@@ -628,6 +658,8 @@
       [(not-stringo t) (stringo t)]
       [(symbolo t) (not-symbolo t)]
       [(not-symbolo t) (symbolo t)]
+      [(type-constraint t types) 
+        (disj (type-constraint t (set-subtract all-inf-type-label types)) (is-of-finite-type t))]
       [(Top) (Bottom)]
       [(Bottom) (Top)]
     )
@@ -679,7 +711,8 @@
 )
 
 ;;; appearances of nested list
-(define (member-nested v l)
+(define/contract (member-nested v l)
+  (any? list? . -> . list?)
   (match l ['() #f] 
     [(cons h t) 
       (or (match h [(? pair?) (member-nested v h)] [_ (equal? h v)]) (member-nested v t))]))
@@ -769,14 +802,16 @@
   (define (literal-replace-from-after prev-f rec obj)
     (match obj
       [x 
-        #:when (hash-ref x mapping #f) 
-        (hash-ref x mapping #f)]
+        #:when (hash-ref mapping x #f) 
+        (hash-ref mapping x #f)]
       ;;; other extended construct -- like state
       ;;;  very untyped...
       [(state a scope trace direction d e) 
         (let* ([new-sub (rec a)]
+               [k (begin (display "new-sub: ") (display new-sub) (display "\n"))]
                [old-hash-list (hash->list mapping)]
-               [new-hash-list (map (lambda (x) (cons (car x) (walk* (cdr x) new-sub))) old-hash-list)]
+               [new-hash-list 
+                (map (lambda (x) (cons (car x) (walk* (cdr x) new-sub))) old-hash-list)]
                [new-mapping (make-hash new-hash-list)]
                [rec (lambda (any) (literal-replace* new-mapping any)) ])
           (state new-sub scope trace direction (rec d) (rec e)))]
@@ -791,7 +826,7 @@
           (foldl hash-table-add (hash) new-type-infos) ) ]
       [_ (prev-f obj)]))
 
-  (define internal-f (overloading-functor-list (list literal-replace-from-after pair-base-endofunctor goal-base-endofunctor identity-endo-functor)))
+  (define internal-f (overloading-functor-list (list literal-replace-from-after pair-base-endofunctor goal-term-base-endofunctor identity-endo-functor)))
   ;;; return the following
   (internal-f st)
 )
@@ -828,23 +863,20 @@
 ;;; return a set of vars, indicating that those vars, "s" are in the
 ;;;  form of "s =/= (cons ...)", and thus we need to break down s themselves
 (define (record-vars-on-asymmetry-in-diseq st)
-  (define each-asymmetry-record! (set))
+  (define each-asymmetry-record! (mutable-set))
   (define (each-asymmetry prev-f rec g)
     (match g
       ;;; thiss pattern matching i a bit dangerous
       ;;; TODO: make equation/inequality into a struct so that pattern-matching can be easier
       [(cons (var _ _) (cons _ _)) 
-          (let* ([v (car g)]
-                 [composed (cdr g)])
+          (let* ([v (car g)])
               (set-add! each-asymmetry-record! v)
               g
                  )]
       [(cons (cons _ _) (var _ _)) 
-          (let* ([v (cdr g)]
-                 [composed (car g)])
+          (let* ([v (cdr g)])
               (set-add! each-asymmetry-record! v)
-              g
-                 )]
+              g)]
       [_ (prev-f g)]
 
     )
@@ -877,7 +909,7 @@
   (define conj-axioms
     (foldl conj (Top) axioms-on-each))
   
-  (start st conj-axioms)
+  (pause st (conj conj-axioms (== 1 1)))
 )
 
 ;;; return an equivalent stream of state, given a state
@@ -885,6 +917,9 @@
 ;;;     i.e. (var s) =/= (cons ...)
 (define (remove-assymetry-in-diseq st)
   (define asymmetric-vars (record-vars-on-asymmetry-in-diseq st))
+  (display "inside remove-assymetry-in-diseq st:")
+  (display st)
+  (display "\n")
   (if (equal? (length asymmetric-vars) 0)
     (wrap-state-stream st)
     (mapped-stream remove-assymetry-in-diseq (pair-or-not-pair-by-axiom asymmetric-vars st))))
@@ -1001,7 +1036,9 @@
 ;;;  s.t. the returned set won't have a equation like below
 ;;; (mentioned-var = (cons ... unmentioned-var ...))
 ;;; i.e. if one-side is mentioned var, then the other-side must be all mentioned
-(define (unmentioned-exposed-form mentioned-vars eqs)
+(define/contract (unmentioned-exposed-form mentioned-vars st)
+  (set? state? . -> . state?)
+  (define eqs (state-sub st))
   (define (each-eliminate-cons single-eq) (list (tcar-eq single-eq) (tcdr-eq single-eq)))
   ;;; given one eq
   ;;;  return a list of eqs equivalent
@@ -1010,7 +1047,7 @@
     (define fst (car eq))
     (define snd (cdr eq))
     (define is-unexposed-form
-      (and (member fst mentioned-vars)
+      (and (set-member? mentioned-vars fst)
            (there-is-var-not-in mentioned-vars snd)))
     (define cons-at-right
       (pair? snd))
@@ -1027,8 +1064,10 @@
       (list eq)
     )
   )
-  (foldl append '()
-    (map single-unmentioned-exposed-form eqs))
+  (define new-eqs 
+    (foldl append '()
+      (map single-unmentioned-exposed-form eqs)))
+  (state-sub-set st new-eqs)
 )
 
 ;;; given a set of equations (lhs doesn't have to be variable)
@@ -1096,14 +1135,15 @@
 ;;;   return a state, where unmentioned-var are replaced as much as possible
 ;;;     "as much as" is because there are cases that unmentioned-var
 ;;;     has no relationship with other vars, so cannot be eliminated
-(define (unmentioned-substed-form mentioned-vars st)
+(define/contract (unmentioned-substed-form mentioned-vars st)
+  (set? state? . -> . state?)
   (define (unmention-remove-everywhere eqs st)
     ;;; (define eqs (state-sub st))
     (if (equal? eqs '())
       st
       (match (car eqs)
         [(cons v rhs)
-          #:when (not (member v mentioned-vars))
+          #:when (not (set-member? mentioned-vars v))
           (unmention-remove-everywhere (cdr eqs) (literal-replace v (walk* rhs (cdr eqs)) st))]
         [(cons v rhs)
           (unmention-remove-everywhere (cdr eqs) st)]
@@ -1121,7 +1161,7 @@
   ;;; var x state -> state
   (define (force-as-pair v st) 
     (state-typercd-cst-add st v pair?))
-  (foldl (lambda (tp st) (force-as-pair (tproj-v tp) st)) st all-tprojs)
+  (foldl (lambda (tp st) (force-as-pair (tproj-v tp) st)) st (set->list all-tprojs))
 )
 
 ;;; similar as above, but it deal with goal and returns goal
@@ -1130,7 +1170,7 @@
   (define all-tprojs (collect-tprojs goal))
   ;;; var x goal -> goal
   (define (force-as-pair v g) (conj g (type-constraint v (list pair?))))
-  (foldl (lambda (tp g) (force-as-pair (tproj-v tp) g)) goal all-tprojs)
+  (foldl (lambda (tp g) (force-as-pair (tproj-v tp) g)) goal (set->list all-tprojs))
 )
 
 ;;; (define (state->goal st)
@@ -1145,13 +1185,20 @@
 
 ;;; given a state with only conjunction, we go through and take out all the
 ;;;   atomic proposition
-(define (conj-state->set-of-goals st)
-  (define eqs (list->set (map (lambda (eq) (== (car eq) (cdr eq))) (state-sub st))))
-  (define diseqs (list->set (map (lambda (l) (car l)) (state-diseq st))))
+(define/contract (conj-state->list-of-goals st)
+  (state? . -> . list?)
+  (define eqs 
+    (set->list 
+      (list->set 
+        (map (lambda (eq) (== (car eq) (cdr eq))) (state-sub st)))))
+  (define diseqs 
+    (set->list 
+      (list->set (map (lambda (l) (let ([l (car l)]) (=/= (car l) (cdr l))) ) 
+                      (state-diseq st)))))
   (define types 
     (let* ([typ-infos (hash->list (state-typercd st))])
       (map (lambda (term-type) (type-constraint (car term-type) (cdr term-type))) typ-infos)))
-  (set-union eqs (set-union diseqs types))
+  (append eqs (append diseqs types))
 )
 
 ;;; given compositions of DS where there is tproj appearances
@@ -1178,7 +1225,7 @@
 ;;;  for example (tproj x car) == k
 ;;;    will transform to (a == k) and a list of equation [(x (cons a b))]
 (define (eliminate-tproj-return-record anything)
-  (define all-tprojs (collect-tprojs anything))
+  (define all-tprojs (set->list (collect-tprojs anything)))
   (define all-tproj-removing-eqs (map equation-for-remove-tproj all-tprojs))
   ;;; then we do huge literal-replace
   ;;;  the literal-replace respects 
@@ -1196,7 +1243,7 @@
 ;;;    st is in non-asymmretic form (i.e. no (var ..) =/= (cons ...))
 ;;;    st is in unmentioned-substed-form, where mentioned var are scope + var
 ;;;    st is domain-enforced
-(define (relative-complement st scope var)
+(define (relative-complement st scope varx)
 ;;; 2.5 first we do DomainEnforcement-Goal, basically every existence of term (tproj x)
 ;;;         has to introduce type constraint x \in Pair
 ;;; 3. we then make sure all existence unmentioned (in diseq) will be replaced by true
@@ -1209,7 +1256,7 @@
 ;;;     and the set of atomic prop will be interpreted as disjunctions of atomic prop
 ;;;  4.4 we again use DomainEnforcement-Goal on each of them
 ;;;  4.5 we translate the set into big disjunction
-  (define mentioned-vars (set-add scope var))
+  (define mentioned-vars (set-add scope varx))
   ;;; (define unmentioned-exposed-subst (unmentioned-exposed-form mentioned-vars (state-sub st)))
   ;;; Step 1 done
   ;;; this will literally remove the appearances of unmentioned var
@@ -1230,9 +1277,9 @@
       (state-typercd-set domain-enforced-st new-typercd)
       new-diseq)))
   ;;; Step 3 done
-  (define atomics-of-states (conj-state->set-of-goals unmentioned-removed-st))
-  (define atomics-of-var-related (filter (lambda (x) (there-is-var-in (set var) x)) atomics-of-states))
-  (define atomics-of-var-unrelated (filter (lambda (x) (not (there-is-var-in (set var) x))) atomics-of-states) )
+  (define atomics-of-states (conj-state->list-of-goals unmentioned-removed-st))
+  (define atomics-of-var-related (filter (lambda (x) (there-is-var-in (set varx) x)) atomics-of-states))
+  (define atomics-of-var-unrelated (filter (lambda (x) (not (there-is-var-in (set varx) x))) atomics-of-states) )
   (define complemented-atomics-of-var-related 
     (map complement atomics-of-var-related))
   (define domain-enforced-complemented-atomics-of-var-related 
@@ -1241,8 +1288,15 @@
   (define conj-unrelated 
     (syntactical-simplify (foldl conj (Top) atomics-of-var-unrelated)))
   (define disj-related 
-    (syntactical-simplify (foldl disj (Bottom) domain-enforced-complemented-atomics-of-var-related)))
-  (define returned-content (conj conj-unrelated disj-related))
+    (foldl disj (Bottom) domain-enforced-complemented-atomics-of-var-related))
+  (define disj-related-
+    (if (equal? disj-related (Bottom))
+      (Top)
+      disj-related
+    )
+  )
+
+  (define returned-content (conj conj-unrelated disj-related-))
   
   (define tproj-eliminated (eliminate-tproj-return-record returned-content))
   (define tproj-eliminated-content (car tproj-eliminated))

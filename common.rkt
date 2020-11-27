@@ -247,7 +247,7 @@
     (define (neg-unify*-on-corner list-u-v st)
       (and st (neg-unify* list-u-v st))
     )
-    (foldl neg-unify*-on-corner st conj-all-diseq)
+    (foldl neg-unify*-on-corner (state-diseq-set st '()) conj-all-diseq)
   )
 
   (let* ([sub (unify/sub u v (state-sub st))]
@@ -282,11 +282,11 @@
 
 ;; Reification
 (define/contract (walk* tm sub)
-  (any? pair? . -> . any?)
+  (any? list? . -> . any?)
   (let ((tm (walk tm sub)))
     (match tm
       [(cons a b) (cons (walk* a sub) (walk* b sub))]
-      [(tproj x cxr) (tproj_ (walk* x) cxr)]
+      [(tproj x cxr) (tproj_ (walk* x sub) cxr)]
       [_ tm]
     )))
 (define (reified-index index)
