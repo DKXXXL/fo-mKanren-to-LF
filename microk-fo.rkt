@@ -580,6 +580,9 @@
                    [current-vars (list->set current-vars)]
                   ;;;  TODO: figure out trace!
                    [mentioned-var (set-add current-vars v)]
+
+                   ;; (x = (cons x y) ) (cons a x) = (cons a y) -> x = y
+                  ;;;  (x = (cons a y)) => (a = x.car, y = x.cdr  )
                    [unmentioned-exposed-st (unmentioned-exposed-form mentioned-var st)]
                    
                    [unmention-substed-st (unmentioned-substed-form mentioned-var unmentioned-exposed-st)]
@@ -805,8 +808,10 @@
         (hash-ref mapping x #f)]
       ;;; other extended construct -- like state
       ;;;  very untyped...
+      ;;;  (a = a) (type-constrant a (number?))
       [(state a scope trace direction d e) 
-        (let* ([new-sub (rec a)]
+        (let* ([new-sub (rec a)] 
+                ;;; BUGFIX : (a = a) shouldn't appear hear
                [old-hash-list (hash->list mapping)]
                [new-hash-list 
                 (map (lambda (x) (cons (car x) (walk* (cdr x) new-sub))) old-hash-list)]
@@ -1152,7 +1157,7 @@
 
 ;;; DomainEnforcement -- basically currently make sure if term (tproj x car) appear
 ;;;   then x is of type pair
-(define (domain-enforcement-st st)
+(define (domain-enforcement-st st) ;; (tproj x car.cdr.car) (typeconstant x car) pair
   (define all-tprojs (collect-tprojs st))
   ;;; var x state -> state
   (define (force-as-pair v st) 
@@ -1223,12 +1228,13 @@
 ;;;    an gives a set of equation explaining the remove
 ;;;  for example (tproj x car) == k
 ;;;    will transform to (a == k) and a list of equation [(x (cons a b))]
-(define (eliminate-tproj-return-record anything)
+(define (eliminate-tproj-return-record anything) ;; tproj x car.cdr.car ;; x = (cons (cons _ (cons _ _)) _)
   (define all-tprojs (set->list (collect-tprojs anything)))
   (define all-tproj-removing-eqs (map equation-for-remove-tproj all-tprojs))
   ;;; then we do huge literal-replace
   ;;;  the literal-replace respects 
   (define tproj-removed (literal-replace* (make-hash all-tproj-removing-eqs) anything))
+  ;;; TODO : make sure that the constraint about (tproj x car) is transferred to the newly introduced var
   (cons tproj-removed all-tproj-removing-eqs)
 )
 

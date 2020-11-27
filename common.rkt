@@ -303,6 +303,9 @@
                                (extend-sub t (reified-index index) sub))
                     (else      sub)))))
 
+;;; TODO: make constraint information printed, just for debugging purpose
+;;;       make it an option
+
 (define (reify-cst tm st)
   (define index -1)
   (define everything-to-print 
