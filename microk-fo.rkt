@@ -512,7 +512,7 @@
             ] 
 
         (match domain_
-          [(Bottom) (wrap-state-stream st)]
+          [(Bottom) (wrap-state-stream st)] ;;; BUGFIX: shrink-into about st
           [_ (bind-forall (state-scope st) 
                           (TO-DNF (TO-NON-Asymmetric (pause st (ex var (conj domain_ goal)))))  
                           var 
@@ -1156,6 +1156,9 @@
   (define all-tprojs (collect-tprojs st))
   ;;; var x state -> state
   (define (force-as-pair v st) 
+    ;;; BUGFIX: add multilevel pair, 
+    ;;;   for example, (tproj x (car cdr car)) then we have two totally three
+    ;;;     terms need to be about  
     (state-typercd-cst-add st v pair?))
   (foldl (lambda (tp st) (force-as-pair (tproj-v tp) st)) st (set->list all-tprojs))
 )
