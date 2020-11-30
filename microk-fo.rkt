@@ -512,7 +512,7 @@
             ] 
 
         (match domain_
-          [(Bottom) (wrap-state-stream st)] ;;; BUGFIX: shrink-into about st
+          [(Bottom) (wrap-state-stream st) ] ;;; BUGFIX: shrink-into about st
           [_ (bind-forall (state-scope st) 
                           (TO-DNF (TO-NON-Asymmetric (pause st (ex var (conj domain_ goal)))))  
                           var 
@@ -810,8 +810,10 @@
       ;;;  very untyped...
       ;;;  (a = a) (type-constrant a (number?))
       [(state a scope trace direction d e) 
-        (let* ([new-sub (rec a)] 
-                ;;; BUGFIX : (a = a) shouldn't appear hear
+        (let* ([new-sub-possible-with-cycle (rec a)] 
+               [new-sub (filter (lambda (x) (not (equal? (car x) (cdr x)))) new-sub-possible-with-cycle)]
+                ;;; TODO: we will only remove (a = a) and 
+                ;;;   forget about possible cycle cases like (a = b, b = a)
                [old-hash-list (hash->list mapping)]
                [new-hash-list 
                 (map (lambda (x) (cons (car x) (walk* (cdr x) new-sub))) old-hash-list)]
@@ -1159,13 +1161,32 @@
 ;;;   then x is of type pair
 (define (domain-enforcement-st st) ;; (tproj x car.cdr.car) (typeconstant x car) pair
   (define all-tprojs (collect-tprojs st))
-  ;;; var x state -> state
-  (define (force-as-pair v st) 
-    ;;; BUGFIX: add multilevel pair, 
-    ;;;   for example, (tproj x (car cdr car)) then we have two totally three
-    ;;;     terms need to be about  
-    (state-typercd-cst-add st v pair?))
-  (foldl (lambda (tp st) (force-as-pair (tproj-v tp) st)) st (set->list all-tprojs))
+  (define sub (state-sub st))
+  ;;; (tproj v path) x state -> state
+  (define (force-as-pair term st) 
+    (define (all-domain-terms x)
+      (define v (tproj-v x))
+      (define path (tproj-cxr x))
+      (match cxr
+        [(list r) 
+          #:when (member r '(car cdr))
+          (set v)]
+        [(cons r rpath)
+          #:when (member r '(car cdr))
+          (set-add (all-domain-terms (tproj v rpath)))
+        ]
+        [o/w (raise "Unexpected Path or Datatype")]
+      )
+    )    
+    (define collected-domain-terms (all-domain-terms term))
+    
+
+    (for/fold 
+      ([acc-st st])
+      ([each-projed-term collected-domain-terms])
+      (state-typercd-cst-add acc-st (walk* sub each-projed-term) pair?))
+  )
+  (foldl (lambda (tp st) (force-as-pair tp st)) st (set->list all-tprojs))
 )
 
 ;;; similar as above, but it deal with goal and returns goal
