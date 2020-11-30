@@ -499,6 +499,7 @@
     ((type-constraint t types)
       (wrap-state-stream (check-as-inf-type-disj types t st)))
     ((ex v gn) 
+      ;;; TODO: make scope a ordered set (or just a list)
       (start (state-scope-update st (lambda (scope) (set-add scope v))) gn))
     ;;; forall is tricky, 
     ;;;   we first use simplification to
@@ -512,7 +513,8 @@
             ] 
 
         (match domain_
-          [(Bottom) (wrap-state-stream st) ] ;;; BUGFIX: shrink-into about st
+          ;;; BUGFIX: shrink-into about st
+          [(Bottom) (clear-about st domain var)] 
           [_ (bind-forall (state-scope st) 
                           (TO-DNF (TO-NON-Asymmetric (pause st (ex var (conj domain_ goal)))))  
                           var 
@@ -591,10 +593,6 @@
                    
                    [relative-complemented-goal (relative-complement domain-enforced-st current-vars v)]
                    [shrinked-st (shrink-away domain-enforced-st current-vars v)]
-                  ;;;  [st-scoped-w/v (shrink-into (set-add current-vars v) st)]
-                  ;;;  [st-scoped-w/ov (shrink-into (set-remove current-vars v) st) ]
-                  ;;;  [complemented-goal (syntactical-simplify (complement (extract-goal-about v st-scoped-w/v)))]
-                  ;;;  [(cons next-st cgoal) (eliminate-tproj st-scoped-w/ov complemented-goal)]
                    [k (begin  (display " st: ")(display st)
                               (display "\n shrinked-st: ")(display shrinked-st) 
                               (display "\n relative-complemented-goal: ")(display relative-complemented-goal)
@@ -744,50 +742,6 @@
   )
 )
 
-
-;;; getting the goals that is translating
-;;;   the state 'st', also goals include the type constraints about v
-;;;  var x state -> goal
-(define/contract (extract-goal-about v st)
-  (any? state? . -> . any?)
-  (define (extract-from-each-subst pair)
-      (match pair [(cons l r) (== l r)]))
-  
-  (define from-subst 
-    (foldl conj (Top)
-      (map extract-from-each-subst (state-sub st) )))
-  
-  ;;; stage each (list as) disjunction of inequalities into literal goals
-  (define (stage-disj disj-list)
-    (define (each-to-diseq p) 
-      (if (pair? p) 
-        (=/= (car p) (cdr p))
-        (if (equal? p (Top))
-          p 
-          (raise "Unexpected Value"))
-        ))
-    (foldl disj (Bottom) (map each-to-diseq disj-list)))
-
-  ;;; stage each (list as) conjunction of disjunction of inequalities into literal goals
-  (define (stage-conj-disj conj-disj-list)
-    (foldl conj (Top) (map stage-disj conj-disj-list)))
-
-  (define from-diseq
-    ;;; make a conjunction of disjunction of inequalities
-    ;;;   into literal goals
-    (stage-conj-disj (state-diseq st)))
-
-  (define from-typecsts
-    ; just take out the typercd about v
-    ;;; and translate to goals
-    (let* ([tyr (state-typercd st)]
-           [type-labels (hash-ref tyr v '())]
-           [type-label-to-goal (lambda (label) ((hash-ref type-label-to-type-goal label (void)) v))]
-           [type-csts (map type-label-to-goal type-labels)])
-      (foldl conj (Top) type-csts)))
-  
-  (conj from-subst (conj from-diseq from-typecsts))
-)
 
 
 (define/contract (literal-replace* mapping st)
@@ -1099,18 +1053,18 @@
       (map each-eli-eq eqs)))
 )
 
-;;; clear everything about v on st
-;;;  var x state -> state
-;;;   done easily by replace v with a brand new var everywhere in the st
-(define/contract (clear-about v st)
-  (any?  ?state? . -> . ?state?)
-  ;;; (display st)
-  (let* ([vname (symbol->string (var-name v))]
-         [new-v (var/fresh (string->symbol (string-append vname "D")))]
-         [replaced (literal-replace v new-v st)]
-         )
-    replaced )
-)
+;;; ;;; clear everything about v on st
+;;; ;;;  var x state -> state
+;;; ;;;   done easily by replace v with a brand new var everywhere in the st
+;;; (define/contract (clear-about v st)
+;;;   (any?  ?state? . -> . ?state?)
+;;;   ;;; (display st)
+;;;   (let* ([vname (symbol->string (var-name v))]
+;;;          [new-v (var/fresh (string->symbol (string-append vname "D")))]
+;;;          [replaced (literal-replace v new-v st)]
+;;;          )
+;;;     replaced )
+;;; )
 
 ;;; will declare variable, and assert goal on all its domain
 (define-syntax for-all
@@ -1167,7 +1121,7 @@
     (define (all-domain-terms x)
       (define v (tproj-v x))
       (define path (tproj-cxr x))
-      (match cxr
+      (match path
         [(list r) 
           #:when (member r '(car cdr))
           (set v)]
@@ -1347,7 +1301,8 @@
 ;;;   st is in non-asymmretic form (i.e. no (var ..) =/= (cons ...))
 ;;;    st is in unmentioned-substed-form, where mentioned var are scope + var
 ;;;   st is domain-enforced
-(define (shrink-away st scope var)
+(define/contract (shrink-away st scope var)
+  (state? set? var? . -> . state?)
   (define mentioned-vars scope)
   (define domain-enforced-st st)
   ;;;  we remove none-substed appearances of unmentioned var
@@ -1365,4 +1320,23 @@
   (define tproj-eliminated-content (car tproj-eliminated))
   (define tproj-eliminated-evidence (cdr tproj-eliminated))
   (unifies-equations tproj-eliminated-evidence tproj-eliminated-content)
+)
+
+;;; the same shrink-away but don't require much precondition
+;;; return a stream of states
+;;;   where the stream is equivalent to the states of clearing
+;;;   also remove things from scope
+(define (clear-about st scope v)
+  (define dnf-sym-stream (TO-DNF (TO-NON-Asymmetric st)))
+  (define mentioned-var (set-add scope v))
+  (define (map-clear-about st)
+    (let* (
+        [current-vars scope]
+        [unmentioned-exposed-st (unmentioned-exposed-form mentioned-var st)]
+        [unmention-substed-st (unmentioned-substed-form mentioned-var unmentioned-exposed-st)]  
+        [domain-enforced-st (domain-enforcement-st st)]
+        [shrinked-st (shrink-away domain-enforced-st current-vars v)])
+        (state-scope-update shrinked-st (lambda (scope) (set-remove scope v)))
+        ))
+  (mapped-stream map-clear-about dnf-sym-stream)
 )
