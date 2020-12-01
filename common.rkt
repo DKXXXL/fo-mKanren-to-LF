@@ -97,7 +97,7 @@
 (define-syntax raise-and-warn
   (syntax-rules ()
     ((_ x ...) 
-      (begin (debug-dump-w/level 100 x ...) (raise x ...)))))
+      (begin (debug-dump-w/level 100 x ...) (/ 1 0)))))
 
 
 
@@ -121,7 +121,7 @@
     [(cons a b) a]
     [(tproj x y) (tproj x (cons 'car y))]
     [(var _ _) (tproj t (list 'car))]
-    [_ (raise-and-warn "tcar: Unexpected Value")]
+    [_ (raise-and-warn "tcar: Unexpected Value ~a" t)]
   ))
 
 (define (tcdr t) 
@@ -129,7 +129,7 @@
     [(cons a b) b]
     [(tproj x y) (tproj x (cons 'cdr y))]
     [(var _ _) (tproj t (list 'cdr))]
-    [_ (raise-and-warn "tcdr: Unexpected Value")]
+    [_ (raise-and-warn "tcdr: Unexpected Value ~a" t)]
   ))
 
 ;;; normalize a tproj term so that tproj-v is always a var 

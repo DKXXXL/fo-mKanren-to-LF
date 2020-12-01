@@ -1107,6 +1107,8 @@
 (define/contract (unmentioned-substed-form mentioned-vars st)
   (set? state? . -> . state?)
   (define old-eqs (state-sub st))
+  (debug-dump "\n unmentioned-substed-form's input st: ~a" st)
+  ;;; precondition: st has empty sub
   (define (unmention-remove-everywhere eqs st)
     ;;; (define eqs (state-sub st))
     (if (equal? eqs '())
@@ -1116,13 +1118,15 @@
           #:when (not (set-member? mentioned-vars v))
           (unmention-remove-everywhere (cdr eqs) (literal-replace v (walk* rhs (cdr eqs)) st))]
         [(cons v rhs)
-          (unmention-remove-everywhere (cdr eqs) st)]
+          (state-sub-update 
+            (unmention-remove-everywhere (cdr eqs) st)
+            (lambda (eqs-) (cons (cons v rhs) eqs-)))]
       )
     ))
-  (define new-eqs (filter (lambda (x) (set-member? mentioned-vars (car x))) old-eqs))
-  (state-sub-set 
-    (unmention-remove-everywhere old-eqs (state-sub-set st '()))
-    new-eqs)
+  ;;; (define new-eqs (filter (lambda (x) (set-member? mentioned-vars (car x))) old-eqs))
+  
+  (unmention-remove-everywhere old-eqs (state-sub-set st '()))
+    
 )
 
 
@@ -1199,7 +1203,7 @@
 ;;; given compositions of DS where there is tproj appearances
 ;;;  return a set of all tprojs
 (define (collect-tprojs anything)
-  (define result (set))
+  (define result (mutable-set))
   (define (each-case prev-f rec g)
     (match g
       [(tproj _ _) (set-add! result g)] ;; local side-effect
@@ -1207,7 +1211,7 @@
     )
   )
   (define result-f 
-    (overloading-functor-list (list each-case goal-base-endofunctor (there-is-in-pair-base-functor #f)))
+    (overloading-functor-list (list each-case goal-term-base-endofunctor pair-base-endofunctor identity-endo-functor))
   )
   (result-f anything)
   result
@@ -1225,7 +1229,12 @@
   ;;; then we do huge literal-replace
   ;;;  the literal-replace respects 
   (define tproj-removed (literal-replace* (make-hash all-tproj-removing-eqs) anything))
+  (debug-dump "\n eliminate-tproj-return-record's input: ~a" anything)
+  (debug-dump "\n eliminate-tproj-return-record's input's tprojs: ~a" all-tprojs)
+
+  (debug-dump "\n eliminate-tproj-return-record's using equation: ~a" all-tproj-removing-eqs)
   ;;; TODO : make sure that the constraint about (tproj x car) is transferred to the newly introduced var
+  (debug-dump "\n eliminate-tproj-return-record's return: ~a" tproj-removed)
   (cons tproj-removed all-tproj-removing-eqs)
 )
 
