@@ -440,7 +440,7 @@
 
 (define/contract (mature s)
     (not-state? . -> . any?)
-    ;;; (printf "\n maturing: ~a" s)
+    ;;; (debug-dump "\n maturing: ~a" s)
     (if (mature? s) s (mature (step s))))
   
 (define (total-mature s)
@@ -455,11 +455,11 @@
 ;;;   make sure there is no disjunction in meaning of each state and 
 ;;;     all the disjunction are lifted to mplus
 (define (TO-DNF stream)
-  ;;; (display "TO-DNF computing \n")
+  ;;; (debug-dump "TO-DNF computing \n")
   (mapped-stream (lambda (st) (to-dnf st (get-state-DNF-initial-index st))) stream))
 
 (define (TO-NON-Asymmetric stream)
-  ;;; (display "TO-NON-Asymmetric computing \n")
+  ;;; (debug-dump "TO-NON-Asymmetric computing \n")
   (mapped-stream remove-assymetry-in-diseq stream)
 )
 
@@ -514,7 +514,7 @@
     ;;; 
     ((forall var domain goal) 
       (let* [(domain_ (simplify-wrt st domain var))
-             (k (begin (display var) (display ": domain_: ") (display domain_) (display "\n")))
+             (k (begin (debug-dump "\n ~a : domain_ : ~a " var domain_)))
             ] 
 
         (match domain_
@@ -600,16 +600,16 @@
                    
                    [relative-complemented-goal (relative-complement domain-enforced-st current-vars v)]
                    [shrinked-st (shrink-away domain-enforced-st current-vars v)]
-                   [k (begin  (display " st: ")(display st)
-                              ;;; (display "\n unmention-exposed-st: ")(display unmentioned-exposed-st)
-                              (display "\n unmention-substed-st: ")(display unmention-substed-st)
-                              (display "\n shrinked-st: ")(display shrinked-st) 
-                              (display "\n relative-complemented-goal: ")(display relative-complemented-goal)
-                              ;;; (display "\n complemented goal: ")(display st-scoped-w/ov)
-                              ;;; (display "\n next state ") (display next-st) 
-                              ;;; (display "\n search with domain on var ")
-                              ;;; (display v) (display " in ") (display cgoal) 
-                              (display "\n"))
+                   [k (begin  (debug-dump "\n st: ~a" st)
+                              ;;; (debug-dump "\n unmention-exposed-st: ")(debug-dump unmentioned-exposed-st)
+                              (debug-dump "\n unmention-substed-st: ~a" unmention-substed-st)
+                              (debug-dump "\n shrinked-st: ~a" shrinked-st) 
+                              (debug-dump "\n relative-complemented-goal: ~a" relative-complemented-goal)
+                              ;;; (debug-dump "\n complemented goal: ")(debug-dump st-scoped-w/ov)
+                              ;;; (debug-dump "\n next state ") (debug-dump next-st) 
+                              ;;; (debug-dump "\n search with domain on var ")
+                              ;;; (debug-dump v) (debug-dump " in ") (debug-dump cgoal) 
+                              (debug-dump "\n"))
                               ]
                     )
               ;;; forall x (== x 3) (== x 3)
@@ -655,11 +655,11 @@
     (match g
       [(disj g1 g2) (conj (c g1) (c g2))]
       [(conj g1 g2) (disj (c g1) (c g2))]
-      [(relate _ _) (raise "User-Relation not supported.")]
+      [(relate _ _) (raise-and-warn "User-Relation not supported.")]
       [(== t1 t2) (=/= t1 t2)]
       [(=/= t1 t2) (== t1 t2)]
       [(ex a gn) (forall a (c gn))]
-      [(forall v bound gn) (raise "Not supported complement on higher-ranked.") ]
+      [(forall v bound gn) (raise-and-warn "Not supported complement on higher-ranked.") ]
       [(numbero t) (not-numbero t)]
       [(not-numbero t) (numbero t)]
       [(stringo t) (not-stringo t)]
@@ -884,7 +884,7 @@
 ;;;     i.e. (var s) =/= (cons ...)
 (define (remove-assymetry-in-diseq st)
   (define asymmetric-vars (record-vars-on-asymmetry-in-diseq st))
-  ;;; (printf "\n assymetric-st:  ~a \n asymmetric-vars: ~a" st asymmetric-vars)
+  (debug-dump "\n assymetric-st:  ~a \n asymmetric-vars: ~a" st asymmetric-vars)
   (if (equal? (length asymmetric-vars) 0)
     (wrap-state-stream st)
     (mapped-stream remove-assymetry-in-diseq (pair-or-not-pair-by-axiom asymmetric-vars st))))
@@ -1029,7 +1029,7 @@
         (list (cons snd fst))
         (if cons-at-right 
           (eliminate-conses (each-eliminate-cons eq)) 
-          (raise "Unexpected Equation Form")))
+          (raise-and-warn "Unexpected Equation Form")))
       (list eq)
     )
   )
@@ -1046,7 +1046,7 @@
     ;;; won't stop if either side has cons
     (match single-eq
       [(cons (tproj _ _) (tproj _ _)) 
-        (raise "Cannot Eliminate Conses if there is no conses")]
+        (raise-and-warn "Cannot Eliminate Conses if there is no conses")]
       [(cons (cons _ _) _) (eliminate-conses (list (tcar-eq single-eq) (tcdr-eq single-eq)))]
       [(cons _ (cons _ _)) (eliminate-conses (list (tcar-eq single-eq) (tcdr-eq single-eq)))]
       [_ (list single-eq)] ;; 
@@ -1057,7 +1057,7 @@
     (match eq
       [(cons (var _ _) _) eq]
       [(cons _ (var _ _)) (cons (car eq) (cdr eq))]
-      [_ (raise "Not A proper substution-form Equation!")]
+      [_ (raise-and-warn "Not A proper substution-form Equation!")]
     )
   )
   (map lhs-must-var 
@@ -1070,7 +1070,7 @@
 ;;; ;;;   done easily by replace v with a brand new var everywhere in the st
 ;;; (define/contract (clear-about v st)
 ;;;   (any?  ?state? . -> . ?state?)
-;;;   ;;; (display st)
+;;;   ;;; (debug-dump st)
 ;;;   (let* ([vname (symbol->string (var-name v))]
 ;;;          [new-v (var/fresh (string->symbol (string-append vname "D")))]
 ;;;          [replaced (literal-replace v new-v st)]
@@ -1145,7 +1145,7 @@
           #:when (member r '(car cdr))
           (set-add (all-domain-terms (tproj v rpath)))
         ]
-        [o/w (raise "Unexpected Path or Datatype")]
+        [o/w (raise-and-warn "Unexpected Path or Datatype")]
       )
     )    
     (define collected-domain-terms (all-domain-terms term))
@@ -1323,7 +1323,7 @@
   (define v-exposed-st (unmentioned-exposed-form mentioned-vars st))
   (define var-removed-st (unmentioned-substed-form mentioned-vars v-exposed-st))
   ;;; (define var-removed-st st)
-  ;;; (printf "\n shrink-var-removed-st: ~a" var-removed-st)
+  ;;; (debug-dump "\n shrink-var-removed-st: ~a" var-removed-st)
   (define domain-enforced-st var-removed-st)
   ;;;  we remove none-substed appearances of unmentioned var
   (define unmentioned-removed-st

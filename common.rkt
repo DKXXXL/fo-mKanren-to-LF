@@ -37,6 +37,9 @@
   false?
   any?
   ?state?
+  debug-dump-w/level
+  debug-dump
+  raise-and-warn
   )
 
 ;;; bear with it now.... let me search if there is
@@ -62,6 +65,40 @@
 (define var-number (void)) 
 ;; return the maximum existing var-id, unless it is 0
 
+(define (debug-info-initialization)
+  (define debug-info-threshold 1)
+  (define (get-debug-info-threshold)
+    debug-info-threshold)
+
+  (define (set-debug-info-threshold! l)
+    (set! debug-info-threshold l))
+  
+  (values get-debug-info-threshold set-debug-info-threshold!)
+)
+
+(define-values 
+  (get-debug-info-threshold set-debug-info-threshold!)
+  (debug-info-initialization))
+
+
+(define-syntax debug-dump-w/level
+  (syntax-rules ()
+    ((_ l x ...) 
+      (if (>= l (get-debug-info-threshold)) 
+        (printf x ...)
+        'Threshold-Too-High))
+          ))
+
+(define-syntax debug-dump
+  (syntax-rules ()
+    ((_ x ...) 
+      (debug-dump-w/level 0 x ...))))
+
+(define-syntax raise-and-warn
+  (syntax-rules ()
+    ((_ x ...) 
+      (begin (debug-dump-w/level 100 x ...) (raise x ...)))))
+
 
 
 (let ((index 0))
@@ -84,7 +121,7 @@
     [(cons a b) a]
     [(tproj x y) (tproj x (cons 'car y))]
     [(var _ _) (tproj t (list 'car))]
-    [_ (raise "Unexpected Value")]
+    [_ (raise-and-warn "tcar: Unexpected Value")]
   ))
 
 (define (tcdr t) 
@@ -92,7 +129,7 @@
     [(cons a b) b]
     [(tproj x y) (tproj x (cons 'cdr y))]
     [(var _ _) (tproj t (list 'cdr))]
-    [_ (raise "Unexpected Value")]
+    [_ (raise-and-warn "tcdr: Unexpected Value")]
   ))
 
 ;;; normalize a tproj term so that tproj-v is always a var 

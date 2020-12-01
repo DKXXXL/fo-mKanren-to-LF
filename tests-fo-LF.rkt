@@ -25,7 +25,7 @@
                       ))
                    )
                (if (checker-func actual)
-                 (printf "~s\n" 'success)
+                 (printf "\n ~s " 'success)
                  (printf "FAILURE\nEXPECTED: ~s\nACTUAL: ~s\n"
                          expected actual))
                          
