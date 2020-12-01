@@ -514,7 +514,7 @@
     ;;; 
     ((forall var domain goal) 
       (let* [(domain_ (simplify-wrt st domain var))
-            ;;;  (k (begin (display var) (display ": domain_: ") (display domain_) (display "\n")))
+             (k (begin (display var) (display ": domain_: ") (display domain_) (display "\n")))
             ] 
 
         (match domain_
@@ -595,20 +595,21 @@
                    
                    [unmention-substed-st (unmentioned-substed-form mentioned-var unmentioned-exposed-st)]
                    
-                   [domain-enforced-st (domain-enforcement-st st)]
+                   [domain-enforced-st (domain-enforcement-st unmention-substed-st)]
                    
                    [relative-complemented-goal (relative-complement domain-enforced-st current-vars v)]
                    [shrinked-st (shrink-away domain-enforced-st current-vars v)]
-                  ;;;  [k (begin  (display " st: ")(display st)
-                  ;;;             (display "\n shrinked-st: ")(display shrinked-st) 
-                  ;;;             (display "\n relative-complemented-goal: ")(display relative-complemented-goal)
-                  ;;;             (display "\n unmention-substed-st: ")(display unmention-substed-st)
-                  ;;;             ;;; (display "\n complemented goal: ")(display st-scoped-w/ov)
-                  ;;;             ;;; (display "\n next state ") (display next-st) 
-                  ;;;             ;;; (display "\n search with domain on var ")
-                  ;;;             ;;; (display v) (display " in ") (display cgoal) 
-                  ;;;             (display "\n"))
-                  ;;;             ]
+                   [k (begin  (display " st: ")(display st)
+                              (display "\n unmention-exposed-st: ")(display unmentioned-exposed-st)
+                              (display "\n unmention-substed-st: ")(display unmention-substed-st)
+                              (display "\n shrinked-st: ")(display shrinked-st) 
+                              (display "\n relative-complemented-goal: ")(display relative-complemented-goal)
+                              ;;; (display "\n complemented goal: ")(display st-scoped-w/ov)
+                              ;;; (display "\n next state ") (display next-st) 
+                              ;;; (display "\n search with domain on var ")
+                              ;;; (display v) (display " in ") (display cgoal) 
+                              (display "\n"))
+                              ]
                     )
               ;;; forall x (== x 3) (== x 3)
               ;;;   forall x (conj (== x 3) (=/= x 3)) (== x 3)
@@ -999,6 +1000,10 @@
 ;;;  s.t. the returned set won't have a equation like below
 ;;; (mentioned-var = (cons ... unmentioned-var ...))
 ;;; i.e. if one-side is mentioned var, then the other-side must be all mentioned
+;;; BUGFIX: 
+;;;   change the algorithm to ranked-exposed-form
+;;;     the var on right hand side must have lower rank then that on the LHS
+;;;     the rank is decided by scope/mentioned-vars, as an ordered
 (define/contract (unmentioned-exposed-form mentioned-vars st)
   (set? state? . -> . state?)
   (define eqs (state-sub st))
@@ -1310,7 +1315,9 @@
 (define/contract (shrink-away st scope var)
   (state? set? var? . -> . state?)
   (define mentioned-vars scope)
-  (define domain-enforced-st st)
+  (define var-removed-st (unmentioned-substed-form mentioned-vars st))
+  ;;; (define var-removed-st st)
+  (define domain-enforced-st var-removed-st)
   ;;;  we remove none-substed appearances of unmentioned var
   (define unmentioned-removed-st
     (let* ([diseqs (state-diseq domain-enforced-st)]
@@ -1336,7 +1343,7 @@
   (state? set? var? . -> . any?)
   (define dnf-sym-stream (TO-DNF (TO-NON-Asymmetric (wrap-state-stream state))))
 
-  (define mentioned-var (set-add scope v))
+  (define mentioned-var scope)
   (define (map-clear-about st)
     (let* (
         [current-vars scope]
