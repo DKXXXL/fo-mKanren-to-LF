@@ -219,7 +219,9 @@
 (define (wrap-state-stream st) (and st (cons st #f)))
 
 ;;; state x var x (set of) typeinfo -> state
-(define (state-typercd-cst-add st v type-info)
+(define/contract (state-typercd-cst-add st v type-info)
+  (state? var? set? . -> . state?)
+
   (define typerc (state-typercd st))
   (define type-info (if (set? type-info) type-info (set type-info)))
   (define org (hash-ref typerc v #f))
@@ -261,10 +263,10 @@
               ;;;  extract newly added variables
               ;;;  [(u v), (j k)]
               [new-vars (map car new-subst)]
-              [new-vars-indices (map var-index new-vars)]
+              ;;; [new-vars-indices (map var-index new-vars)]
               ;;; TODO: unifies the representation
-              [new-vars-types (map (lambda (x) (hash-ref htable x #f) ) new-vars-indices)]
-              [erased-htable (foldl (lambda (index htable) (hash-remove htable index)) htable new-vars-indices)]
+              [new-vars-types (map (lambda (x) (hash-ref htable x #f) ) new-vars)]
+              [erased-htable (foldl (lambda (index htable) (hash-remove htable index)) htable new-vars)]
               [erased-type-state (state-typercd-set unified-state erased-htable)]
               ;;; TODO: check-as-inf-type-disj might have corner 
               ;;;   case where first element is null
@@ -433,10 +435,11 @@
   (define infinite-type-checked-state ;;; type : state
     (and st
     (match (walk* t (state-sub st))
-          [(var _ index) 
+          [(var name index) 
             ;;; check if there is already typercd for index on symbol
-            (let* ([htable (state-typercd st)]
-                   [type-info (hash-ref htable index 'False)])
+            (let* ([v (var name index)]
+                   [htable (state-typercd st)]
+                   [type-info (hash-ref htable v 'False)])
               (if (not (equal? type-info 'False))
                 ;;; type-info is a set of predicates
                 ;;;  disjunction of type is conflicting
@@ -466,11 +469,11 @@
                         ;;; 2. unify/sub doesn't seem to do more checking? ** 
                         ;;; 3. then we remove type information
                         st-tyrcd-updated) ]  
-                    [_   (state-typercd-update st (lambda (x) (hash-set x index intersected)))]
+                    [_   (state-typercd-update st (lambda (x) (hash-set x v intersected)))]
                     )
                   
                 )
-                (state-typercd-update st (lambda (x) (hash-set x index type?*)))) ) ]
+                (state-typercd-update st (lambda (x) (hash-set x v type?*)))) ) ]
 
           [v (and (ormap (lambda (x?) (x? v)) inf-type?*) st)]) ))
     ;;; return the following
