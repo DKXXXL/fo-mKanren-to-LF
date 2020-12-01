@@ -435,7 +435,12 @@
 
 (define (mature? s) 
     (or (not s) (pair? s)))
-(define (mature s)
+
+(define (not-state? x) (not (state? x)))
+
+(define/contract (mature s)
+    (not-state? . -> . any?)
+    ;;; (printf "\n maturing: ~a" s)
     (if (mature? s) s (mature (step s))))
   
 (define (total-mature s)
@@ -514,8 +519,8 @@
 
         (match domain_
           ;;; BUGFIX: shrink-into about st
-          ;;; [(Bottom) (clear-about st (state-scope st) var)]
-          [(Bottom) (wrap-state-stream st)] 
+          [(Bottom) (clear-about st (list->set (state-scope st)) var)]
+          ;;; [(Bottom) (wrap-state-stream st)] 
           [_ (bind-forall (state-scope st) 
                           (TO-DNF (TO-NON-Asymmetric (pause st (ex var (conj domain_ goal)))))  
                           var 
@@ -877,7 +882,7 @@
 ;;;     i.e. (var s) =/= (cons ...)
 (define (remove-assymetry-in-diseq st)
   (define asymmetric-vars (record-vars-on-asymmetry-in-diseq st))
-  
+  ;;; (printf "\n assymetric-st:  ~a \n asymmetric-vars: ~a" st asymmetric-vars)
   (if (equal? (length asymmetric-vars) 0)
     (wrap-state-stream st)
     (mapped-stream remove-assymetry-in-diseq (pair-or-not-pair-by-axiom asymmetric-vars st))))
@@ -1327,17 +1332,21 @@
 ;;; return a stream of states
 ;;;   where the stream is equivalent to the states of clearing
 ;;;   also remove things from scope
-(define (clear-about st scope v)
-  (define dnf-sym-stream (TO-DNF (TO-NON-Asymmetric st)))
+(define/contract (clear-about state scope v)
+  (state? set? var? . -> . any?)
+  (define dnf-sym-stream (TO-DNF (TO-NON-Asymmetric (wrap-state-stream state))))
+
   (define mentioned-var (set-add scope v))
   (define (map-clear-about st)
     (let* (
         [current-vars scope]
         [unmentioned-exposed-st (unmentioned-exposed-form mentioned-var st)]
-        [unmention-substed-st (unmentioned-substed-form mentioned-var unmentioned-exposed-st)]  
+        [unmention-substed-st (unmentioned-substed-form mentioned-var unmentioned-exposed-st)] 
+
         [domain-enforced-st (domain-enforcement-st st)]
-        [shrinked-st (shrink-away domain-enforced-st current-vars v)])
-        (state-scope-update shrinked-st (lambda (scope) (set-remove scope v)))
+        [shrinked-st (shrink-away domain-enforced-st current-vars v)]
+        )
+        (wrap-state-stream (state-scope-update shrinked-st (lambda (scope) (set-remove scope v))))
         ))
   (mapped-stream map-clear-about dnf-sym-stream)
 )
