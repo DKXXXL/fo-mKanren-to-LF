@@ -586,6 +586,7 @@
             (match-let* 
                   ([st (car s)]
                    [current-vars (list->set current-vars)]
+                   [w/o-v (set-remove current-vars v)]
                   ;;;  TODO: figure out trace!
                    [mentioned-var (set-add current-vars v)]
 
@@ -1318,9 +1319,11 @@
 ;;;   st is domain-enforced
 (define/contract (shrink-away st scope var)
   (state? set? var? . -> . state?)
-  (define mentioned-vars scope)
-  (define var-removed-st (unmentioned-substed-form mentioned-vars st))
+  (define mentioned-vars (set-remove scope var))
+  (define v-exposed-st (unmentioned-exposed-form mentioned-vars st))
+  (define var-removed-st (unmentioned-substed-form mentioned-vars v-exposed-st))
   ;;; (define var-removed-st st)
+  ;;; (printf "\n shrink-var-removed-st: ~a" var-removed-st)
   (define domain-enforced-st var-removed-st)
   ;;;  we remove none-substed appearances of unmentioned var
   (define unmentioned-removed-st
@@ -1347,7 +1350,7 @@
   (state? set? var? . -> . any?)
   (define dnf-sym-stream (TO-DNF (TO-NON-Asymmetric (wrap-state-stream state))))
 
-  (define mentioned-var scope)
+  (define mentioned-var (set-remove scope v))
   (define (map-clear-about st)
     (let* (
         [current-vars scope]

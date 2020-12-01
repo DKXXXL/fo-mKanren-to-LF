@@ -162,7 +162,8 @@
 ((run 1 (a) (for-all (x) (fresh (s t) (== s `(,x . ,t))))) . test==> . 'succeed)
 
 
-((run 1 (a b) (for-all (x) (disj (=/= x a) (=/= x b)))) . test==> . 'fail)
+((run 1 (a b) (for-all (x) 
+  (disj (=/= x a) (=/= x b)))) . test==> . 'fail)
 ; closed world: removing any of the disjuncts should fail
 ((run 1 () (for-all (x) 
   (disj* (symbolo x) (numbero x) (stringo x)
