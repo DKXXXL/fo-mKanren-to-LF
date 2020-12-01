@@ -509,12 +509,13 @@
     ;;; 
     ((forall var domain goal) 
       (let* [(domain_ (simplify-wrt st domain var))
-             (k (begin (display var) (display ": domain_: ") (display domain_) (display "\n")))
+            ;;;  (k (begin (display var) (display ": domain_: ") (display domain_) (display "\n")))
             ] 
 
         (match domain_
           ;;; BUGFIX: shrink-into about st
-          [(Bottom) (clear-about st domain var)] 
+          ;;; [(Bottom) (clear-about st (state-scope st) var)]
+          [(Bottom) (wrap-state-stream st)] 
           [_ (bind-forall (state-scope st) 
                           (TO-DNF (TO-NON-Asymmetric (pause st (ex var (conj domain_ goal)))))  
                           var 
@@ -593,16 +594,16 @@
                    
                    [relative-complemented-goal (relative-complement domain-enforced-st current-vars v)]
                    [shrinked-st (shrink-away domain-enforced-st current-vars v)]
-                   [k (begin  (display " st: ")(display st)
-                              (display "\n shrinked-st: ")(display shrinked-st) 
-                              (display "\n relative-complemented-goal: ")(display relative-complemented-goal)
-                              (display "\n unmention-substed-st: ")(display unmention-substed-st)
-                              ;;; (display "\n complemented goal: ")(display st-scoped-w/ov)
-                              ;;; (display "\n next state ") (display next-st) 
-                              ;;; (display "\n search with domain on var ")
-                              ;;; (display v) (display " in ") (display cgoal) 
-                              (display "\n"))
-                              ]
+                  ;;;  [k (begin  (display " st: ")(display st)
+                  ;;;             (display "\n shrinked-st: ")(display shrinked-st) 
+                  ;;;             (display "\n relative-complemented-goal: ")(display relative-complemented-goal)
+                  ;;;             (display "\n unmention-substed-st: ")(display unmention-substed-st)
+                  ;;;             ;;; (display "\n complemented goal: ")(display st-scoped-w/ov)
+                  ;;;             ;;; (display "\n next state ") (display next-st) 
+                  ;;;             ;;; (display "\n search with domain on var ")
+                  ;;;             ;;; (display v) (display " in ") (display cgoal) 
+                  ;;;             (display "\n"))
+                  ;;;             ]
                     )
               ;;; forall x (== x 3) (== x 3)
               ;;;   forall x (conj (== x 3) (=/= x 3)) (== x 3)

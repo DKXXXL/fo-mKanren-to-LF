@@ -93,11 +93,15 @@
 
 (define (evalo expr value) (eval-expo expr '() value))
 
+(define blue-colour "\033[94m")
+(define blue-colour-end "\033[0m")
+
 (define-syntax test
   (syntax-rules ()
     ((_ name e-actual e-expected)
      (time (begin
-             (printf "Testing ~s: " name)
+             (printf "Testing ~a ~s: \n  ~s ~a \n  \n ==> " 
+                      blue-colour name 'e-actual blue-colour-end)
              (let ((actual e-actual) (expected e-expected))
                (if (equal? actual expected)
                  (printf "~s\n" 'success)

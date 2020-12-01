@@ -3,4 +3,4 @@
 
 (display "Running first-order microKanren tests:")
 (newline)
-(include "tests.rkt")
+(include "tests-fo.rkt")
