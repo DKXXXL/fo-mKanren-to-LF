@@ -135,11 +135,10 @@
 )
 
 ;; a is every pair
-;;; the following currently unhalt!
-;;; (test 'AllThePair
-;;;   (run 1 (a) (for-all (x y) (== a `(,x . ,y))))
-;;;   run-1-fail
-;;; )
+(test 'AllThePair
+  (run 1 (a) (for-all (x y) (== a `(,x . ,y))))
+  run-1-fail
+)
 
 (test 'AllSymbol
   (run 1 () (for-all (x) (symbolo x)))
@@ -163,7 +162,7 @@
 
 
 ((run 1 (a b) (for-all (x) 
-  (disj (=/= x a) (=/= x b)))) . test==> . 'fail)
+  (disj (=/= x a) (=/= x b)))) . test==> . 'succeed)
 ; closed world: removing any of the disjuncts should fail
 ((run 1 () (for-all (x) 
   (disj* (symbolo x) (numbero x) (stringo x)
