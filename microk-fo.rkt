@@ -600,7 +600,7 @@
                    [relative-complemented-goal (relative-complement domain-enforced-st current-vars v)]
                    [shrinked-st (shrink-away domain-enforced-st current-vars v)]
                    [k (begin  (display " st: ")(display st)
-                              (display "\n unmention-exposed-st: ")(display unmentioned-exposed-st)
+                              ;;; (display "\n unmention-exposed-st: ")(display unmentioned-exposed-st)
                               (display "\n unmention-substed-st: ")(display unmention-substed-st)
                               (display "\n shrinked-st: ")(display shrinked-st) 
                               (display "\n relative-complemented-goal: ")(display relative-complemented-goal)
@@ -1000,7 +1000,7 @@
 ;;;  s.t. the returned set won't have a equation like below
 ;;; (mentioned-var = (cons ... unmentioned-var ...))
 ;;; i.e. if one-side is mentioned var, then the other-side must be all mentioned
-;;; BUGFIX: 
+;;; TODO: 
 ;;;   change the algorithm to ranked-exposed-form
 ;;;     the var on right hand side must have lower rank then that on the LHS
 ;;;     the rank is decided by scope/mentioned-vars, as an ordered
@@ -1105,6 +1105,7 @@
 ;;;     has no relationship with other vars, so cannot be eliminated
 (define/contract (unmentioned-substed-form mentioned-vars st)
   (set? state? . -> . state?)
+  (define old-eqs (state-sub st))
   (define (unmention-remove-everywhere eqs st)
     ;;; (define eqs (state-sub st))
     (if (equal? eqs '())
@@ -1117,7 +1118,10 @@
           (unmention-remove-everywhere (cdr eqs) st)]
       )
     ))
-  (unmention-remove-everywhere (state-sub st) (state-sub-set st '()))
+  (define new-eqs (filter (lambda (x) (set-member? mentioned-vars (car x))) old-eqs))
+  (state-sub-set 
+    (unmention-remove-everywhere old-eqs (state-sub-set st '()))
+    new-eqs)
 )
 
 
