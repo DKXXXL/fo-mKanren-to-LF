@@ -211,7 +211,7 @@
 ;;; the above currently unhalt if set to run*
 
 ((run* (a) 
-  (for-all (x y) (disj* (=/= x y) ;; adds no information
+  (for-all (x y) (disj* 
                         (=/= a x) 
                         (conj* (== a x) (== x y)))))
 ;;; ()
