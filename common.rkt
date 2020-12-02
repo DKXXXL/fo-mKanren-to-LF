@@ -418,7 +418,14 @@
     [(cons (cons u v) rest) 
         (let* (
           [subst (state-sub st)]
-          [unification-info (unify/sub u v subst)]
+          ;;; [old-type-info (state-typercd st)]
+          [unification-info-single-stream (unify u v st)]
+          [unification-info-st 
+            (and unification-info-single-stream 
+                 (car unification-info-single-stream))]
+          [unification-info 
+            (and unification-info-st 
+                 (state-sub unification-info-st))]
           [newly-added (extract-new unification-info subst)]
               ;;; I should check unification result
           )
