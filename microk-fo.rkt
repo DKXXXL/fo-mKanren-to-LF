@@ -35,7 +35,8 @@
   
 
   syntactical-simplify
-  replace-1-to-0
+  complement
+  ;;; replace-1-to-0
   )
 
 (require "common.rkt")
@@ -650,16 +651,20 @@
 
 ;;; trivially negate the goal, relies on the fact that
 ;;;  we have a dualized goals
+;;; doesn't support user-customized goal, and universal-quantification
 (define (complement g)
+  ;;; (goal? . -> . goal?)
   (let ([c complement])
     (match g
       [(disj g1 g2) (conj (c g1) (c g2))]
       [(conj g1 g2) (disj (c g1) (c g2))]
-      [(relate _ _) (raise-and-warn "User-Relation not supported.")]
+      [(relate _ _) 
+        (raise-and-warn "User-Relation not supported.")]
       [(== t1 t2) (=/= t1 t2)]
       [(=/= t1 t2) (== t1 t2)]
       [(ex a gn) (forall a (c gn))]
-      [(forall v bound gn) (raise-and-warn "Not supported complement on higher-ranked.") ]
+      [(forall v bound gn) 
+        (raise-and-warn "Not supported complement on higher-ranked.") ]
       [(numbero t) (not-numbero t)]
       [(not-numbero t) (numbero t)]
       [(stringo t) (not-stringo t)]

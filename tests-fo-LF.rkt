@@ -129,6 +129,10 @@
 (define-relation (not-pairo a)
   (for-all (x y) (=/= a (cons y x))))
 
+
+(define-relation (not-symbolo a)
+  (complement (symbolo a)))
+
 (test 'finite-domain-exhaustion
   (run 1 (a b c) (=/= a b) (=/= b c) (=/= a c) (boolo a) (boolo b) (boolo c))
   run-1-fail
@@ -151,6 +155,97 @@
   run-1-succeed
 )
 
+;;; BUGFIX: the following currently unhalt 
+;;;   if set to run*
+;;; BUGFIX: change the following into two runs
+;;;   each check one of (not-pairo) and (identity pair)
+((run 1 (a) 
+  (conj* 
+    (for-all (x y) (disj* (=/= x y) ;; this =/= adds no information, but shouldn’t break
+                          (=/= a `(,x . ,y))
+                          (conj* (== a `(,x . ,y)) (== x y))))
+    (disj* (not-pairo a) (fresh (z) (== a (cons z z))))))
+
+;;; ((not-pairo a) (_.0 . _0) ...)
+. test==> . 'succeed
+)
+
+((run 1 (a) 
+  (conj* 
+    (for-all (x) (=/= a `(,x . ,x)))
+    (disj* (not-pairo a) (fresh (m n) (=/= m n) (== a (cons m n))))
+    ))
+
+;;; ((not-pairo a) [(_.0 . _.1) where (=/= _.0 _.1)] …)
+. test==> . 'succeed
+)
+
+
+;;; this unhalt even set to 1
+;;; ((run 1 (a) 
+;;;   (conj* 
+;;;     (for-all (x y) 
+;;;       (disj* (symbolo x) ;; this symbolo adds no information
+;;;             (=/= a `(,x . ,y))
+;;;             (conj* (== a `(,x . ,y)) (not-symbolo x))))
+;;;     (disj* (not-pairo a) 
+;;;            (fresh (m n) (not-symbolo m) (== a (cons m n)) ))))
+;;; ;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
+;;; . test==> . 'succeed 
+;;; )
+
+;;; this unhalt even set to 1
+;; x is not a pair whose car is a symbol
+;;; ((run 1 (a) 
+;;;   (conj*  
+;;;     (for-all (x y) 
+;;;       (disj* (symbolo x) ;; this symbolo adds no information
+;;;               (=/= a `(,x . ,y))
+;;;               (conj* (== a `(,x . ,y)) (not-symbolo x)))))
+;;;     (disj* (not-pairo a) (not-symbolo a)))
+
+;;; ;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
+;;; . test==> . 'succeed
+;;; )
+
+;;; the above currently unhalt if set to run*
+
+((run* (a) 
+  (for-all (x y) (disj* (=/= x y) ;; adds no information
+                        (=/= a x) 
+                        (conj* (== a x) (== x y)))))
+;;; ()
+. test==> . 'fail
+)
+
+
+
+
+((run 1 (a b)
+  (conj*
+    (for-all (x)
+      (=/= (cons a b) (cons x 3)))
+    (=/= b 3)    
+  ))
+
+;;; ((=/= b 3) …)
+. test==> . 'succeed
+)
+
+((run 6 (a b)
+  (conj*
+    (for-all (x)
+      (disj* (conj* (== a x)            ;; complement of (=/= a x)
+                        (disj* (=/= a x)  ;; this branch will fail
+                                  (=/= b 3)))
+            (=/= b 3))))
+    (=/= b 3))
+
+;;; ((=/= b 3) …)
+. test==> . 'succeed
+)
+
+
 ; Universally quantified: x, y, z
 ; Outside of the for-all: a, b, c
 ; Inside of the for-all: r, s, t
@@ -159,6 +254,8 @@
 ((run 1 (a) (for-all (x) (fresh (s) (== a s)))) . test==> . 'succeed)
 ((run 1 (a) (for-all (x) (fresh (s) (== x s)))) . test==> . 'succeed)
 ((run 1 (a) (for-all (x) (fresh (s t) (== s `(,x . ,t))))) . test==> . 'succeed)
+
+
 
 
 ((run 1 (a b) (for-all (x) 
