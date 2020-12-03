@@ -441,7 +441,7 @@
 
 (define/contract (mature s)
     (not-state? . -> . any?)
-    ;;; (debug-dump "\n maturing: ~a" s)
+    (debug-dump "\n maturing: ~a" s)
     (if (mature? s) s (mature (step s))))
   
 (define (total-mature s)

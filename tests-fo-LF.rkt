@@ -205,7 +205,6 @@
 )
 
 
-;;; this unhalt even set to 1
 (Complicated-1
   (run 1 (a) 
   (conj* 
@@ -221,17 +220,18 @@
 
 ;;; this unhalt even set to 1
 ;; x is not a pair whose car is a symbol
-;;; ((run 1 (a) 
-;;;   (conj*  
-;;;     (for-all (x y) 
-;;;       (disj* (symbolo x) ;; this symbolo adds no information
-;;;               (=/= a `(,x . ,y))
-;;;               (conj* (== a `(,x . ,y)) (not-symbolo x)))))
-;;;     (disj* (not-pairo a) (not-symbolo a)))
+(Complicated-2
+  (run 1 (a) 
+  (conj*  
+    (for-all (x y) 
+      (disj* (symbolo x) ;; this symbolo adds no information
+              (=/= a `(,x . ,y))
+              (conj* (== a `(,x . ,y)) (not-symbolo x)))))
+    (disj* (not-pairo a) (not-symbolo a)))
 
-;;; ;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
-;;; . test-reg!=> . 'succeed
-;;; )
+;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
+. test-reg!=> . 'succeed
+)
 
 ;;; the above currently unhalt if set to run*
 
@@ -350,4 +350,4 @@
      ((hash-ref all-tests-table 'name)) )
  ))
 
-;;; (run-all-tests)
+(run-all-tests)

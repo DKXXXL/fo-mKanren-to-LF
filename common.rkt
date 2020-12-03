@@ -48,7 +48,7 @@
 (require racket/contract)
 
 ;;; set the following to 'ON then we will have debug info
-(define debug-output-info 'ON)
+(define debug-output-info 'OFF)
 
 ;; Logic variables
 (struct var (name index) ;;;#:prefab
@@ -117,7 +117,16 @@
   )
 )
 
-(struct tproj (v cxr) #:prefab)
+(struct tproj (v cxr)
+  ;;; #:prefab 
+  #:transparent
+  #:guard (lambda (v cxr type-name)
+                    (cond
+                      [(var? v) (values v cxr)]
+                      [else (error type-name
+                                   "bad v: ~e"
+                                   v)]))
+)
 
 
 (define (tcar t) 
@@ -329,7 +338,7 @@
   (let ((tm (walk tm sub)))
     (match tm
       [(cons a b) (cons (walk* a sub) (walk* b sub))]
-      [(tproj x cxr) (tproj_ (walk* x sub) cxr)]
+      [(tproj x cxr) (tproj_ (walk x sub) cxr)]
       [_ tm]
     )))
 (define (reified-index index)
