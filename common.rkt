@@ -47,6 +47,9 @@
 (require struct-update)
 (require racket/contract)
 
+;;; set the following to 'ON then we will have debug info
+(define debug-output-info 'OFF)
+
 ;; Logic variables
 (struct var (name index) ;;;#:prefab
   #:transparent
@@ -66,7 +69,8 @@
 ;; return the maximum existing var-id, unless it is 0
 
 (define (debug-info-initialization)
-  (define debug-info-threshold 1)
+  (define debug-info-threshold 
+    (if (equal? debug-output-info 'ON) -100 1))
   (define (get-debug-info-threshold)
     debug-info-threshold)
 
