@@ -4,6 +4,9 @@
 (require errortrace)
 ;;; (require "examples-for-test.rkt")
 
+(provide
+  (all-defined-out)
+)
 
 (display "Running first-order-microKanren-LF tests:")
 (newline)
@@ -40,14 +43,21 @@
 (define-syntax test-reg!
   (syntax-rules ()
     ((_ name e-actual e-expected)
-     (let ([x (lambda () (test name e-actual e-expected))])
-      (hash-set! all-tests-table name x)))
+     (define name
+          (let* ([x (lambda () (test 'name e-actual e-expected))]
+                [reg! (hash-set! all-tests-table 'name x)])
+            'name)))
+    ((_ e-actual e-expected)
+          (let* ([name (gensym '?)]
+                 [x (lambda () (test name e-actual e-expected))]
+                 [reg! (hash-set! all-tests-table name x)])
+            reg!))
  ))
 
 (define-syntax test-reg!=>
   (syntax-rules ()
     ((_ name e-actual e-expected) (test-reg! name e-actual e-expected))
-    ((_ e-actual e-expected) (test-reg! (gensym '?) e-actual e-expected))
+    ((_ e-actual e-expected) (test-reg! e-actual e-expected))
     ))
 
 (define run-1-succeed (run 1 () (== 1 1)))
@@ -82,45 +92,45 @@
 
 ;;; Sanity Check
 
-(test 'Identity
+(test-reg! Identity
   (run 1 () (for-all (y) (fresh (x) (== y x))))
   run-1-succeed
 )
 
 
-(test 'NEQPair
+(test-reg! NEQPair
   (run 1 () (fresh (y) (for-all (x) (=/= y (cons x 3)))))
   run-1-succeed
 )
 
-(test 'NEQAll
+(test-reg! NEQAll
   (run 1 () (fresh (y) (for-all (x) (=/= y x))))
   run-1-fail
 )
 
-(test 'NEQPair-All
+(test-reg! NEQPair-All
   (run 1 () (fresh (y) (for-all (x) (=/= (cons y 3) (cons x 3)))))
   run-1-fail
 )
 
 
-(test 'Trivial-contradiction-1
+(test-reg! Trivial-contradiction-1
   (run 1 () (for-all (y) (fresh (x) (== y x) (=/= y x))))
   run-1-fail
 )
 
-(test 'Trivial-contradiction-2
+(test-reg! Trivial-contradiction-2
   (run 1 () (for-all (y) (for-all (x) (== y x) (=/= y x))))
   run-1-fail
 )
 
-(test 'Trivial-Disjunction-1
+(test-reg! Trivial-Disjunction-1
   (run 1 () (for-all (y) (for-all (x) (disj* (== y x) (=/= y x)))))
   run-1-succeed
 )
 
 
-(test 'Trivial-Disjunction-2
+(test-reg! Trivial-Disjunction-2
   (run 1 () (fresh (y) (for-all (x) (disj* (== y x) (=/= y x)))))
   run-1-succeed
 )
@@ -147,24 +157,24 @@
 (define-relation (not-symbolo a)
   (complement (symbolo a)))
 
-(test 'finite-domain-exhaustion
+(test-reg! finite-domain-exhaustion
   (run 1 (a b c) (=/= a b) (=/= b c) (=/= a c) (boolo a) (boolo b) (boolo c))
   run-1-fail
 )
 
 ;; a is every pair
-(test 'AllThePair
+(test-reg! AllThePair
   (run 1 (a) (for-all (x y) (== a `(,x . ,y))))
   run-1-fail
 )
 
-(test 'AllSymbol
+(test-reg! AllSymbol
   (run 1 () (for-all (x) (symbolo x)))
   run-1-fail
 )
 
 
-(test 'Trivial-Disjunction-Symbol
+(test-reg! Trivial-Disjunction-Symbol
   (run 1 () (for-all (y) (disj* (symbolo y) (not-symbolo y) )))
   run-1-succeed
 )
@@ -196,18 +206,18 @@
 
 
 ;;; this unhalt even set to 1
-;;; ('Complicated-1
-;;;   (run 1 (a) 
-;;;   (conj* 
-;;;     (for-all (x y) 
-;;;       (disj* (symbolo x) ;; this symbolo adds no information
-;;;             (=/= a `(,x . ,y))
-;;;             (conj* (== a `(,x . ,y)) (not-symbolo x))))
-;;;     (disj* (not-pairo a) 
-;;;            (fresh (m n) (not-symbolo m) (== a (cons m n)) ))))
-;;; ;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
-;;; . test-reg!=> . 'succeed 
-;;; )
+(Complicated-1
+  (run 1 (a) 
+  (conj* 
+    (for-all (x y) 
+      (disj* (symbolo x) ;; this symbolo adds no information
+            (=/= a `(,x . ,y))
+            (conj* (== a `(,x . ,y)) (not-symbolo x))))
+    (disj* (not-pairo a) 
+           (fresh (m n) (not-symbolo m) (== a (cons m n)) ))))
+;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
+. test-reg!=> . 'succeed 
+)
 
 ;;; this unhalt even set to 1
 ;; x is not a pair whose car is a symbol
@@ -334,5 +344,10 @@
     (lambda (key value) (value))))
 
 
+(define-syntax run-the-test
+  (syntax-rules ()
+    ((_ name)
+     ((hash-ref all-tests-table 'name)) )
+ ))
 
-(run-all-tests)
+;;; (run-all-tests)
