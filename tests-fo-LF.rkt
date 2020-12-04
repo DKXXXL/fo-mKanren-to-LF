@@ -12,6 +12,25 @@
 (newline)
 
 
+(define-values (total-tested-number 
+                passed-tested-number
+                inc-total-tested-number
+                inc-passed-tested-number) 
+  (let* (
+    [total-tested-number-literal 0]
+    [passed-tested-number-literal 0]
+    [get-total (lambda () total-tested-number-literal)]
+    [get-passed (lambda () passed-tested-number-literal)]
+    [inc-total-tested-number 
+      (lambda () 
+        (set! total-tested-number-literal (+ total-tested-number-literal 1)))]
+    [inc-passed-tested-number 
+      (lambda () 
+        (set! passed-tested-number-literal (+ passed-tested-number-literal 1)))])
+  (values get-total get-passed inc-total-tested-number inc-passed-tested-number)      
+  )
+)
+
 (define all-tests-table (make-hash))
 ;;; global mutable-context for hashing
 ;;; hash : maps symbol to (closure of) test-cases
@@ -24,6 +43,7 @@
      (time (begin
              (printf "Testing ~a ~s: \n  ~s ~a \n  \n ==> " 
                       blue-colour name 'e-actual blue-colour-end)
+             (inc-total-tested-number)
              (let* ((actual e-actual) 
                    (expected e-expected)
                    (checker-func 
@@ -34,7 +54,9 @@
                       ))
                    )
                (if (checker-func actual)
-                 (printf "\n ~s " 'success)
+                 (begin 
+                    (inc-passed-tested-number) 
+                    (printf "\n ~s " 'success))
                  (printf "FAILURE\nEXPECTED: ~s\nACTUAL: ~s\n"
                          expected actual))
                          
@@ -183,7 +205,8 @@
 ;;;   if set to run*
 ;;; BUGFIX: change the following into two runs
 ;;;   each check one of (not-pairo) and (identity pair)
-((run 1 (a) 
+(Complicated-3
+  (run* (a) 
   (conj* 
     (for-all (x y) (disj* (=/= x y) ;; this =/= adds no information, but shouldn’t break
                           (=/= a `(,x . ,y))
@@ -350,4 +373,8 @@
      ((hash-ref all-tests-table 'name)) )
  ))
 
-(run-all-tests)
+;;; (run-all-tests)
+
+(printf "\n Passed/Total number of test-cases: ~a/~a" 
+  (passed-tested-number) 
+  (total-tested-number))

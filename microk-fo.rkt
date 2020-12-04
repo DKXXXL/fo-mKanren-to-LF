@@ -234,6 +234,14 @@
   )
 )
 
+(define (state-base-endo-functor prev-f rec g)
+  (match g
+    [(state a scope trace direction d e)
+      (state (rec a) scope trace direction (rec d) (rec e))]
+    [_ (prev-f g)]
+  )
+)
+
 
 (define (identity-endo-functor prev-f rec g) g)
 
@@ -368,7 +376,7 @@
   )
   
   (define result-f 
-    (overloading-functor-list (list counter goal-term-base-endofunctor pair-base-endofunctor identity-endo-functor))
+    (overloading-functor-list (list counter goal-term-base-endofunctor pair-base-endofunctor state-base-endo-functor identity-endo-functor))
   )
 
   (result-f g)
@@ -915,7 +923,8 @@
       ['() (fresh-var fpu)]
     )
   )
-  (cons (tproj-v x) (construct-sketch (tproj-cxr x)))
+  ;;; TODO: figure out why this reverse is necessary! -_-
+  (cons (tproj-v x) (construct-sketch (reverse (tproj-cxr x))))
 )
 
 ;;; given st x goal -> st x goal
@@ -1001,6 +1010,11 @@
     [_ res])
 )
 
+;;; for Lisp universe, the only
+;;;   non simple thing is pair
+(define (not-simple-form x) (pair? x))
+(define (is-simple-form x) (not (not-simple-form x)))
+
 ;;; given a set of equation (lhs must be var)
 ;;;  return an equivalent set of equation (lhs must be var)
 ;;;  s.t. the returned set won't have a equation like below
@@ -1013,27 +1027,30 @@
 (define/contract (unmentioned-exposed-form mentioned-vars st)
   (set? state? . -> . state?)
   (define eqs (state-sub st))
-  (define (each-eliminate-cons single-eq) (list (tcar-eq single-eq) (tcdr-eq single-eq)))
+  ;;; (define (each-eliminate-cons single-eq) (list (tcar-eq single-eq) (tcdr-eq single-eq)))
   ;;; given one eq
   ;;;  return a list of eqs equivalent
   ;;;  and make sure in unmentioned-exposed-form 
   (define (single-unmentioned-exposed-form eq)
     (define fst (car eq))
     (define snd (cdr eq))
+    
+    
     (define is-unexposed-form
-      (and (set-member? mentioned-vars fst)
+      (and (there-is-var-in mentioned-vars fst)
            (there-is-var-not-in mentioned-vars snd)))
     (define cons-at-right
       (pair? snd))
-    (define is-simple-form
-      (and (var? fst) (var? snd)))
+    (define is-simple-eq
+      (and (is-simple-form fst) (is-simple-form snd)) )
     (if is-unexposed-form
       ;;; the following is quite twisted... 
       ;;; basically there are too many preconditions 
-      (if is-simple-form 
+      (if is-simple-eq
         (list (cons snd fst))
         (if cons-at-right 
-          (eliminate-conses (each-eliminate-cons eq)) 
+          ;;; at this point, we know 
+          (eliminate-conses (list eq)) 
           (raise-and-warn "Unexpected Equation Form")))
       (list eq)
     )
@@ -1047,25 +1064,31 @@
 ;;; given a set of equations (lhs doesn't have to be variable)
 ;;;  return an equivalent set of equations (lhs must be variable)
 (define (eliminate-conses eqs)
+  (debug-dump "\n eliminate-conses's input: ~a" eqs)
   (define (each-eli-eq single-eq)
     ;;; won't stop if either side has cons
     (match single-eq
-      [(cons (tproj _ _) (tproj _ _)) 
-        (raise-and-warn "Cannot Eliminate Conses if there is no conses")]
+      [(cons LHS RHS)
+        #:when (and (is-simple-form LHS) (is-simple-form RHS)) 
+        (list single-eq)]
       [(cons (cons _ _) _) (eliminate-conses (list (tcar-eq single-eq) (tcdr-eq single-eq)))]
       [(cons _ (cons _ _)) (eliminate-conses (list (tcar-eq single-eq) (tcdr-eq single-eq)))]
       [_ (list single-eq)] ;; 
     )
   )
 
-  (define (lhs-must-var eq)
+  (define (lhs-must-simple-var eq)
     (match eq
-      [(cons (var _ _) _) eq]
-      [(cons _ (var _ _)) (cons (car eq) (cdr eq))]
-      [_ (raise-and-warn "Not A proper substution-form Equation!")]
+      [(cons LHS _) 
+        #:when (term? LHS) 
+        eq]
+      [(cons LHS RHS) 
+        #:when (term? RHS)
+        (cons RHS LHS)]
+      [_ (raise-and-warn "\n Not A proper substution-form Equation! ~a \n" eq)]
     )
   )
-  (map lhs-must-var 
+  (map lhs-must-simple-var
     (foldl append '() 
       (map each-eli-eq eqs)))
 )
@@ -1152,7 +1175,7 @@
           (set v)]
         [(cons r rpath)
           #:when (member r '(car cdr))
-          (set-add (all-domain-terms (tproj v rpath)))
+          (set-add (all-domain-terms (tproj v rpath)) (tproj v rpath))
         ]
         [o/w (raise-and-warn "Unexpected Path or Datatype")]
       )
@@ -1163,7 +1186,7 @@
     (for/fold 
       ([acc-st st])
       ([each-projed-term collected-domain-terms])
-      (state-typercd-cst-add acc-st (walk* sub each-projed-term) pair?))
+      (state-typercd-cst-add acc-st (walk* each-projed-term sub) (set pair?)))
   )
   (foldl (lambda (tp st) (force-as-pair tp st)) st (set->list all-tprojs))
 )
@@ -1216,7 +1239,7 @@
     )
   )
   (define result-f 
-    (overloading-functor-list (list each-case goal-term-base-endofunctor pair-base-endofunctor identity-endo-functor))
+    (overloading-functor-list (list each-case goal-term-base-endofunctor pair-base-endofunctor state-base-endo-functor identity-endo-functor))
   )
   (result-f anything)
   result
@@ -1240,6 +1263,13 @@
   (debug-dump "\n eliminate-tproj-return-record's using equation: ~a" all-tproj-removing-eqs)
   ;;; TODO : make sure that the constraint about (tproj x car) is transferred to the newly introduced var
   (debug-dump "\n eliminate-tproj-return-record's return: ~a" tproj-removed)
+  
+  ;;; TODO : make it into a contract
+  (let* ([all-tproj (collect-tprojs tproj-removed)])
+    (if (not (set-empty? all-tproj)) 
+        (raise-and-warn "\n tproj elimination-failed ~a \n -> \n ~a \n gen-context of ~a \n" anything tproj-removed all-tproj-removing-eqs)
+
+        'pass))
   (cons tproj-removed all-tproj-removing-eqs)
 )
 

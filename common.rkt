@@ -24,6 +24,7 @@
   trace-right
   unify
   walk*
+  term?
   unitize-metavar
   reify
   reify/initial-var
@@ -122,7 +123,8 @@
   #:transparent
   #:guard (lambda (v cxr type-name)
                     (cond
-                      [(var? v) (values v cxr)]
+                      [(and (var? v) (pair? cxr)) 
+                       (values v cxr)]
                       [else (error type-name
                                    "bad v: ~e"
                                    v)]))
@@ -145,6 +147,8 @@
     [_ (raise-and-warn "tcdr: Unexpected Value ~a" t)]
   ))
 
+(define (term? x) (or (var? x) (tproj? x)))
+
 ;;; normalize a tproj term so that tproj-v is always a var 
 (define (tproj_ term cxr)
   
@@ -152,11 +156,15 @@
   ;;; (define (compose f g) (lambda (x) (f (g x))))
   ;;; (define mcxr (map m cxr))
   ;;; (define )
-  (match cxr
-    [(cons 'car rest) (tcar (tproj_ term rest))]
-    [(cons 'cdr rest) (tcdr (tproj_ term rest))]
-    ['() term] 
-  )
+  (if (var? term) 
+    (if (null? cxr)
+      term
+      (tproj term cxr))
+    (match cxr
+      [(cons 'car rest) (tcar (tproj_ term rest))]
+      [(cons 'cdr rest) (tcdr (tproj_ term rest))]
+      ['() term] 
+    ))
 )
 
 ;;; (define var/fresh
@@ -167,9 +175,34 @@
 
 ;; States
 (define empty-sub '())
+;;; (define (walk t sub)
+;;;   (let ((xt (and (var? t) (assf (lambda (x) (var=? t x)) sub))))
+;;;     (if xt (walk (cdr xt) sub) t))
+;;;   )
+
+;;; Now it should support tproj term subject to substitution
 (define (walk t sub)
-  (let ((xt (and (var? t) (assf (lambda (x) (var=? t x)) sub))))
-    (if xt (walk (cdr xt) sub) t)))
+  (match t
+    [(var _ _) 
+      (let ((xt (assf (lambda (x) (var=? t x)) sub)))
+        (if xt (walk (cdr xt) sub) t))]
+    [(tproj v (cons cxr rest))
+      #:when (member cxr '(car cdr))
+      (let ([xt (assf (lambda (x) (equal? t x)) sub)]
+            [tcxr (match cxr 
+                    ['car tcar] 
+                    ['cdr tcdr] 
+                    [o/w (raise-and-warn "Unexpected projection ~a" t)])]
+            )
+        (if xt 
+          (walk (cdr xt) sub) 
+          (tcxr (walk (tproj_ v rest) sub))))]
+    [_ t]
+  )
+)
+
+;;; BUGFIX: might need to double check this
+;;;    as we introduce a new type of 'substitutable' tproj
 (define (occurs? x t sub)
   (cond ((pair? t) (or (occurs? x (walk (car t) sub) sub)
                        (occurs? x (walk (cdr t) sub) sub)))
@@ -270,10 +303,10 @@
 
 ;;; state x var x (set of) typeinfo -> state
 (define/contract (state-typercd-cst-add st v type-info)
-  (state? var? set? . -> . state?)
+  (state? term? set? . -> . state?)
 
   (define typerc (state-typercd st))
-  (define type-info (if (set? type-info) type-info (set type-info)))
+  ;;; (define type-info (if (set? type-info) type-info (set type-info)))
   (define org (hash-ref typerc v #f))
   (define new-type-info 
     (if org 
@@ -333,14 +366,35 @@
   )))
 
 ;; Reification
+;;; (define/contract (walk* tm sub)
+;;;   (any? list? . -> . any?)
+;;;   (let ((tm (walk tm sub)))
+;;;     (match tm
+;;;       [(cons a b) (cons (walk* a sub) (walk* b sub))]
+;;;       [(tproj x cxr) (tproj_ (walk x sub) cxr)]
+;;;       [_ tm]
+;;;     )))
+
+;;; walk with struct respecting
+;;;  will replace each var inside a structure with what sub points to
+(define/contract (walk-struct-once tm sub)
+  (any? list? . -> . any?)
+    (match tm
+      [(cons a b) (cons (walk-struct-once a sub) (walk-struct-once b sub))]
+      [(tproj x cxr) (walk tm sub)]
+      [(var _ _) (walk tm sub)]
+      [_ tm]
+    ))
+
+
+;;; walk* -- walk-struct-once until fixpoint
+;;;  unhalt only if there is cycle in sub
 (define/contract (walk* tm sub)
   (any? list? . -> . any?)
-  (let ((tm (walk tm sub)))
-    (match tm
-      [(cons a b) (cons (walk* a sub) (walk* b sub))]
-      [(tproj x cxr) (tproj_ (walk x sub) cxr)]
-      [_ tm]
-    )))
+  (let* ([tm- (walk-struct-once tm sub)]
+         [k (debug-dump "\n walk* ~a -> ~a" tm tm-)])
+    (if (equal? tm- tm) tm (walk* tm- sub))))
+
 (define (reified-index index)
   (string->symbol
     (string-append "_." (number->string index))))
