@@ -6,6 +6,7 @@
 
 (provide
   (all-defined-out)
+  (all-from-out "mk-fo.rkt")
 )
 
 (display "Running first-order-microKanren-LF tests:")
@@ -176,9 +177,6 @@
   (for-all (x y) (=/= a (cons y x))))
 
 
-(define-relation (not-symbolo a)
-  (complement (symbolo a)))
-
 (test-reg! finite-domain-exhaustion
   (run 1 (a b c) (=/= a b) (=/= b c) (=/= a c) (boolo a) (boolo b) (boolo c))
   run-1-fail
@@ -229,14 +227,15 @@
 
 
 (Complicated-1
-  (run 1 (a) 
+  (run* (a) 
   (conj* 
     (for-all (x y) 
       (disj* (symbolo x) ;; this symbolo adds no information
             (=/= a `(,x . ,y))
             (conj* (== a `(,x . ,y)) (not-symbolo x))))
     (disj* (not-pairo a) 
-           (fresh (m n) (not-symbolo m) (== a (cons m n)) ))))
+           (fresh (m n) (not-symbolo m) (== a (cons m n)) ))
+           ))
 ;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
 . test-reg!=> . 'succeed 
 )
@@ -254,6 +253,28 @@
 
 ;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
 . test-reg!=> . 'succeed
+)
+
+(Complicated-4
+  (run* (a) 
+    (for-all (x y) 
+      (disj* 
+            (symbolo x) ;; this symbolo adds no information
+            (=/= a `(,x . ,y))
+            (conj* 
+                   (== a `(,x . ,y)) 
+                   (not-symbolo x)
+                   ))) )
+;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
+. test-reg!=> . 'succeed 
+)
+
+(Complicated-5
+  (run* (a) 
+    (disj* (not-pairo a) 
+           (fresh (m n) (not-symbolo m) (== a (cons m n)) )) )
+;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
+. test-reg!=> . 'succeed 
 )
 
 ;;; the above currently unhalt if set to run*
@@ -373,7 +394,7 @@
      ((hash-ref all-tests-table 'name)) )
  ))
 
-(run-all-tests)
+;;; (run-all-tests)
 
 (printf "\n Passed/Total number of test-cases: ~a/~a" 
   (passed-tested-number) 

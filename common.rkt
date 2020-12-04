@@ -184,7 +184,7 @@
 (define (walk t sub)
   (match t
     [(var _ _) 
-      (let ((xt (assf (lambda (x) (var=? t x)) sub)))
+      (let ((xt (assf (lambda (x) (equal? t x)) sub)))
         (if xt (walk (cdr xt) sub) t))]
     [(tproj v (cons cxr rest))
       #:when (member cxr '(car cdr))
@@ -392,7 +392,8 @@
 (define/contract (walk* tm sub)
   (any? list? . -> . any?)
   (let* ([tm- (walk-struct-once tm sub)]
-         [k (debug-dump "\n walk* ~a -> ~a" tm tm-)])
+        ;;;  [k (debug-dump "\n walk* ~a -> ~a" tm tm-)]
+         )
     (if (equal? tm- tm) tm (walk* tm- sub))))
 
 (define (reified-index index)

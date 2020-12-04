@@ -449,7 +449,7 @@
 
 (define/contract (mature s)
     (not-state? . -> . any?)
-    (debug-dump "\n maturing: ~a" s)
+    ;;; (debug-dump "\n maturing: ~a" s)
     (if (mature? s) s (mature (step s))))
   
 (define (total-mature s)
@@ -528,7 +528,9 @@
 
         (match domain_
           ;;; BUGFIX: shrink-into about st
-          [(Bottom) (clear-about st (list->set (state-scope st)) var)]
+          [(Bottom) (begin 
+                      (debug-dump "\n one solution: ~a" st)
+                      (clear-about st (list->set (state-scope st)) var))]
           ;;; [(Bottom) (wrap-state-stream st)] 
           [_ (bind-forall (state-scope st) 
                           (TO-DNF (TO-NON-Asymmetric (pause st (ex var (conj domain_ goal)))))  
@@ -602,17 +604,16 @@
                    ;; (x = (cons x y) ) (cons a x) = (cons a y) -> x = y
                   ;;;  (x = (cons a y)) => (a = x.car, y = x.cdr  )
                    [unmentioned-exposed-st (unmentioned-exposed-form mentioned-var st)]
+                   [domain-enforced-st (domain-enforcement-st unmentioned-exposed-st)]
+                   [unmention-substed-st (unmentioned-substed-form mentioned-var domain-enforced-st)]
                    
-                   [unmention-substed-st (unmentioned-substed-form mentioned-var unmentioned-exposed-st)]
-                   
-                   [domain-enforced-st (domain-enforcement-st unmention-substed-st)]
                    
                    [relative-complemented-goal (relative-complement domain-enforced-st current-vars v)]
                    [shrinked-st (shrink-away domain-enforced-st current-vars v)]
-                   [k (begin  (debug-dump "\n st: ~a" st)
+                   [k (begin  (debug-dump "\n initial st: ~a" st)
                               ;;; (debug-dump "\n unmention-exposed-st: ")(debug-dump unmentioned-exposed-st)
                               (debug-dump "\n unmention-substed-st: ~a" unmention-substed-st)
-                              (debug-dump "\n shrinked-st: ~a" shrinked-st) 
+                              (debug-dump "\n shrinked-st on ~a: ~a" v shrinked-st) 
                               (debug-dump "\n relative-complemented-goal: ~a" relative-complemented-goal)
                               ;;; (debug-dump "\n complemented goal: ")(debug-dump st-scoped-w/ov)
                               ;;; (debug-dump "\n next state ") (debug-dump next-st) 
@@ -897,7 +898,7 @@
 ;;;     i.e. (var s) =/= (cons ...)
 (define (remove-assymetry-in-diseq st)
   (define asymmetric-vars (record-vars-on-asymmetry-in-diseq st))
-  (debug-dump "\n assymetric-st:  ~a \n asymmetric-vars: ~a" st asymmetric-vars)
+  ;;; (debug-dump "\n assymetric-st:  ~a \n asymmetric-vars: ~a" st asymmetric-vars)
   (if (equal? (length asymmetric-vars) 0)
     (wrap-state-stream st)
     (mapped-stream remove-assymetry-in-diseq (pair-or-not-pair-by-axiom asymmetric-vars st))))
@@ -1064,7 +1065,7 @@
 ;;; given a set of equations (lhs doesn't have to be variable)
 ;;;  return an equivalent set of equations (lhs must be variable)
 (define (eliminate-conses eqs)
-  (debug-dump "\n eliminate-conses's input: ~a" eqs)
+  ;;; (debug-dump "\n eliminate-conses's input: ~a" eqs)
   (define (each-eli-eq single-eq)
     ;;; won't stop if either side has cons
     (match single-eq
@@ -1135,7 +1136,7 @@
 (define/contract (unmentioned-substed-form mentioned-vars st)
   (set? state? . -> . state?)
   (define old-eqs (state-sub st))
-  (debug-dump "\n unmentioned-substed-form's input st: ~a" st)
+  ;;; (debug-dump "\n unmentioned-substed-form's input st: ~a \n unmentioned-substed-form's vars : ~a \n" st mentioned-vars)
   ;;; precondition: st has empty sub
   (define (unmention-remove-everywhere eqs st)
     ;;; (define eqs (state-sub st))
@@ -1179,15 +1180,15 @@
         ]
         [o/w (raise-and-warn "Unexpected Path or Datatype")]
       )
-    )    
+    )
     (define collected-domain-terms (all-domain-terms term))
     
-
     (for/fold 
       ([acc-st st])
       ([each-projed-term collected-domain-terms])
       (state-typercd-cst-add acc-st (walk* each-projed-term sub) (set pair?)))
   )
+
   (foldl (lambda (tp st) (force-as-pair tp st)) st (set->list all-tprojs))
 )
 
@@ -1257,12 +1258,12 @@
   ;;; then we do huge literal-replace
   ;;;  the literal-replace respects 
   (define tproj-removed (literal-replace* (make-hash all-tproj-removing-eqs) anything))
-  (debug-dump "\n eliminate-tproj-return-record's input: ~a" anything)
-  (debug-dump "\n eliminate-tproj-return-record's input's tprojs: ~a" all-tprojs)
+  ;;; (debug-dump "\n eliminate-tproj-return-record's input: ~a" anything)
+  ;;; (debug-dump "\n eliminate-tproj-return-record's input's tprojs: ~a" all-tprojs)
 
-  (debug-dump "\n eliminate-tproj-return-record's using equation: ~a" all-tproj-removing-eqs)
-  ;;; TODO : make sure that the constraint about (tproj x car) is transferred to the newly introduced var
-  (debug-dump "\n eliminate-tproj-return-record's return: ~a" tproj-removed)
+  ;;; (debug-dump "\n eliminate-tproj-return-record's using equation: ~a" all-tproj-removing-eqs)
+  ;;; ;;; TODO : make sure that the constraint about (tproj x car) is transferred to the newly introduced var
+  ;;; (debug-dump "\n eliminate-tproj-return-record's return: ~a" tproj-removed)
   
   ;;; TODO : make it into a contract
   (let* ([all-tproj (collect-tprojs tproj-removed)])
@@ -1399,9 +1400,8 @@
     (let* (
         [current-vars scope]
         [unmentioned-exposed-st (unmentioned-exposed-form mentioned-var st)]
-        [unmention-substed-st (unmentioned-substed-form mentioned-var unmentioned-exposed-st)] 
-
-        [domain-enforced-st (domain-enforcement-st st)]
+        [domain-enforced-st (domain-enforcement-st unmentioned-exposed-st)]
+        [unmention-substed-st (unmentioned-substed-form mentioned-var domain-enforced-st)] 
         [shrinked-st (shrink-away domain-enforced-st current-vars v)]
         )
         (wrap-state-stream (state-scope-update shrinked-st (lambda (scope) (set-remove scope v))))
