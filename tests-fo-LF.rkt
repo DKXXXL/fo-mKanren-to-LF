@@ -475,13 +475,30 @@
            ((== x1 #f) (== x2 #f)
             (== y1 #f) (== y2 #f)))))
 (Babysort
-(run 1 () (for-all (x1 x2) 
-   (fresh (r1 r2)
-     (sort-two-boolo (list x1 x2) (list r1 r2))
-     (disj* (conj* (=/= x1 #f) (=/= x2 #f))
-            (== r2 #f)))))
+  (run 1 () (for-all (x1 x2) 
+    (fresh (r1 r2)
+      (sort-two-boolo (list x1 x2) (list r1 r2))
+      (disj* (conj* (=/= x1 #f) (=/= x2 #f))
+              (== r2 #f)))))
 . test-reg!=> . 'succeed
 )
+
+(Babysort-fail
+  (run 1 () (for-all (x1 x2) 
+    (fresh (r1 r2)
+      (sort-two-boolo (list x1 x2) (list r1 r2))
+      (disj* (conj* (=/= x1 #f) (=/= x2 #f))
+              (=/= r2 #f)))))
+. test-reg!=> . 'fail
+)
+
+
+
+
+;;; 
+;;; 
+;;; 
+
 (define (run-all-tests)
   (hash-for-each all-tests-table 
     (lambda (key value) (value))))
