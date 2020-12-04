@@ -206,7 +206,7 @@
 ;;; BUGFIX: change the following into two runs
 ;;;   each check one of (not-pairo) and (identity pair)
 (Complicated-3
-  (run* (a) 
+  (run 1 (a) 
   (conj* 
     (for-all (x y) (disj* (=/= x y) ;; this =/= adds no information, but shouldn’t break
                           (=/= a `(,x . ,y))
@@ -373,7 +373,7 @@
      ((hash-ref all-tests-table 'name)) )
  ))
 
-;;; (run-all-tests)
+(run-all-tests)
 
 (printf "\n Passed/Total number of test-cases: ~a/~a" 
   (passed-tested-number) 
