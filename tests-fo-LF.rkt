@@ -200,7 +200,7 @@
 )
 
 ;;; BUGFIX: the following currently unhalt 
-;;;   if set to run*
+;;;   if set to run 1
 ;;; BUGFIX: change the following into two runs
 ;;;   each check one of (not-pairo) and (identity pair)
 (Complicated-3
@@ -227,7 +227,7 @@
 
 
 (Complicated-1
-  (run* (a) 
+  (run 1 (a) 
   (conj* 
     (for-all (x y) 
       (disj* (symbolo x) ;; this symbolo adds no information
@@ -256,7 +256,7 @@
 )
 
 (Complicated-4
-  (run* (a) 
+  (run 1 (a) 
     (for-all (x y) 
       (disj* 
             (symbolo x) ;; this symbolo adds no information
@@ -264,22 +264,98 @@
             (conj* 
                    (== a `(,x . ,y)) 
                    (not-symbolo x)
-                   ))) )
+                   )
+            )) )
+;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
+. test-reg!=> . 'succeed 
+)
+
+(Complicated-4-1
+  (run 1 (a) 
+    (for-all (x y) 
+      (disj* 
+            ;;; (symbolo x) ;; this symbolo adds no information
+            (=/= a `(,x . ,y))
+            (conj* 
+                   (== a `(,x . ,y)) 
+                   (not-symbolo x)
+                   )
+            )) )
+;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
+. test-reg!=> . 'succeed 
+)
+
+
+(Complicated-4-1-1
+  (run 1 (a) 
+    (for-all (x y) 
+      (disj* 
+            ;;; (symbolo x) ;; this symbolo adds no information
+            (=/= a `(,x . ,y))
+            (conj* 
+                   (== a `(,x . ,y)) 
+                  ;;;  (not-symbolo x)
+                   )
+            )) )
+;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
+. test-reg!=> . 'succeed 
+)
+
+(Complicated-4-1-2
+  (run 1 (a) 
+    (for-all (x y) 
+      (disj* 
+            ;;; (symbolo x) ;; this symbolo adds no information
+            (=/= a `(,x . ,y))
+            ;;;  (== a `(,x . ,y)) 
+            (not-symbolo x))) )
+;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
+. test-reg!=> . 'succeed 
+)
+
+
+
+(Complicated-4-2
+  (run 1 (a) 
+    (for-all (x y) 
+      (disj* 
+            (symbolo x) ;; this symbolo adds no information
+            ;;; (=/= a `(,x . ,y))
+            (conj* 
+                   (== a `(,x . ,y)) 
+                   (not-symbolo x)
+                   )
+            )) )
+;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
+. test-reg!=> . 'fail
+)
+
+(Complicated-4-3
+  (run 1 (a) 
+    (for-all (x y) 
+      (disj* 
+            (symbolo x) ;; this symbolo adds no information
+            (=/= a `(,x . ,y))
+            ;;; (conj* 
+            ;;;        (== a `(,x . ,y)) 
+            ;;;        (not-symbolo x)
+            ;;;        )
+            )) )
 ;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
 . test-reg!=> . 'succeed 
 )
 
 (Complicated-5
-  (run* (a) 
+  (run 1 (a) 
     (disj* (not-pairo a) 
            (fresh (m n) (not-symbolo m) (== a (cons m n)) )) )
 ;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
 . test-reg!=> . 'succeed 
 )
 
-;;; the above currently unhalt if set to run*
+;;; the above currently unhalt if set to run 1
 
-((run* (a) 
+((run 1 (a) 
   (for-all (x y) (disj* 
                         (=/= a x) 
                         (conj* (== a x) (== x y)))))
@@ -394,7 +470,7 @@
      ((hash-ref all-tests-table 'name)) )
  ))
 
-;;; (run-all-tests)
+(run-all-tests)
 
 (printf "\n Passed/Total number of test-cases: ~a/~a" 
   (passed-tested-number) 

@@ -608,8 +608,8 @@
                    [unmention-substed-st (unmentioned-substed-form mentioned-var domain-enforced-st)]
                    
                    
-                   [relative-complemented-goal (relative-complement domain-enforced-st current-vars v)]
-                   [shrinked-st (shrink-away domain-enforced-st current-vars v)]
+                   [relative-complemented-goal (relative-complement unmention-substed-st current-vars v)]
+                   [shrinked-st (shrink-away unmention-substed-st current-vars v)]
                    [k (begin  (debug-dump "\n initial st: ~a" st)
                               ;;; (debug-dump "\n unmention-exposed-st: ")(debug-dump unmentioned-exposed-st)
                               (debug-dump "\n unmention-substed-st: ~a" unmention-substed-st)
