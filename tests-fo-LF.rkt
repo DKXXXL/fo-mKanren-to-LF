@@ -459,6 +459,29 @@
 ;;; ((run 1 () (for-all-bound (z) [(for-all-bound (x) (=/= x z))] (Bottom)) )
 ;;; . test-reg!=> . 'succeed)
 
+
+;;; baby sorting
+
+(define-relation (sort-two-boolo xs ys)
+  (fresh (x1 x2 y1 y2)
+    (== xs (list x1 x2))
+    (== ys (list y1 y2))
+    (conde ((=/= x1 #f) (=/= x2 #f)
+            (=/= y1 #f) (=/= y2 #f))
+           ((=/= x1 #f) (== x2 #f)
+            (=/= y1 #f) (== y2 #f))
+           ((== x1 #f) (=/= x2 #f)
+            (=/= y1 #f) (== y2 #f))
+           ((== x1 #f) (== x2 #f)
+            (== y1 #f) (== y2 #f)))))
+(Babysort
+(run 1 () (for-all (x1 x2) 
+   (fresh (r1 r2)
+     (sort-two-boolo (list x1 x2) (list r1 r2))
+     (disj* (conj* (=/= x1 #f) (=/= x2 #f))
+            (== r2 #f)))))
+. test-reg!=> . 'succeed
+)
 (define (run-all-tests)
   (hash-for-each all-tests-table 
     (lambda (key value) (value))))
