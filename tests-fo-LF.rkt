@@ -493,15 +493,89 @@
 )
 
 
+(define-relation (splito xs x1s x2s)
+  (conde ((== xs '())
+          (== x1s '())
+          (== x2s '()))
+         ((fresh (x)
+           (== xs '(x))
+           (== x1s '(x))
+           (== x2s '())))
+         ((fresh (xs^ x y x1s^ x2s^)
+           (== xs (cons x (cons y xs^)))
+           (== x1s (cons x x1s^))
+           (== x2s (cons y x2s^))
+           (splito xs^ x1s^ x2s^)))))
+
+(define-relation (merge-boolo xs ys xsys)
+  (conde ((== xs '()) (== ys xsys))
+         ((== ys '()) (== xs xsys))
+         ((fresh (x y xs^ ys^ xsys^)
+            (== xs (cons x xs^))
+            (== ys (cons y ys^))
+            (conde ((== x #f)
+                    (== xsys (cons x xsys^))
+                    (merge-boolo xs^ ys xsys^))
+                   ((=/= x #f)
+                    (== xsys (cons y xsys^))
+                    (merge-boolo xs ys^ xsys^)))))))
+
+(define-relation (sort-boolo xs ys)
+  (conde ((== xs '()) (== ys '()))
+         ((fresh (x)
+           (== xs '(x))
+           (== ys '(x))))
+         ((fresh (x1s x2s y1s y2s)
+              (splito xs x1s x2s)
+              (sort-boolo x1s y1s)
+              (sort-boolo x2s y2s)
+              (merge-boolo y1s y2s ys)))))
 
 
+
+;;; (Teenage-sort-1
+;;;   (run 1 () (for-all (x) (sort-boolo (list x #f) (list #f x))))
+
+;;; . test-reg!=> . 'succeed
+;;; )
+
+(Teenage-sort-2
+  (run 1 () (for-all (x) (sort-boolo (list #f x) (list #f x))))
+. test-reg!=> . 'succeed
+)
+
+(Teenage-sort-3
+  (run 1 () (for-all (x) (sort-boolo (list x #f #f) (list #f #f x))))
+. test-reg!=> . 'succeed
+)
+
+(Teenage-sort-4
+  (run 1 () (for-all (x) (sort-boolo (list #f x #f) (list #f #f x))))
+. test-reg!=> . 'succeed
+)
+
+(Teenage-sort-5
+  (run 1 () (for-all (x) (sort-boolo (list #f #f x) (list #f #f x))))
+. test-reg!=> . 'succeed
+)
+
+
+
 ;;; 
 ;;; 
 ;;; 
+
+
+(define (report-current)
+  (printf "\n Passed/Total number of test-cases: ~a/~a" 
+    (passed-tested-number) 
+    (total-tested-number)))
 
 (define (run-all-tests)
   (hash-for-each all-tests-table 
-    (lambda (key value) (value))))
+    (lambda (key value) (value)))
+  (report-current)  
+  )
 
 
 (define-syntax run-the-test
@@ -512,6 +586,5 @@
 
 (run-all-tests)
 
-(printf "\n Passed/Total number of test-cases: ~a/~a" 
-  (passed-tested-number) 
-  (total-tested-number))
+
+
