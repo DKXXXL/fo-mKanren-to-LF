@@ -409,22 +409,38 @@
 ((run 1 () (for-all (x) 
   (disj* (symbolo x) (numbero x) (stringo x)
          (== x #t) (== x #f) 
+         (fresh (r s) (== x (cons r s)))))) . test-reg!=> . 'fail)
+
+((run 1 () (for-all (x) 
+  (disj* (symbolo x) (numbero x) (stringo x)
+         (== x #t) (== x #f) (== x '())
          (fresh (r s) (== x (cons r s)))))) . test-reg!=> . 'succeed)
+
 ; cons + car/cdr: all these should 'succeed
 ((run 1 () 
 (for-all (x) 
   (fresh (r) 
-    (disj* (fresh (s t) (=/= x (cons s t))) ; x not a pair
+    (disj* (fresh (s t) (=/= x (cons s t))) ; this always holds
+          (fresh (s t) (== x (cons s t))))))) . test-reg!=> . 'succeed) ; x is the pair
+
+; cons + car/cdr: all these should 'succeed
+((run 1 () 
+(for-all (x) 
+  (fresh (r) 
+    (disj* (for-all (s t) (=/= x (cons s t))) ; x not any pair  
           (fresh (s t) (== x (cons s t))))))) . test-reg!=> . 'succeed) ; x is a pair
+
 ; different ways of encoding a “pairo” like constraint
 ((run 1 () (for-all (x)
-   (disj* (not-pairo x) (fresh (s t) (== x (cons s t))))))
+   (disj* (not-pairo x) 
+          (fresh (s t) (== x (cons s t))))))
    . test-reg!=> . 'succeed
    )
 ; Using relations
 ((run 1 () (for-all (x) (fresh (r s)
     (disj* (=/= (cons x r) s)
            (appendo (list x) r s))))) 
+    ;;; [s == (x . r)] ==> appendo (list x) r s
   . test-reg!=> . 'succeed )
 ;; not supported yet:
 ;(run 1 () (for-all (x) (fresh (r s)
@@ -462,6 +478,7 @@
 
 ;;; baby sorting
 
+;;;  truthness : truth value always first
 (define-relation (sort-two-boolo xs ys)
   (fresh (x1 x2 y1 y2)
     (== xs (list x1 x2))
@@ -479,7 +496,7 @@
     (fresh (r1 r2)
       (sort-two-boolo (list x1 x2) (list r1 r2))
       (disj* (conj* (=/= x1 #f) (=/= x2 #f))
-              (== r2 #f)))))
+             (== r2 #f)))))
 . test-reg!=> . 'succeed
 )
 
@@ -488,7 +505,7 @@
     (fresh (r1 r2)
       (sort-two-boolo (list x1 x2) (list r1 r2))
       (disj* (conj* (=/= x1 #f) (=/= x2 #f))
-              (=/= r2 #f)))))
+             (=/= r2 #f)))))
 . test-reg!=> . 'fail
 )
 
