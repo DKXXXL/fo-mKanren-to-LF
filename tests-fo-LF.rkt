@@ -420,9 +420,10 @@
 ; closed world: removing any of the disjuncts should fail
 (Closed-world-1
   (run 1 () (for-all (x) 
-  (disj* (symbolo x) (numbero x) (stringo x)
-         (== x #t) (== x #f) 
-         (fresh (r s) (== x (cons r s)))))) . test-reg!=> . 'fail)
+  (disj*  
+         (== x #t) 
+         (fresh (r s) (== x (cons r s)))
+         ))) . test-reg!=> . 'fail)
 
 (Closed-world-2
   (run 1 () (for-all (x) 
