@@ -617,15 +617,15 @@
 
                    ;; (x = (cons x y) ) (cons a x) = (cons a y) -> x = y
                   ;;;  (x = (cons a y)) => (a = x.car, y = x.cdr  )
-                   [unmentioned-exposed-st (unmentioned-exposed-form mentioned-var st)]
-                   [domain-enforced-st (domain-enforcement-st unmentioned-exposed-st)]
+                   [field-projected-st (field-proj-form st)]
+                   [domain-enforced-st (domain-enforcement-st field-projected-st)]
                    [unmention-substed-st (unmentioned-substed-form mentioned-var domain-enforced-st)]
                    
                    
                    [relative-complemented-goal (relative-complement unmention-substed-st current-vars v)]
                    [shrinked-st (shrink-away unmention-substed-st current-vars v)]
                    [k (begin  (debug-dump "\n initial st: ~a" st)
-                              (debug-dump "\n unmention-exposed-st: ~a" unmentioned-exposed-st)
+                              (debug-dump "\n field-projected-st: ~a" field-projected-st)
                               (debug-dump "\n domain-enforced-st: ~a" domain-enforced-st)
                               (debug-dump "\n unmention-substed-st: ~a" unmention-substed-st)
                               (debug-dump "\n shrinked-st on ~a: ~a" v shrinked-st) 
@@ -1031,54 +1031,24 @@
 (define (not-simple-form x) (pair? x))
 (define (is-simple-form x) (not (not-simple-form x)))
 
-;;; given a set of equation (lhs must be var)
-;;;  return an equivalent set of equation (lhs must be var)
-;;;  s.t. the returned set won't have a equation like below
-;;; (mentioned-var = (cons ... unmentioned-var ...))
-;;; i.e. if one-side is mentioned var, then the other-side must be all mentioned
-;;; TODO: 
-;;;   change the algorithm to ranked-exposed-form
-;;;     the var on right hand side must have lower rank then that on the LHS
-;;;     the rank is decided by scope/mentioned-vars, as an ordered
-(define/contract (unmentioned-exposed-form mentioned-vars st)
-  (set? state? . -> . state?)
+
+;;; given a set of equation 
+;;;  return an equivalent set of equation 
+;;;  s.t. each equation won't have pair inside, and at each side of
+;;;     one equation there is only one var
+(define/contract (field-proj-form st)
+  (state? . -> . state?)
   (define eqs (state-sub st))
   ;;; (define (each-eliminate-cons single-eq) (list (tcar-eq single-eq) (tcdr-eq single-eq)))
   ;;; given one eq
   ;;;  return a list of eqs equivalent
   ;;;  and make sure in unmentioned-exposed-form 
-  (define (single-unmentioned-exposed-form eq)
-    (define fst (car eq))
-    (define snd (cdr eq))
-    
-    
-    (define is-unexposed-form
-      (and (there-is-var-in mentioned-vars fst)
-           (there-is-var-not-in mentioned-vars snd)))
-    (define cons-at-right
-      (pair? snd))
-    (define is-simple-eq
-      (and (is-simple-form fst) (is-simple-form snd)) )
-    (if is-unexposed-form
-      ;;; the following is quite twisted... 
-      ;;; basically there are too many preconditions 
-      (if is-simple-eq
-        (list (cons snd fst))
-        (if cons-at-right 
-          ;;; at this point, we know 
-          (eliminate-conses (list eq)) 
-          (raise-and-warn "Unexpected Equation Form")))
-      (list eq)
-    )
-  )
-  (define new-eqs 
-    (foldl append '()
-      (map single-unmentioned-exposed-form eqs)))
-  (state-sub-set st new-eqs)
+  (state-sub-set st (eliminate-conses eqs))
 )
 
-;;; given a set of equations (lhs doesn't have to be variable)
-;;;  return an equivalent set of equations (lhs must be variable)
+;;; given a set of equations 
+;;;  return an equivalent set of equations, with no pair inside 
+;;; basically equivalent to field-proj-form
 (define (eliminate-conses eqs)
   ;;; (debug-dump "\n eliminate-conses's input: ~a" eqs)
   (define (each-eli-eq single-eq)
@@ -1089,24 +1059,12 @@
         (list single-eq)]
       [(cons (cons _ _) _) (eliminate-conses (list (tcar-eq single-eq) (tcdr-eq single-eq)))]
       [(cons _ (cons _ _)) (eliminate-conses (list (tcar-eq single-eq) (tcdr-eq single-eq)))]
-      [_ (list single-eq)] ;; 
+      [o/w (raise-and-warn "\n Unexpected equation form ~a" single-eq)]
     )
   )
 
-  (define (lhs-must-simple-var eq)
-    (match eq
-      [(cons LHS _) 
-        #:when (term? LHS) 
-        eq]
-      [(cons LHS RHS) 
-        #:when (term? RHS)
-        (cons RHS LHS)]
-      [_ (raise-and-warn "\n Not A proper substution-form Equation! ~a \n" eq)]
-    )
-  )
-  (map lhs-must-simple-var
-    (foldl append '() 
-      (map each-eli-eq eqs)))
+  (foldl append '() 
+      (map each-eli-eq eqs))
 )
 
 ;;; ;;; clear everything about v on st
@@ -1137,11 +1095,6 @@
     ((_ (x xs ...) g)
       (forall x (Top) (given (xs ...) g)))))
 
-;;; ;;; given a state, we 
-;;; (define (not-mention-means-always-True st mentioned)
-
-;;; )
-
 
 
 ;;; given a state in unmentioned-exposed-form
@@ -1150,7 +1103,29 @@
 ;;;     has no relationship with other vars, so cannot be eliminated
 (define/contract (unmentioned-substed-form mentioned-vars st)
   (set? state? . -> . state?)
-  (define old-eqs (state-sub st))
+
+  ;;; following function will swap lhs and rhs of equation
+  ;;;   if lhs is not unmentioned but rhs is
+  ;;; postcondition: 
+  ;;; 1. the lhs must be a var
+  ;;; 2. if lhs is mentioned, then rhs must be mentioned
+  ;;; 3. unsafe as substitution list as we are doing lhs/rhs swapping
+  ;;;     might causing cycle in subst list, but those have unmentioned will soon removed
+  ;;; 4. if there is unmentioned var, it must appear on the left hand side
+  (define (swap-if-rhs-unmentioned eq)
+    (define lhs (car eq))
+    (define rhs (cdr eq))
+    (define lhs-has-mentioned-var
+      (there-is-var-in mentioned-vars lhs))
+
+    (define rhs-has-unmentioned-var
+      (there-is-var-not-in mentioned-vars rhs))
+
+    (if (and lhs-has-mentioned-var rhs-has-unmentioned-var)
+      (cons rhs lhs) ;; doing swap
+      eq))
+
+  (define old-eqs (map swap-if-rhs-unmentioned (state-sub st)))
   ;;; (debug-dump "\n unmentioned-substed-form's input st: ~a \n unmentioned-substed-form's vars : ~a \n" st mentioned-vars)
   ;;; precondition: st has empty sub
   (define (unmention-remove-everywhere eqs st)
@@ -1158,9 +1133,10 @@
     (if (equal? eqs '())
       st
       (match (car eqs)
-        [(cons v rhs)
-          #:when (not (set-member? mentioned-vars v))
-          (unmention-remove-everywhere (cdr eqs) (literal-replace v (walk* rhs (cdr eqs)) st))]
+        [(cons lhs rhs)
+          #:when (there-is-var-not-in mentioned-vars lhs) 
+          ; when there is unmentioned var, thus equation needs removed
+          (unmention-remove-everywhere (cdr eqs) (literal-replace lhs (walk* rhs (cdr eqs)) st))]
         [(cons v rhs)
           (state-sub-update 
             (unmention-remove-everywhere (cdr eqs) st)
@@ -1170,7 +1146,6 @@
   ;;; (define new-eqs (filter (lambda (x) (set-member? mentioned-vars (car x))) old-eqs))
   
   (unmention-remove-everywhere old-eqs (state-sub-set st '()))
-    
 )
 
 
@@ -1297,7 +1272,7 @@
 ;;; precondition: 
 ;;;    st is in conjunction form (i.e. there is no disjunction in diseq)
 ;;;    st is in non-asymmretic form (i.e. no (var ..) =/= (cons ...))
-;;;    st is in unmentioned-substed-form, where mentioned var are scope + var
+;;;    st is in field-projection form, where mentioned var are scope + var
 ;;;    st is domain-enforced
 (define (relative-complement st scope varx)
 ;;; 2.5 first we do DomainEnforcement-Goal, basically every existence of term (tproj x)
@@ -1313,14 +1288,7 @@
 ;;;  4.4 we again use DomainEnforcement-Goal on each of them
 ;;;  4.5 we translate the set into big disjunction
   (define mentioned-vars (set-add scope varx))
-  ;;; (define unmentioned-exposed-subst (unmentioned-exposed-form mentioned-vars (state-sub st)))
-  ;;; Step 1 done
-  ;;; this will literally remove the appearances of unmentioned var
-  ;;;  according to eqs, except for those inside subst of st
   
-
-  ;;; (define unmention-substed-st st)
-  ;;; Step 2 done
   (define domain-enforced-st st)
   ;;;  we remove none-substed appearances of unmentioned var
   (define unmentioned-removed-st
@@ -1375,17 +1343,19 @@
 ;;; precondition: 
 ;;;   st is in conjunction form (i.e. there is no disjunction in diseq)
 ;;;   st is in non-asymmretic form (i.e. no (var ..) =/= (cons ...))
-;;;    st is in unmentioned-substed-form, where mentioned var are scope + var
+;;;    st is in field-projected-form, where mentioned var are scope + var
 ;;;   st is domain-enforced
 (define/contract (shrink-away st scope var)
   (state? set? var? . -> . state?)
   (define mentioned-vars (set-remove scope var))
-  (define v-exposed-st (unmentioned-exposed-form mentioned-vars st))
-  (define var-removed-st (unmentioned-substed-form mentioned-vars v-exposed-st))
+  ;;;  we need to do extra unmentioned-substed because here var is considered unmentioned
+  (define var-removed-st (unmentioned-substed-form mentioned-vars st))
   ;;; (define var-removed-st st)
   ;;; (debug-dump "\n shrink-var-removed-st: ~a" var-removed-st)
   (define domain-enforced-st var-removed-st)
   ;;;  we remove none-substed appearances of unmentioned var
+  ;;; TODO : abstract this part away -- 
+  ;;;   "unmentioned-totally-removed" replace those constraints into True
   (define unmentioned-removed-st
     (let* ([diseqs (state-diseq domain-enforced-st)]
            [new-diseq (filter (lambda (p) (not (there-is-var-not-in mentioned-vars p))) diseqs)] ;; diseqs must be list of singleton list of thing
@@ -1414,9 +1384,10 @@
   (define (map-clear-about st)
     (let* (
         [current-vars scope]
-        [unmentioned-exposed-st (unmentioned-exposed-form mentioned-var st)]
-        [domain-enforced-st (domain-enforcement-st unmentioned-exposed-st)]
-        [unmention-substed-st (unmentioned-substed-form mentioned-var domain-enforced-st)] 
+        [field-projected-st (field-proj-form st)]
+        [domain-enforced-st (domain-enforcement-st field-projected-st)]
+        ;;; [unmention-substed-st (unmentioned-substed-form mentioned-var domain-enforced-st)]
+        [unmention-substed-st  domain-enforced-st] 
         [shrinked-st (shrink-away domain-enforced-st current-vars v)]
         )
         (wrap-state-stream shrinked-st)
