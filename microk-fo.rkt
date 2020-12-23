@@ -389,7 +389,7 @@
 )
 
 ;;; streams
-(struct bind   (scope bind-s bind-g)          #:prefab)
+(struct bind   (bind-s bind-g)          #:prefab)
 (struct mplus  (mplus-s1 mplus-s2)      #:prefab)
 (struct pause  (pause-state pause-goal) #:prefab)
 (struct mapped-stream (f stream) #:prefab)
@@ -494,7 +494,7 @@
      (step (mplus (pause st g1)
                   (pause st g2))))
     ((conj g1 g2)
-     (step (bind (state-scope st) (pause st g1) g2)))
+     (step (bind (pause st g1) g2)))
     ((relate thunk _)
      (pause st (thunk)))
     ((== t1 t2) (unify t1 t2 st))
@@ -519,7 +519,16 @@
       (wrap-state-stream (check-as-inf-type-disj types t st)))
     ((ex v gn) 
       ;;; TODO: make scope a ordered set (or just a list)
-      (start (state-scope-update st (lambda (scope) (set-add scope v))) gn))
+      (let* (
+          [add-to-scope (lambda (scope) (set-add scope v))]
+          [remove-from-scope-stream 
+            (lambda (st) 
+              (wrap-state-stream (state-scope-update st (lambda (scope) (set-remove scope v)) )))]
+          [scoped-st (state-scope-update st (lambda (scope) (set-add scope v)))]
+          [solving-gn (pause scoped-st gn)]
+          [remove-scoped-stream (mapped-stream remove-from-scope-stream solving-gn)]
+          )
+        remove-scoped-stream))
     ;;; forall is tricky, 
     ;;;   we first use simplification to
     ;;;   we first need to consider forall as just another fresh
@@ -537,7 +546,7 @@
                       (debug-dump "\n one solution: ~a" st)
                       (clear-about st (list->set (state-scope st)) var))]
           ;;; [(Bottom) (wrap-state-stream st)] 
-          [_ (bind-forall (state-scope st) 
+          [_ (bind-forall (set-add (state-scope st) var)
                           (TO-DNF (TO-NON-Asymmetric (pause st (ex var (conj domain_ goal)))))  
                           var 
                           (forall var domain_ goal))]
@@ -559,13 +568,13 @@
               (cons (car s1)
                     (mplus s2 (cdr s1))))
              (else (mplus s2 s1)))))
-    ((bind scope s g)
+    ((bind s g)
      (let ((s (if (mature? s) s (step s))))
        (cond ((not s) #f)
              ((pair? s)
-              (step (mplus (pause (state-scope-set (car s) scope) g)
-                           (bind scope (cdr s) g))))
-             (else (bind scope s g)))))
+              (step (mplus (pause (car s) g)
+                           (bind  (cdr s) g))))
+             (else (bind s g)))))
     ((to-dnf st mark)
       ;;; mark is the index
       (and mark
@@ -616,7 +625,8 @@
                    [relative-complemented-goal (relative-complement unmention-substed-st current-vars v)]
                    [shrinked-st (shrink-away unmention-substed-st current-vars v)]
                    [k (begin  (debug-dump "\n initial st: ~a" st)
-                              ;;; (debug-dump "\n unmention-exposed-st: ")(debug-dump unmentioned-exposed-st)
+                              (debug-dump "\n unmention-exposed-st: ~a" unmentioned-exposed-st)
+                              (debug-dump "\n domain-enforced-st: ~a" domain-enforced-st)
                               (debug-dump "\n unmention-substed-st: ~a" unmention-substed-st)
                               (debug-dump "\n shrinked-st on ~a: ~a" v shrinked-st) 
                               (debug-dump "\n relative-complemented-goal: ~a" relative-complemented-goal)
@@ -1409,7 +1419,7 @@
         [unmention-substed-st (unmentioned-substed-form mentioned-var domain-enforced-st)] 
         [shrinked-st (shrink-away domain-enforced-st current-vars v)]
         )
-        (wrap-state-stream (state-scope-update shrinked-st (lambda (scope) (set-remove scope v))))
+        (wrap-state-stream shrinked-st)
         ))
   (mapped-stream map-clear-about dnf-sym-stream)
 )
