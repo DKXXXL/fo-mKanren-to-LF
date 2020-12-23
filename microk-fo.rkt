@@ -981,35 +981,6 @@
   
 )
 
-;;; make sure there is no cons on each side of equation
-;;;  by transforming each equations to two sub equations
-;;; List of pair of terms -> List of pair of terms
-(define (eliminate-cons subs)
-  (define (tcar-eq eq) 
-    (define res (map tcar eq))
-    (match res [(cons _ (var _)) (cons (cdr res) (car res))] [_ res])
-  )
-  (define (tcdr-eq eq) 
-    (define res (map tcdr eq))
-    (match res [(cons _ (var _)) (cons (cdr res) (car res))] [_ res])
-  )
-  (define (each-eliminate-cons single-eq) (list (tcar-eq single-eq) (tcdr-eq single-eq)))
-  (match subs
-    [(cons head-eq rest) 
-      (match head-eq 
-        [(cons (cons _ _) rhs) 
-          #:when (not (pair? rhs))
-            (append (each-eliminate-cons head-eq) rest)]
-        [(cons lhs (cons _ _))
-          #:when (not (pair? lhs)) 
-            (append (each-eliminate-cons head-eq) rest)]
-        [_ (cons head-eq (eliminate-cons rest))]
-        )
-    ]
-    ['() '()]
-  )
-)
-
 
 (define (tcar-eq eq) 
   (define res `(,(tcar (car eq)) . ,(tcar (cdr eq))))
@@ -1318,6 +1289,8 @@
   (define atomics-of-var-unrelated (filter (lambda (x) (not (there-is-var-in (set varx) x))) atomics-of-states) )
   (define complemented-atomics-of-var-related 
     (map complement atomics-of-var-related))
+  ;;;  Note: this following re-application of domain-enforcement is necessary
+  ;;;     
   (define domain-enforced-complemented-atomics-of-var-related 
     (map domain-enforcement-goal complemented-atomics-of-var-related))
   ;;; we are almost done but we need to remove tproj
