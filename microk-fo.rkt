@@ -1148,6 +1148,26 @@
   (unmention-remove-everywhere old-eqs (state-sub-set st '()))
 )
 
+;;; given a state in unmentioned-subst-form and field-projected-form
+;;;   return a state, where 
+;;;     every constraint "about any variables not inside mentioned-vars"
+;;;         will be considered automatically satisfied
+;;;   operationally, we just literally remove those constraints
+;;; precondition: 
+;;;  1. st is in unmentioned-substed-form, domain-enforced-form, field-proj-form
+(define/contract (unmentioned-totally-removed mentioned-vars st)
+  (set? state? . -> . state?)
+  (let* ([domain-enforced-st st]
+         [diseqs (state-diseq domain-enforced-st)]
+         [new-diseq (filter (lambda (p) (not (there-is-var-not-in mentioned-vars p))) diseqs)] 
+         ;; diseqs must be list of singleton list of thing
+         [type-rcd-lst (hash->list (state-typercd domain-enforced-st))]
+         [new-typercd-lst (filter (lambda (v) (not (there-is-var-not-in mentioned-vars v))) type-rcd-lst)]
+         [new-typercd (make-hash new-typercd-lst)])
+    (state-diseq-set 
+      (state-typercd-set domain-enforced-st new-typercd)
+      new-diseq))
+)
 
 
 ;;; DomainEnforcement -- basically currently make sure if term (tproj x car) appear
@@ -1291,15 +1311,7 @@
   
   (define domain-enforced-st st)
   ;;;  we remove none-substed appearances of unmentioned var
-  (define unmentioned-removed-st
-    (let* ([diseqs (state-diseq domain-enforced-st)]
-           [new-diseq (filter (lambda (p) (not (there-is-var-not-in mentioned-vars p))) diseqs)] ;; diseqs must be list of singleton list of thing
-           [type-rcd-lst (hash->list (state-typercd domain-enforced-st))]
-           [new-typercd-lst (filter (lambda (v) (not (there-is-var-not-in mentioned-vars v))) type-rcd-lst)]
-           [new-typercd (make-hash new-typercd-lst)])
-    (state-diseq-set 
-      (state-typercd-set domain-enforced-st new-typercd)
-      new-diseq)))
+  (define unmentioned-removed-st (unmentioned-totally-removed mentioned-vars domain-enforced-st))
   ;;; Step 3 done
   (define atomics-of-states (conj-state->list-of-goals unmentioned-removed-st))
   (define atomics-of-var-related (filter (lambda (x) (there-is-var-in (set varx) x)) atomics-of-states))
@@ -1356,15 +1368,7 @@
   ;;;  we remove none-substed appearances of unmentioned var
   ;;; TODO : abstract this part away -- 
   ;;;   "unmentioned-totally-removed" replace those constraints into True
-  (define unmentioned-removed-st
-    (let* ([diseqs (state-diseq domain-enforced-st)]
-           [new-diseq (filter (lambda (p) (not (there-is-var-not-in mentioned-vars p))) diseqs)] ;; diseqs must be list of singleton list of thing
-           [type-rcd-lst (hash->list (state-typercd domain-enforced-st))]
-           [new-typercd-lst (filter (lambda (v) (not (there-is-var-not-in mentioned-vars v))) type-rcd-lst)]
-           [new-typercd (make-hash new-typercd-lst)])
-    (state-diseq-set 
-      (state-typercd-set domain-enforced-st new-typercd)
-      new-diseq)))
+  (define unmentioned-removed-st (unmentioned-totally-removed mentioned-vars domain-enforced-st))
   ;;; then we eliminate tproj
   (define tproj-eliminated (eliminate-tproj-return-record unmentioned-removed-st))
   (define tproj-eliminated-content (car tproj-eliminated))
