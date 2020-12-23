@@ -1,13 +1,25 @@
 #lang racket
 
 (require "mk-fo.rkt")
+(require racket/format)
 (require errortrace)
 ;;; (require "examples-for-test.rkt")
+
+(require rackunit)
 
 (provide
   (all-defined-out)
   (all-from-out "mk-fo.rkt")
 )
+
+(display "Enabling code coverage, might hurt performance \n")
+(instrumenting-enabled (make-parameter #t))
+(profiling-enabled (make-parameter #t))
+(profiling-record-enabled (make-parameter #t))
+(execute-counts-enabled (make-parameter #t))
+(coverage-counts-enabled (make-parameter #t))
+(printf "Profiling is ~a \n" (profiling-enabled))
+(get-execute-counts)
 
 (display "Running first-order-microKanren-LF tests:")
 (newline)
@@ -42,24 +54,27 @@
   (syntax-rules ()
     ((_ name e-actual e-expected)
      (time (begin
-             (printf "Testing ~a ~s: \n  ~s ~a \n  \n ==> " 
-                      blue-colour name 'e-actual blue-colour-end)
-             (inc-total-tested-number)
-             (let* ((actual e-actual) 
+            ;;;  (printf "Testing ~a ~s: \n  ~s ~a \n  \n ==> " 
+            ;;;           blue-colour name 'e-actual blue-colour-end)
+            ;;;  (inc-total-tested-number)
+             (let* (
+                   (actual e-actual) 
+                   (str-name (~a name))
                    (expected e-expected)
                    (checker-func 
                       (match expected 
-                        ['succeed (lambda (x) (not (null? x)))]
-                        ['fail null?]
-                        [o/w (lambda (x) (equal? x expected))]
+                        ['succeed (lambda (x) (test-false str-name (null? x)))]
+                        ['fail (lambda (x) (test-true str-name (null? x)))]
+                        [o/w (lambda (x) (test-equal? str-name x expected))]
                       ))
                    )
-               (if (checker-func actual)
-                 (begin 
-                    (inc-passed-tested-number) 
-                    (printf "\n ~s " 'success))
-                 (printf "FAILURE\nEXPECTED: ~s\nACTUAL: ~s\n"
-                         expected actual))
+              ;;;  (if (checker-func actual)
+              ;;;    (begin 
+              ;;;       (inc-passed-tested-number) 
+              ;;;       (printf "\n ~s " 'success))
+              ;;;    (printf "FAILURE\nEXPECTED: ~s\nACTUAL: ~s\n"
+              ;;;            expected actual))
+              (checker-func actual)
                          
              ))))))
 
@@ -71,7 +86,7 @@
                 [reg! (hash-set! all-tests-table 'name x)])
             'name)))
     ((_ e-actual e-expected)
-          (let* ([name (gensym '?)]
+          (let* ([name 'e-actual]
                  [x (lambda () (test name e-actual e-expected))]
                  [reg! (hash-set! all-tests-table name x)])
             reg!))
@@ -406,12 +421,14 @@
 ((run 1 (a b) (for-all (x) 
   (disj (=/= x a) (=/= x b)))) . test-reg!=> . 'succeed)
 ; closed world: removing any of the disjuncts should fail
-((run 1 () (for-all (x) 
+(Closed-world-1
+  (run 1 () (for-all (x) 
   (disj* (symbolo x) (numbero x) (stringo x)
          (== x #t) (== x #f) 
          (fresh (r s) (== x (cons r s)))))) . test-reg!=> . 'fail)
 
-((run 1 () (for-all (x) 
+(Closed-world-2
+  (run 1 () (for-all (x) 
   (disj* (symbolo x) (numbero x) (stringo x)
          (== x #t) (== x #f) (== x '())
          (fresh (r s) (== x (cons r s)))))) . test-reg!=> . 'succeed)
@@ -583,16 +600,28 @@
 ;;; 
 
 
-(define (report-current)
-  (printf "\n Passed/Total number of test-cases: ~a/~a" 
-    (passed-tested-number) 
-    (total-tested-number)))
+;;; (define (report-current)
+;;;   (printf "\n Passed/Total number of test-cases: ~a/~a" 
+;;;     (passed-tested-number) 
+;;;     (total-tested-number)))
 
-(define (run-all-tests)
-  (hash-for-each all-tests-table 
-    (lambda (key value) (value)))
-  (report-current)  
+;;; (define (report-coverage)
+;;;   (annotate-covered-file (string->path "tests-fo-LF.rkt"))
+;;; )
+
+(define all-tests
+  (test-suite 
+    "all"
+    (hash-for-each all-tests-table 
+     (lambda (key value) (value)))
   )
+)
+
+;;; (define (run-all-tests)
+;;;   (hash-for-each all-tests-table 
+;;;     (lambda (key value) (value)))
+;;;   ;;; (report-current)
+;;; )
 
 
 (define-syntax run-the-test
@@ -601,7 +630,12 @@
      ((hash-ref all-tests-table 'name)) )
  ))
 
-(run-all-tests)
 
 
 
+;;; 
+
+
+(module+ test
+  (require rackunit/text-ui)
+  (run-tests all-tests))

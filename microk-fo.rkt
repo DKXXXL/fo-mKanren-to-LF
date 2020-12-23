@@ -40,9 +40,14 @@
   )
 
 (require "common.rkt")
+
 (require errortrace)
 
 (instrumenting-enabled #t)
+(profiling-enabled #t)
+(profiling-record-enabled #t)
+(execute-counts-enabled #t)
+(coverage-counts-enabled #t)
 
 
 (struct relate (thunk description)      ;;;#:prefab
