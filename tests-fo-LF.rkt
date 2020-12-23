@@ -12,17 +12,14 @@
   (all-from-out "mk-fo.rkt")
 )
 
-(display "Enabling code coverage, might hurt performance \n")
-(instrumenting-enabled (make-parameter #t))
-(profiling-enabled (make-parameter #t))
-(profiling-record-enabled (make-parameter #t))
-(execute-counts-enabled (make-parameter #t))
-(coverage-counts-enabled (make-parameter #t))
-(printf "Profiling is ~a \n" (profiling-enabled))
-(get-execute-counts)
-
-(display "Running first-order-microKanren-LF tests:")
-(newline)
+;;; (display "Enabling code coverage, might hurt performance \n")
+(instrumenting-enabled #t)
+;;; (profiling-enabled (make-parameter #t))
+;;; (profiling-record-enabled (make-parameter #t))
+;;; (execute-counts-enabled (make-parameter #t))
+;;; (coverage-counts-enabled (make-parameter #t))
+;;; (printf "Profiling is ~a \n" (profiling-enabled))
+;;; (get-execute-counts)
 
 
 (define-values (total-tested-number 
@@ -61,11 +58,11 @@
                    (actual e-actual) 
                    (str-name (~a name))
                    (expected e-expected)
-                   (checker-func 
+                   (checker
                       (match expected 
-                        ['succeed (lambda (x) (test-false str-name (null? x)))]
-                        ['fail (lambda (x) (test-true str-name (null? x)))]
-                        [o/w (lambda (x) (test-equal? str-name x expected))]
+                        ['succeed  (test-false str-name (null? actual))]
+                        ['fail     (test-true str-name (null? actual))]
+                        [o/w       (test-equal? str-name actual expected)]
                       ))
                    )
               ;;;  (if (checker-func actual)
@@ -74,7 +71,7 @@
               ;;;       (printf "\n ~s " 'success))
               ;;;    (printf "FAILURE\nEXPECTED: ~s\nACTUAL: ~s\n"
               ;;;            expected actual))
-              (checker-func actual)
+              checker
                          
              ))))))
 
@@ -83,7 +80,7 @@
     ((_ name e-actual e-expected)
      (define name
           (let* ([x (lambda () (test 'name e-actual e-expected))]
-                [reg! (hash-set! all-tests-table 'name x)])
+                 [reg! (hash-set! all-tests-table 'name x)])
             'name)))
     ((_ e-actual e-expected)
           (let* ([name 'e-actual]
