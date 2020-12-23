@@ -142,6 +142,13 @@
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "type-constraint ~a ~a" (type-constraint-t val) (type-constraint-typeinfo val)))]
+  #:guard (lambda (t typeinfo type-name)
+                    (cond
+                      [(set? typeinfo) 
+                       (values t typeinfo)]
+                      [else (error type-name
+                                   "bad typeinfo: ~e"
+                                   typeinfo)]))
 )
 
 
@@ -503,17 +510,17 @@
     ((not-symbolo t1) 
       (mplus 
         (term-finite-type t1 st)
-        (wrap-state-stream (check-as-inf-type-disj (remove symbol? all-inf-type-label) t1 st)))) 
+        (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label symbol?) t1 st)))) 
     ((numbero t1) (wrap-state-stream (check-as-inf-type number? t1 st)))
     ((not-numbero t1)  
       (mplus 
         (term-finite-type t1 st)
-        (wrap-state-stream (check-as-inf-type-disj (remove number? all-inf-type-label) t1 st)))) 
+        (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label number?) t1 st)))) 
     ((stringo t1) (wrap-state-stream (check-as-inf-type string? t1 st)))
     ((not-stringo t1)  
       (mplus 
         (term-finite-type t1 st)
-        (wrap-state-stream (check-as-inf-type-disj (remove string? all-inf-type-label) t1 st))))
+        (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label string?) t1 st))))
 
     ((type-constraint t types)
       (wrap-state-stream (check-as-inf-type-disj types t st)))
@@ -895,8 +902,8 @@
 (define (pair-or-not-pair-by-axiom vs st)
   (define (decides-pair-goal v) 
     (disj* 
-       (type-constraint v (list pair?)) 
-       (type-constraint v (remove pair? all-inf-type-label))
+       (type-constraint v (set pair?)) 
+       (type-constraint v (set-remove all-inf-type-label pair?))
        (is-of-finite-type v)
     ))
   (define axioms-on-each 
@@ -1145,9 +1152,15 @@
 ;;;   then x is of type pair
 (define (domain-enforcement-st st) ;; (tproj x car.cdr.car) (typeconstant x car) pair
   (define all-tprojs (collect-tprojs st))
+  ;;; (debug-dump "\n    inside domain-enforcement-st all-tprojs: ~a" all-tprojs)
   (define sub (state-sub st))
   ;;; (tproj v path) x state -> state
-  (define (force-as-pair term st) 
+  ;;; given a (possibly complicated) tproj, make st enforce on its domain
+  ;;;   example, if term = x.car.cdr, then (pair? x), (pair x.car) will both be added
+  (define/contract (force-as-pair term st)
+    (tproj? state? . -> . state?)
+
+    ;;; return all the term that are typed pair inside a tproj term
     (define (all-domain-terms x)
       (define v (tproj-v x))
       (define path (tproj-cxr x))
@@ -1163,14 +1176,21 @@
       )
     )
     (define collected-domain-terms (all-domain-terms term))
-    
+    (debug-dump "\n   inside force-as-pair current collected-domain-terms: ~a" collected-domain-terms)
     (for/fold 
       ([acc-st st])
       ([each-projed-term collected-domain-terms])
-      (state-typercd-cst-add acc-st (walk* each-projed-term sub) (set pair?)))
+        (state-typercd-cst-add acc-st (walk* each-projed-term sub) (set pair?))
+    )
   )
 
-  (foldl (lambda (tp st) (force-as-pair tp st)) st (set->list all-tprojs))
+  (for/fold
+    ([acc-st st])
+    ([each-tproj-term all-tprojs])
+    
+      (force-as-pair each-tproj-term st))
+
+  ;;; (foldl (lambda (tp st) (force-as-pair tp st)) st (set->list all-tprojs))
 )
 
 ;;; similar as above, but it deal with goal and returns goal
@@ -1178,7 +1198,7 @@
 (define (domain-enforcement-goal goal)
   (define all-tprojs (collect-tprojs goal))
   ;;; var x goal -> goal
-  (define (force-as-pair v g) (conj g (type-constraint v (list pair?))))
+  (define (force-as-pair v g) (conj g (type-constraint v (set pair?))))
   (foldl (lambda (tp g) (force-as-pair (tproj-v tp) g)) goal (set->list all-tprojs))
 )
 

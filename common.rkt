@@ -47,9 +47,14 @@
 ;;;  extensible record later
 (require struct-update)
 (require racket/contract)
+(require errortrace)
+
+
+(instrumenting-enabled #t)
 
 ;;; set the following to 'ON then we will have debug info
 (define debug-output-info 'ON)
+
 
 ;; Logic variables
 (struct var (name index) ;;;#:prefab
@@ -104,6 +109,17 @@
     ((_ x ...) 
       (begin (debug-dump-w/level 100 x ...) (/ 1 0)))))
 
+(define-syntax assert-or-warn
+  (syntax-rules ()
+    ((_ COND x ...) 
+      (if COND
+        #t
+        (begin (debug-dump-w/level 100 x ...) (/ 1 0)  )))))
+
+(define-syntax assert
+  (syntax-rules ()
+    ((_ COND) 
+      (assert-or-warn COND "Assertion Violated!"))))
 
 
 (let ((index 0))
@@ -248,8 +264,8 @@
 (define (false? v) (equal? v #f))
 ;;; (null? '() )
 
-(define type-label-top (list true? false? null? pair? number? string? symbol?))
-(define all-inf-type-label (list pair? number? string? symbol?))
+(define type-label-top (set true? false? null? pair? number? string? symbol?))
+(define all-inf-type-label (set pair? number? string? symbol?))
 
 
 ;;; TODO: if all of the elements in type set are for the finite, 
@@ -301,7 +317,7 @@
 
 (define (wrap-state-stream st) (and st (cons st #f)))
 
-;;; state x var x (set of) typeinfo -> state
+;;; state x var x (set of/list of) typeinfo -> state
 (define/contract (state-typercd-cst-add st v type-info)
   (state? term? set? . -> . state?)
 
@@ -310,9 +326,9 @@
   (define org (hash-ref typerc v #f))
   (define new-type-info 
     (if org 
-    (hash-set typerc v (set-intersect org type-info))
-    (hash-set typerc v type-info)))
-  (state-typercd-set st typerc)
+      (hash-set typerc v (set-intersect org type-info))
+      (hash-set typerc v type-info)))
+  (state-typercd-set st new-type-info)
 )
 
 (define (stream? x)
@@ -536,13 +552,15 @@
   )
 (define (not-singleton-type x) (not (is-singleton-type x)))
 
-;;; check-as-inf-type-disj: List[inf-type-predicate] x term x state -> state
+;;; check-as-inf-type-disj: set[inf-type-predicate] x term x state -> state
 ;;;  currently it will use predicate as marker
 ;;;  precondition: type?* is never #f, st is never #f
 ;;;   precondition: type?* \subseteq all-inf-type-label
 (define/contract (check-as-inf-type-disj type?* t st)
-  (any? any? ?state? . -> . ?state?)
-  (define inf-type?* (filter not-singleton-type type?*))
+  (set? any? ?state? . -> . ?state?)
+  (assert-or-warn (subset? type?* all-inf-type-label) 
+    "check-as-inf-type-disj cannot handle these type constraints ~a" type?*)
+  (define inf-type?* type?* )
 
   (define infinite-type-checked-state ;;; type : state
     (and st
@@ -587,7 +605,7 @@
                 )
                 (state-typercd-update st (lambda (x) (hash-set x v type?*)))) ) ]
 
-          [v (and (ormap (lambda (x?) (x? v)) inf-type?*) st)]) ))
+          [v (and (ormap (lambda (x?) (x? v)) (set->list inf-type?*)) st)]) ))
     ;;; return the following
     infinite-type-checked-state
 )
