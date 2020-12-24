@@ -811,11 +811,13 @@
       (hash-set htable key value))
   )
 
+  (define subst-mapping (hash->list mapping))
+
   (define (literal-replace-from-after prev-f rec obj)
     (match obj
       [x 
         #:when (hash-ref mapping x #f) 
-        (hash-ref mapping x #f)]
+        (walk* (hash-ref mapping x #f) subst-mapping) ]
       ;;; other extended construct -- like state
       ;;;  very untyped...
       ;;;  (a = a) (type-constrant a (number?))
@@ -873,6 +875,17 @@
 ;;;  unifies each equation one by one
 (define (unifies-equations list-u-v-s st)
   (foldl (lambda (eq st) (car (unify (car eq) (cdr eq) st))) st list-u-v-s)
+)
+
+;;; [(term, term)] -> [(term, term)]
+;;; given a series of equation, make it into a standard subst form (cyclic-free)
+(define (consistent-subst-equation list-u-v-s)
+  (for/fold
+    ([acc-subst '()])
+    ([each-eq list-u-v-s])
+    (match-let* ([(cons u v) each-eq])
+      (unify/sub u v acc-subst))
+  )
 )
 
 ;;; return a set of vars, indicating that those vars, "s" are in the
@@ -961,44 +974,6 @@
   )
   ;;; TODO: figure out why this reverse is necessary! -_-
   (cons (tproj-v x) (construct-sketch (reverse (tproj-cxr x))))
-)
-
-;;; given st x goal -> st x goal
-;;;  with tproj all removed
-(define (eliminate-tproj st goal)
-  ;;; 0. we first collect all occurrence of tproj, collect into a set
-  ;;; 1. we use equation-for-remove-tproj to remove each tproj, 
-  ;;;     and remember what variable each tproj will be mapped to
-  ;;; 2. we then do literal replace to remove tproj occurrences
-  ;;; 3. we use unify-equations to make sure the equations are satisfied
-
-  ;;; the collected tprojs
-  (define all-tprojs (collect-tprojs st))
-  ;;;  the corresponding equation for each tproj
-  (define removing-equations (map equation-for-remove-tproj all-tprojs))
-  ;;; for each equation ((var y) (cons ...)), originated from  (tproj y ...)
-  ;;;   we record ((tproj y ...), (var ...))
-  ;;; (define tproj-map-to (map 
-  ;;;                         (lambda (tproj equ) (cons tproj (tproj_ (car equ) (cdr equ))))
-  ;;;                          all-tprojs removing-equations))
-  (define tproj-mapped-to 
-    (map (lambda (tproj-info equ) (tproj_ (cdr equ) (tproj-cxr tproj-info))) 
-          all-tprojs removing-equations))
-  ;;; we have for each (tproj y ..) a var v standing for it in the context of removing equations
-  ;;; (define tproj-hash-map (make-hash tproj-map-to))
-
-  (define tproj-replaced-st
-    (foldl (lambda (ttproj v st) (literal-replace ttproj v st)) st all-tprojs tproj-mapped-to))
-
-  (define tproj-replaced-goal
-    (foldl (lambda (ttproj v g) (literal-replace ttproj v g)) goal all-tprojs tproj-mapped-to))
-  
-  (define tproj-removed-st
-    (unifies-equations removing-equations tproj-replaced-st)
-  )
-
-  `(,tproj-removed-st . ,tproj-replaced-goal)
-  
 )
 
 
@@ -1305,15 +1280,20 @@
 (define (eliminate-tproj-return-record anything) ;; tproj x car.cdr.car ;; x = (cons (cons _ (cons _ _)) _)
   (define all-tprojs (set->list (collect-tprojs anything)))
   (define all-tproj-removing-eqs (map equation-for-remove-tproj all-tprojs))
+  ;;; Interestingly, at this stage, these equations are not "unified"
+  ;;;   basically it can have ( a == (x y . z)) and (a == (f . d)), then if the 
+  ;;;     later one is used for subst, then we cannot, proceed for (cdr cdr cdr a)
+  (define unified-all-tproj-removing-eqs (consistent-subst-equation all-tproj-removing-eqs) )
   ;;; then we do huge literal-replace
   ;;;  the literal-replace respects 
-  (define tproj-removed (literal-replace* (make-hash all-tproj-removing-eqs) anything))
-  ;;; (debug-dump "\n eliminate-tproj-return-record's input: ~a" anything)
-  ;;; (debug-dump "\n eliminate-tproj-return-record's input's tprojs: ~a" all-tprojs)
+  (define tproj-removed (literal-replace* (make-hash unified-all-tproj-removing-eqs) anything))
+  (debug-dump "\n eliminate-tproj-return-record's input: \n ~a" anything)
+  (debug-dump "\n eliminate-tproj-return-record's input's tprojs: \n ~a" all-tprojs)
 
-  ;;; (debug-dump "\n eliminate-tproj-return-record's using equation: ~a" all-tproj-removing-eqs)
-  ;;; ;;; TODO : make sure that the constraint about (tproj x car) is transferred to the newly introduced var
-  ;;; (debug-dump "\n eliminate-tproj-return-record's return: ~a" tproj-removed)
+  (debug-dump "\n eliminate-tproj-return-record's using initial equation: \n ~a" all-tproj-removing-eqs)
+  (debug-dump "\n eliminate-tproj-return-record's using unified equation: \n ~a" unified-all-tproj-removing-eqs)
+  ;;; TODO : make sure that the constraint about (tproj x car) is transferred to the newly introduced var
+  (debug-dump "\n eliminate-tproj-return-record's return: \n ~a" tproj-removed)
   
   ;;; TODO : make it into a contract
   (let* ([all-tproj (collect-tprojs tproj-removed)])
@@ -1321,7 +1301,7 @@
         (raise-and-warn "\n tproj elimination-failed ~a \n -> \n ~a \n gen-context of ~a \n" anything tproj-removed all-tproj-removing-eqs)
 
         'pass))
-  (cons tproj-removed all-tproj-removing-eqs)
+  (cons tproj-removed unified-all-tproj-removing-eqs)
 )
 
 

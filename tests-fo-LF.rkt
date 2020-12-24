@@ -489,7 +489,10 @@
 (NestedCons-1
   (run 1 (c a b) (for-all (x) (=/= c (cons a (cons b x)))))
 . test-reg!=> . 'succeed)
-((run 1 (c a b) (for-all (y) (=/= c (cons a (cons b y)))) )
+
+;;; The following current has bug
+(NestedCons-2
+  (run 1 (c a b) (for-all (y) (=/= c (cons a (cons b y)))) )
 . test-reg!=> . 'succeed)
 ((run 1 () (for-all (x) (=/= x (cons x x))))
 . test-reg!=> . 'succeed)
@@ -597,29 +600,29 @@
 
 
 
-(Teenage-sort-1-Unhalt
-  (run 1 () (for-all (x) (sort-boolo (list x #f) (list #f x))))
+(Teenage-sort-1
+  (run 1 () (for-bound (x) (boolo x) (sort-boolo (list x #f) (list #f x))))
 
-. test-reg!=>X . 'succeed
+. test-reg!=> . 'succeed
 )
 
 (Teenage-sort-2
-  (run 1 () (for-all (x) (sort-boolo (list #f x) (list #f x))))
+  (run 1 () (for-bound (x) (boolo x) (sort-boolo (list #f x) (list #f x))))
 . test-reg!=> . 'succeed
 )
 
 (Teenage-sort-3
-  (run 1 () (for-all (x) (sort-boolo (list x #f #f) (list #f #f x))))
+  (run 1 () (for-bound (x) (boolo x) (sort-boolo (list x #f #f) (list #f #f x))))
 . test-reg!=> . 'succeed
 )
 
 (Teenage-sort-4
-  (run 1 () (for-all (x) (sort-boolo (list #f x #f) (list #f #f x))))
+  (run 1 () (for-bound (x) (boolo x) (sort-boolo (list #f x #f) (list #f #f x))))
 . test-reg!=> . 'succeed
 )
 
 (Teenage-sort-5
-  (run 1 () (for-all (x) (sort-boolo (list #f #f x) (list #f #f x))))
+  (run 1 () (for-bound (x) (boolo x) (sort-boolo (list #f #f x) (list #f #f x))))
 . test-reg!=> . 'succeed
 )
 
