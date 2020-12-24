@@ -454,13 +454,14 @@
 (struct bind-forall   (scope first-attempt-s dv bind-g)          #:prefab)
 
 
-(define (mature? s) 
+(define (mature? s)
     (or (not s) (pair? s)))
 
 (define (not-state? x) (not (state? x)))
 
 (define/contract (mature s)
     (not-state? . -> . any?)
+    (assert-or-warn (not-state? s) "It is not supposed to be a state here")
     ;;; (debug-dump "\n maturing: ~a" s)
     (if (mature? s) s (mature (step s))))
   
@@ -535,7 +536,7 @@
           [solving-gn (pause scoped-st gn)]
           [remove-scoped-stream (mapped-stream remove-from-scope-stream solving-gn)]
           )
-        remove-scoped-stream))
+        (step remove-scoped-stream)))
     ;;; forall is tricky, 
     ;;;   we first use simplification to
     ;;;   we first need to consider forall as just another fresh
@@ -567,6 +568,7 @@
   
 
 (define (step s)
+  (debug-dump "\n       step: I am going through ~a" s)
   (match s
     ((mplus s1 s2)
      (let ((s1 (if (mature? s1) s1 (step s1))))
@@ -1176,7 +1178,7 @@
       )
     )
     (define collected-domain-terms (all-domain-terms term))
-    (debug-dump "\n   inside force-as-pair current collected-domain-terms: ~a" collected-domain-terms)
+    ;;; (debug-dump "\n   inside force-as-pair current collected-domain-terms: ~a" collected-domain-terms)
     (for/fold 
       ([acc-st st])
       ([each-projed-term collected-domain-terms])

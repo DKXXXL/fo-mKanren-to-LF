@@ -41,6 +41,8 @@
   debug-dump-w/level
   debug-dump
   raise-and-warn
+  assert-or-warn
+  assert
   )
 
 ;;; bear with it now.... let me search if there is
@@ -53,7 +55,7 @@
 (instrumenting-enabled #t)
 
 ;;; set the following to 'ON then we will have debug info
-(define debug-output-info 'ON)
+(define debug-output-info 'OFF)
 
 
 ;; Logic variables
@@ -616,7 +618,7 @@
 (define/contract (check-as-inf-type type? t st) 
   (any? any? ?state? . -> . ?state?)
   (if (and type? st)
-    (check-as-inf-type-disj (list type?) t st)
+    (check-as-inf-type-disj (set type?) t st)
     st)
 )
 
