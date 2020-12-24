@@ -639,12 +639,13 @@
                    
                    [relative-complemented-goal (relative-complement unmention-substed-st current-vars v)]
                    [shrinked-st (shrink-away unmention-substed-st current-vars v)]
-                   [k (begin  (debug-dump "\n initial st: ~a" st)
+                   [k (begin  (debug-dump "\n domain ~a" domain)
+                              (debug-dump "\n initial st: ~a" st)
                               (debug-dump "\n field-projected-st: ~a" field-projected-st)
                               (debug-dump "\n domain-enforced-st: ~a" domain-enforced-st)
                               (debug-dump "\n unmention-substed-st: ~a" unmention-substed-st)
                               (debug-dump "\n shrinked-st on ~a: ~a" v shrinked-st) 
-                              (debug-dump "\n relative-complemented-goal: ~a" relative-complemented-goal)
+                              (debug-dump "\n relative-complemented-goal: ~a" (syntactical-simplify relative-complemented-goal))
                               ;;; (debug-dump "\n complemented goal: ")(debug-dump st-scoped-w/ov)
                               ;;; (debug-dump "\n next state ") (debug-dump next-st) 
                               ;;; (debug-dump "\n search with domain on var ")
@@ -927,10 +928,10 @@
 ;;; return an equivalent stream of state, given a state
 ;;;  but in each state, there is no assymetric disequality
 ;;;     i.e. (var s) =/= (cons ...)
-;;;   This is usually where bugs happening 
+;;;   This is usually where unhalting happening 
 (define (remove-assymetry-in-diseq st)
   (define asymmetric-vars (record-vars-on-asymmetry-in-diseq st))
-  (debug-dump "\n assymetric-st:  ~a \n asymmetric-vars: ~a" st asymmetric-vars)
+  ;;; (debug-dump "\n assymetric-st:  ~a \n asymmetric-vars: ~a" st asymmetric-vars)
   (if (equal? (length asymmetric-vars) 0)
     (wrap-state-stream st)
     (mapped-stream remove-assymetry-in-diseq (pair-or-not-pair-by-axiom asymmetric-vars st))))
