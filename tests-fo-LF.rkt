@@ -222,6 +222,12 @@
   run-1-succeed
 )
 
+(test-reg! Trivial-Disjunction-Number
+  (run 1 () (for-all (y) (disj* (numbero y) (not-numbero y) )))
+  run-1-succeed
+)
+
+
 ;;; BUGFIX: the following currently unhalt 
 ;;;   if set to run 1
 ;;; BUGFIX: change the following into two runs
@@ -491,17 +497,31 @@
 . test-reg!=> . 'succeed)
 ((run 1 () (for-all (z) (fresh ( r ) (=/= r z) (numbero r))))
 . test-reg!=> . 'succeed)
-;;; ((run 1 () (for-all-bound (z) [numbero z] (=/= z (cons 1 2))))
-;;; . test-reg!=> . 'succeed)
-;;; ((run 1 () (for-all-bound (z) [stringo z] (=/= z (cons 1 2))))
-;;; . test-reg!=> . 'succeed)
-;;; ((run 1 () (for-all-bound (z) [symbolo z] (=/= z (cons 1 2))))
-;;; . test-reg!=> . 'succeed)
-;;; ((run 1 () (for-all-bound (z) [(for-all-bound (x) (== x z))] (Bottom)) )
-;;; . test-reg!=> . 'succeed)
-;;; ((run 1 () (for-all-bound (z) [(for-all-bound (x) (=/= x z))] (Bottom)) )
-;;; . test-reg!=> . 'succeed)
+(For-bound-Trivial-1
+  (run 1 () (for-bound (z) [numbero z] (=/= z (cons 1 2))))
+. test-reg!=> . 'succeed)
+((run 1 () (for-bound (z) [stringo z] (=/= z (cons 1 2))))
+. test-reg!=> . 'succeed)
+((run 1 () (for-bound (z) [symbolo z] (=/= z (cons 1 2))))
+. test-reg!=> . 'succeed)
 
+;;; TODO: Higher-ranked for-all
+;;; ((run 1 () (for-bound (z) [(for-bound (x) (== x z))] (Bottom)) )
+;;; . test-reg!=> . 'succeed)
+;;; ((run 1 () (for-bound (z) [(for-bound (x) (=/= x z))] (Bottom)) )
+;;; . test-reg!=> . 'succeed)
+(For-bound-Identity-1
+  (run 1 () (for-bound (z) [numbero z] (numbero z) ))
+. test-reg!=> . 'succeed)
+
+(For-bound-Identity-2
+  (run 1 () (for-bound (z) [numbero z] (symbolo z) ))
+. test-reg!=> . 'fail)
+
+
+(For-bound-Vacuous-1
+  (run 1 () (for-bound (z) [z . =/= . z] (Bottom) ))
+. test-reg!=> . 'succeed)
 
 ;;; baby sorting
 

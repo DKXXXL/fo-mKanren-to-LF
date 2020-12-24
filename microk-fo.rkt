@@ -24,6 +24,8 @@
   (struct-out bind)
   (struct-out pause)
   for-all
+  for-bound
+  for-bounds
   step
   mature
   mature?
@@ -1086,7 +1088,7 @@
         (forall x (Top) (for-all (y ...) g0 gs ...))))
   ))
 
-(define-syntax for-bound
+(define-syntax for-bounds
   (syntax-rules ()
     ((_ (x ...) () g0 gs ...)
       (for-all (x ...) g0 gs ...))
@@ -1098,6 +1100,17 @@
     ((_ (k x ...) (cond0 conds ...) g0 gs ...)
       (let ( [k (var/fresh 'k)] ) 
         (forall k (Top) (for-bound (x ...) (cond0 conds ...) g0 gs ... )) )
+    )))
+
+(define-syntax for-bound
+  (syntax-rules ()
+    ((_ (x) conds g0 gs ...)
+      (let ( [x (var/fresh 'x)] ) 
+        (forall x conds (conj* g0 gs ...)) ) )
+  
+    ((_ (k x ...) conds g0 gs ...)
+      (let ( [k (var/fresh 'k)] ) 
+        (forall k (Top) (for-bound (x ...) conds g0 gs ... )) )
     )))
 
 ;;; ;;; given (a series of) variable(s) we will assert the goal on all its possible
