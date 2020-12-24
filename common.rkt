@@ -599,7 +599,7 @@
 
                 ;;; if it is empty list then we failed
                   (match intersected
-                    ['() #f]
+                    [(? set-empty?) #f]
                     ;; this part is very weird... as we can see most fresh is not really existential
                     ;;;   quantifier because they don't specify scope!!
                     ;;;  here it is even more complicated ... what is the scope of a b?
