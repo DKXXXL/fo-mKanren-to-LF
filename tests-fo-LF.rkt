@@ -413,7 +413,8 @@
 ; Outside of the for-all: a, b, c
 ; Inside of the for-all: r, s, t
 ((run 1 () (for-all (x) (== x x))) . test-reg!=> . 'succeed)
-((run 1 (a) (for-all (x) (== x a))) . test-reg!=> . 'fail)
+(Trivial-Wrong-1
+  (run 1 (a) (for-all (x) (== x a))) . test-reg!=> . 'fail)
 ((run 1 (a) (for-all (x) (fresh (s) (== a s)))) . test-reg!=> . 'succeed)
 ((run 1 (a) (for-all (x) (fresh (s) (== x s)))) . test-reg!=> . 'succeed)
 ((run 1 (a) (for-all (x) (fresh (s t) (== s `(,x . ,t))))) . test-reg!=> . 'succeed)

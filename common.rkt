@@ -43,6 +43,7 @@
   raise-and-warn
   assert-or-warn
   assert
+  valid-type-constraints-check
   )
 
 ;;; bear with it now.... let me search if there is
@@ -55,7 +56,7 @@
 (instrumenting-enabled #t)
 
 ;;; set the following to 'ON then we will have debug info
-(define debug-output-info 'OFF)
+(define debug-output-info 'ON)
 
 
 ;; Logic variables
@@ -342,6 +343,17 @@
 
 (define (any? _) #t)
 
+;;; check if a given state has a valid/consistent type constraints
+;;;   if not, return #f
+(define/contract (valid-type-constraints-check st)
+  (state? . -> . any?)
+  (define typecses (state-typercd st))
+  (define old-st (state-typercd-set st '()))
+  (for/fold
+    ([acc-st st])
+    ([each-var-types (hash->list typecses)])
+    (check-as-inf-type-disj (cdr each-var-types) (car each-var-types) acc-st)))
+
 (define/contract (unify u v st)
   (any? any? state? . -> . stream?)
   ;;; inequality-recheck :: state -> state
@@ -371,7 +383,8 @@
               [erased-type-state (state-typercd-set unified-state erased-htable)]
               ;;; TODO: check-as-inf-type-disj might have corner 
               ;;;   case where first element is null
-              [check-as-inf-type-disj*-c (lambda (type?* t st) (if (and type?* st) (check-as-inf-type-disj type?* t st) st))]
+              [check-as-inf-type-disj*-c 
+                (lambda (type?* t st) (if (and type?* st) (check-as-inf-type-disj type?* t st) st))]
               [checked-type-state (foldl check-as-inf-type-disj*-c
                                          erased-type-state 
                                          new-vars-types new-vars)]
@@ -562,11 +575,16 @@
   (set? any? ?state? . -> . ?state?)
   (assert-or-warn (subset? type?* all-inf-type-label) 
     "check-as-inf-type-disj cannot handle these type constraints ~a" type?*)
+  ;;; (assert-or-warn (not (set-empty? type?*) ) 
+  ;;;   "check-as-inf-type-disj cannot handle when type?* is empty")
+  
   (define inf-type?* type?* )
 
   (define infinite-type-checked-state ;;; type : state
-    (and st
-    (match (walk* t (state-sub st))
+    (and 
+      st 
+      (not (set-empty? inf-type?*))
+      (match (walk* t (state-sub st))
           [(var name index) 
             ;;; check if there is already typercd for index on symbol
             (let* ([v (var name index)]

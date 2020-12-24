@@ -480,6 +480,12 @@
   ;;; (debug-dump "TO-DNF computing \n")
   (mapped-stream (lambda (st) (to-dnf st (get-state-DNF-initial-index st))) stream))
 
+;;; make sure the state has valid type
+(define (CHECK-TYPE-VALID stream)
+  (define (valid-type-stream st) (wrap-state-stream (valid-type-constraints-check st)))
+  (mapped-stream valid-type-stream stream)
+)
+
 (define (TO-NON-Asymmetric stream)
   ;;; (debug-dump "TO-NON-Asymmetric computing \n")
   (mapped-stream remove-assymetry-in-diseq stream)
@@ -555,7 +561,7 @@
                       (clear-about st (list->set (state-scope st)) var))]
           ;;; [(Bottom) (wrap-state-stream st)] 
           [_ (bind-forall (set-add (state-scope st) var)
-                          (TO-DNF (TO-NON-Asymmetric (pause st (ex var (conj domain_ goal)))))  
+                          (TO-DNF (CHECK-TYPE-VALID (TO-NON-Asymmetric (pause st (ex var (conj domain_ goal))))) )  
                           var 
                           (forall var domain_ goal))]
         )
@@ -568,7 +574,7 @@
   
 
 (define (step s)
-  (debug-dump "\n       step: I am going through ~a" s)
+  ;;; (debug-dump "\n       step: I am going through ~a" s)
   (match s
     ((mplus s1 s2)
      (let ((s1 (if (mature? s1) s1 (step s1))))
@@ -645,11 +651,12 @@
                               ;;; (debug-dump v) (debug-dump " in ") (debug-dump cgoal) 
                               (debug-dump "\n"))
                               ]
+                    [valid-shrinked-state (valid-type-constraints-check shrinked-st)] ;; clear up the incorrect state information
                     )
               ;;; forall x (== x 3) (== x 3)
               ;;;   forall x (conj (== x 3) (=/= x 3)) (== x 3)
               ;;;  forall x () (symbolo x) /\ (not-symbolo x)
-              (step (mplus (pause shrinked-st (forall v (conj relative-complemented-goal domain) goal))
+              (step (mplus (pause valid-shrinked-state (forall v (conj relative-complemented-goal domain) goal))
                            (bind-forall current-vars (cdr s) v (forall v domain goal)))))) ;;; other possible requirements search
 
         (else (bind-forall current-vars s v (forall v domain goal))))
