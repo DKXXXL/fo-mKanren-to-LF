@@ -542,7 +542,7 @@
           [solving-gn (pause scoped-st gn)]
           [remove-scoped-stream (mapped-stream remove-from-scope-stream solving-gn)]
           )
-        (step remove-scoped-stream)))
+         remove-scoped-stream))
     ;;; forall is tricky, 
     ;;;   we first use simplification to
     ;;;   we first need to consider forall as just another fresh
@@ -927,9 +927,10 @@
 ;;; return an equivalent stream of state, given a state
 ;;;  but in each state, there is no assymetric disequality
 ;;;     i.e. (var s) =/= (cons ...)
+;;;   This is usually where bugs happening 
 (define (remove-assymetry-in-diseq st)
   (define asymmetric-vars (record-vars-on-asymmetry-in-diseq st))
-  ;;; (debug-dump "\n assymetric-st:  ~a \n asymmetric-vars: ~a" st asymmetric-vars)
+  (debug-dump "\n assymetric-st:  ~a \n asymmetric-vars: ~a" st asymmetric-vars)
   (if (equal? (length asymmetric-vars) 0)
     (wrap-state-stream st)
     (mapped-stream remove-assymetry-in-diseq (pair-or-not-pair-by-axiom asymmetric-vars st))))
@@ -1384,7 +1385,7 @@
 ;;;   also remove things from scope
 (define/contract (clear-about state scope v)
   (state? set? var? . -> . any?)
-  (define dnf-sym-stream (TO-DNF (TO-NON-Asymmetric (wrap-state-stream state))))
+  (define dnf-sym-stream (TO-DNF (CHECK-TYPE-VALID (TO-NON-Asymmetric (wrap-state-stream state)))))
 
   (define mentioned-var (set-remove scope v))
   (define (map-clear-about st)

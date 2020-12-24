@@ -51,8 +51,8 @@
   (syntax-rules ()
     ((_ name e-actual e-expected)
      (time (begin
-             (printf "Testing ~a ~s: \n  ~s ~a \n  \n ==> " 
-                      blue-colour name 'e-actual blue-colour-end)
+            ;;;  (printf "Testing ~a ~s: \n  ~s ~a \n  \n ==> " 
+            ;;;           blue-colour name 'e-actual blue-colour-end)
             ;;;  (inc-total-tested-number)
              (let* (
                    (actual e-actual) 

@@ -56,7 +56,7 @@
 (instrumenting-enabled #t)
 
 ;;; set the following to 'ON then we will have debug info
-(define debug-output-info 'ON)
+(define debug-output-info 'OFF)
 
 
 ;; Logic variables
@@ -348,9 +348,9 @@
 (define/contract (valid-type-constraints-check st)
   (state? . -> . any?)
   (define typecses (state-typercd st))
-  (define old-st (state-typercd-set st '()))
+  (define old-st (state-typercd-set st (hash)))
   (for/fold
-    ([acc-st st])
+    ([acc-st old-st])
     ([each-var-types (hash->list typecses)])
     (check-as-inf-type-disj (cdr each-var-types) (car each-var-types) acc-st)))
 
@@ -604,8 +604,7 @@
                     ;;;   quantifier because they don't specify scope!!
                     ;;;  here it is even more complicated ... what is the scope of a b?
                     ;;;    if we don't know the scope, will it cause problem when generating trace?
-                    [(list pair?_)
-                      #:when (equal? pair?_ pair?)
+                    [(? (lambda (the-set) (equal? the-set (set pair?))))
                       (let* ([t1 (var/fresh 't1)]
                              [t2 (var/fresh 't2)]
                              [st-unify-updated 
