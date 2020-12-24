@@ -51,8 +51,8 @@
   (syntax-rules ()
     ((_ name e-actual e-expected)
      (time (begin
-            ;;;  (printf "Testing ~a ~s: \n  ~s ~a \n  \n ==> " 
-            ;;;           blue-colour name 'e-actual blue-colour-end)
+             (printf "Testing ~a ~s: \n  ~s ~a \n  \n ==> " 
+                      blue-colour name 'e-actual blue-colour-end)
             ;;;  (inc-total-tested-number)
              (let* (
                    (actual e-actual) 
@@ -235,7 +235,7 @@
     (disj* (not-pairo a) (fresh (z) (== a (cons z z))))))
 
 ;;; ((not-pairo a) (_.0 . _0) ...)
-. test-reg!=>X . 'succeed
+. test-reg!=> . 'succeed
 )
 
 ((run 1 (a) 
@@ -260,7 +260,7 @@
            (fresh (m n) (not-symbolo m) (== a (cons m n)) ))
            ))
 ;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
-. test-reg!=>X . 'succeed 
+. test-reg!=> . 'succeed 
 )
 
 ;;; this unhalt even set to 1
@@ -290,7 +290,7 @@
                    )
             )) )
 ;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
-. test-reg!=>X . 'succeed 
+. test-reg!=> . 'succeed 
 )
 
 (Complicated-4-1
@@ -305,7 +305,7 @@
                    )
             )) )
 ;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
-. test-reg!=>X . 'succeed 
+. test-reg!=> . 'succeed 
 )
 
 
@@ -321,7 +321,7 @@
                    )
             )) )
 ;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
-. test-reg!=>X . 'succeed 
+. test-reg!=> . 'succeed 
 )
 
 (Complicated-4-1-2
@@ -350,7 +350,7 @@
                    )
             )) )
 ;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
-. test-reg!=>X . 'fail
+. test-reg!=> . 'fail
 )
 
 (Complicated-4-3
@@ -365,7 +365,7 @@
             ;;;        )
             )) )
 ;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
-. test-reg!=>X . 'succeed 
+. test-reg!=> . 'succeed 
 )
 
 (Complicated-5
@@ -440,7 +440,7 @@
   (run 1 () (for-all (x) 
   (disj* (symbolo x) (numbero x) (stringo x)
          (== x #t) (== x #f) (== x '())
-         (fresh (r s) (== x (cons r s)))))) . test-reg!=>X . 'succeed)
+         (fresh (r s) (== x (cons r s)))))) . test-reg!=> . 'succeed)
 
 ; cons + car/cdr: all these should 'succeed
 ((run 1 () 
@@ -467,7 +467,7 @@
     (disj* (=/= (cons x r) s)
            (appendo (list x) r s))))) 
     ;;; [s == (x . r)] ==> appendo (list x) r s
-  . test-reg!=>X . 'succeed )
+  . test-reg!=> . 'succeed )
 ;; not supported yet:
 ;(run 1 () (for-all (x) (fresh (r s)
 ;    (implies (appendo (list x) r s)
@@ -480,7 +480,8 @@
 )
 
 
-((run 1 (c a b) (for-all (x) (=/= c (cons a (cons b x)))))
+(NestedCons-1
+  (run 1 (c a b) (for-all (x) (=/= c (cons a (cons b x)))))
 . test-reg!=> . 'succeed)
 ((run 1 (c a b) (for-all (y) (=/= c (cons a (cons b y)))) )
 . test-reg!=> . 'succeed)

@@ -56,7 +56,7 @@
 (instrumenting-enabled #t)
 
 ;;; set the following to 'ON then we will have debug info
-(define debug-output-info 'ON)
+(define debug-output-info 'OFF)
 
 
 ;; Logic variables
@@ -575,6 +575,8 @@
   (set? any? ?state? . -> . ?state?)
   (assert-or-warn (subset? type?* all-inf-type-label) 
     "check-as-inf-type-disj cannot handle these type constraints ~a" type?*)
+  ;;; TODO: fixing the case when type?* is actually empty
+  ;;;     if it is empty, then we state that t is of finite type
   ;;; (assert-or-warn (not (set-empty? type?*) ) 
   ;;;   "check-as-inf-type-disj cannot handle when type?* is empty")
   
@@ -584,6 +586,8 @@
     (and 
       st 
       (not (set-empty? inf-type?*))
+      ;;; TODO: fixing the case when type?* is actually empty
+      ;;;     if it is empty, then we state that t is of finite type
       (match (walk* t (state-sub st))
           [(var name index) 
             ;;; check if there is already typercd for index on symbol
