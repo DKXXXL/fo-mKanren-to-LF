@@ -1070,19 +1070,44 @@
 ;;; )
 
 ;;; will declare variable, and assert goal on all its domain
+;;; (define-syntax for-all
+;;;   (syntax-rules ()
+;;;     ((_ (x ...) g0 gs ...)
+;;;      (let ((x (var/fresh 'x)) ...) (given (x ...) (conj* g0 gs ...)) ))))
+
 (define-syntax for-all
   (syntax-rules ()
-    ((_ (x ...) g0 gs ...)
-     (let ((x (var/fresh 'x)) ...) (given (x ...) (conj* g0 gs ...)) ))))
+    ((_ (x) g0 gs ...)
+      (let ( [x (var/fresh 'x)] ) 
+        (forall x (Top) (conj* g0 gs ...))))
 
-;;; given (a series of) variable(s) we will assert the goal on all its possible
-;;;  domain
-;;;   using the original variables
-(define-syntax given
+    ((_ (x y ...) g0 gs ...)
+      (let ( [x (var/fresh 'x)] ) 
+        (forall x (Top) (for-all (y ...) g0 gs ...))))
+  ))
+
+(define-syntax for-bound
   (syntax-rules ()
-    ((_ () g) g)
-    ((_ (x xs ...) g)
-      (forall x (Top) (given (xs ...) g)))))
+    ((_ (x ...) () g0 gs ...)
+      (for-all (x ...) g0 gs ...))
+
+    ((_ (x) (cond0 conds ...) g0 gs ...)
+      (let ( [x (var/fresh 'x)] ) 
+        (forall x (conj* cond0 conds ...) (conj* g0 gs ...)) ) )
+  
+    ((_ (k x ...) (cond0 conds ...) g0 gs ...)
+      (let ( [k (var/fresh 'k)] ) 
+        (forall k (Top) (for-bound (x ...) (cond0 conds ...) g0 gs ... )) )
+    )))
+
+;;; ;;; given (a series of) variable(s) we will assert the goal on all its possible
+;;; ;;;  domain
+;;; ;;;   using the original variables
+;;; (define-syntax given
+;;;   (syntax-rules ()
+;;;     ((_ () g) g)
+;;;     ((_ (x xs ...) g)
+;;;       (forall x (Top) (given (xs ...) g)))))
 
 
 

@@ -577,11 +577,11 @@
 
 
 
-;;; (Teenage-sort-1
-;;;   (run 1 () (for-all (x) (sort-boolo (list x #f) (list #f x))))
+(Teenage-sort-1-Unhalt
+  (run 1 () (for-all (x) (sort-boolo (list x #f) (list #f x))))
 
-;;; . test-reg!=> . 'succeed
-;;; )
+. test-reg!=>X . 'succeed
+)
 
 (Teenage-sort-2
   (run 1 () (for-all (x) (sort-boolo (list #f x) (list #f x))))
