@@ -56,7 +56,7 @@
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "~a" (relate-description val)))]
+     (fprintf output-port "{user-relation ~a}" (relate-description val)))]
 )
 (struct ==     (t1 t2)
   #:transparent               
@@ -88,7 +88,7 @@
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "∀~a. ~a" (forall-varname val)  (forall-g val)))]
+     (fprintf output-port "∀~a {~a}. ~a" (forall-varname val) (forall-domain val)  (forall-g val)))]
 )
 
 (struct symbolo (t)
@@ -1287,13 +1287,13 @@
   ;;; then we do huge literal-replace
   ;;;  the literal-replace respects 
   (define tproj-removed (literal-replace* (make-hash unified-all-tproj-removing-eqs) anything))
-  (debug-dump "\n eliminate-tproj-return-record's input: \n ~a" anything)
-  (debug-dump "\n eliminate-tproj-return-record's input's tprojs: \n ~a" all-tprojs)
+  ;;; (debug-dump "\n eliminate-tproj-return-record's input: \n ~a" anything)
+  ;;; (debug-dump "\n eliminate-tproj-return-record's input's tprojs: \n ~a" all-tprojs)
 
-  (debug-dump "\n eliminate-tproj-return-record's using initial equation: \n ~a" all-tproj-removing-eqs)
-  (debug-dump "\n eliminate-tproj-return-record's using unified equation: \n ~a" unified-all-tproj-removing-eqs)
-  ;;; TODO : make sure that the constraint about (tproj x car) is transferred to the newly introduced var
-  (debug-dump "\n eliminate-tproj-return-record's return: \n ~a" tproj-removed)
+  ;;; (debug-dump "\n eliminate-tproj-return-record's using initial equation: \n ~a" all-tproj-removing-eqs)
+  ;;; (debug-dump "\n eliminate-tproj-return-record's using unified equation: \n ~a" unified-all-tproj-removing-eqs)
+  ;;; ;;; TODO : make sure that the constraint about (tproj x car) is transferred to the newly introduced var
+  ;;; (debug-dump "\n eliminate-tproj-return-record's return: \n ~a" tproj-removed)
   
   ;;; TODO : make it into a contract
   (let* ([all-tproj (collect-tprojs tproj-removed)])

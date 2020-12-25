@@ -2,7 +2,7 @@
   (syntax-rules ()
     ((_ (name param ...) g ...)
      (define (name param ...)
-       (relate (lambda () (fresh () g ...)) `(,name name ,param ...))))))
+       (relate (lambda () (fresh () g ...)) `( name ,param ...))))))
 ;; Low-level goals
 (define succeed (== #t #t))
 (define fail    (== #f #t))

@@ -51,8 +51,10 @@
   (syntax-rules ()
     ((_ name e-actual e-expected)
      (time (begin
-             (printf "Testing ~a ~s: \n  ~s ~a \n  \n ==> " 
-                      blue-colour name 'e-actual blue-colour-end)
+
+            ;;;  (printf "Testing ~a ~s: \n  ~s ~a \n  \n ==> " 
+            ;;;           blue-colour name 'e-actual blue-colour-end)
+
             ;;;  (inc-total-tested-number)
              (let* (
                    (actual e-actual) 
@@ -559,7 +561,6 @@
 . test-reg!=> . 'fail
 )
 
-
 (define-relation (splito xs x1s x2s)
   (conde ((== xs '())
           (== x1s '())
@@ -573,7 +574,6 @@
            (== x1s (cons x x1s^))
            (== x2s (cons y x2s^))
            (splito xs^ x1s^ x2s^)))))
-
 (define-relation (merge-boolo xs ys xsys)
   (conde ((== xs '()) (== ys xsys))
          ((== ys '()) (== xs xsys))
@@ -586,7 +586,6 @@
                    ((=/= x #f)
                     (== xsys (cons y xsys^))
                     (merge-boolo xs ys^ xsys^)))))))
-
 (define-relation (sort-boolo xs ys)
   (conde ((== xs '()) (== ys '()))
          ((fresh (x)
@@ -601,28 +600,33 @@
 
 
 (Teenage-sort-1
-  (run 1 () (for-bound (x) (boolo x) (sort-boolo (list x #f) (list #f x))))
+  (run 1 () (for-bound (x) [boolo x] (sort-boolo (list x #f) (list #f x))))
 
 . test-reg!=> . 'succeed
 )
 
 (Teenage-sort-2
-  (run 1 () (for-bound (x) (boolo x) (sort-boolo (list #f x) (list #f x))))
+  (run 1 () (for-bound (x) [boolo x] (sort-boolo (list #f x) (list #f x))))
 . test-reg!=> . 'succeed
 )
 
 (Teenage-sort-3
-  (run 1 () (for-bound (x) (boolo x) (sort-boolo (list x #f #f) (list #f #f x))))
+  (run 1 () (for-bound (x) [boolo x] (sort-boolo (list x #f #f) (list #f #f x))))
 . test-reg!=> . 'succeed
 )
 
 (Teenage-sort-4
-  (run 1 () (for-bound (x) (boolo x) (sort-boolo (list #f x #f) (list #f #f x))))
+  (run 1 () (for-bound (x) [boolo x] (sort-boolo (list #f x #f) (list #f #f x))))
 . test-reg!=> . 'succeed
 )
 
 (Teenage-sort-5
-  (run 1 () (for-bound (x) (boolo x) (sort-boolo (list #f #f x) (list #f #f x))))
+  (run 1 () (for-bound (x) [boolo x] (sort-boolo (list #f #f x) (list #f #f x))))
+. test-reg!=> . 'succeed
+)
+
+(Teenage-sort-6
+  (run 1 (a) (for-bound (x) [boolo x] (sort-boolo (list #f #f x) (list a #f x))))
 . test-reg!=> . 'succeed
 )
 
