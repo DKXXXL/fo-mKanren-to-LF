@@ -309,23 +309,23 @@
 
 
 
-;;; homomorphism on pair, except that each "composed node" will translate to "or"
-;;;   it's just mapping pairs into arithmetic
-;;; for example, we have cons and unit in the language of lisp
-;;; now you can basically look at it as another AST
-;;;   now if we map cons to or, '() to Boolean value, then it is a kind of 
-;;;     folding after evaluation
-(define (pair-base-functor op-mapping)
-  (define (pair-base-functor- prev-f extended-f g)
-    (define rec extended-f)
-    (match g
-      ['() (op-mapping '())]
-      [(cons a b) ((op-mapping cons) (rec a) (rec b))]
-      [_ (op-mapping 'default )] ;;; otherwise use op-mapping's default
-    )
-  )
-  pair-base-functor-
-)
+;;; ;;; homomorphism on pair, except that each "composed node" will translate to "or"
+;;; ;;;   it's just mapping pairs into arithmetic
+;;; ;;; for example, we have cons and unit in the language of lisp
+;;; ;;; now you can basically look at it as another AST
+;;; ;;;   now if we map cons to or, '() to Boolean value, then it is a kind of 
+;;; ;;;     folding after evaluation
+;;; (define (pair-base-functor op-mapping)
+;;;   (define (pair-base-functor- prev-f extended-f g)
+;;;     (define rec extended-f)
+;;;     (match g
+;;;       ['() (op-mapping '())]
+;;;       [(cons a b) ((op-mapping cons) (rec a) (rec b))]
+;;;       [_ (op-mapping 'default )] ;;; otherwise use op-mapping's default
+;;;     )
+;;;   )
+;;;   pair-base-functor-
+;;; )
 
 
 ;;; (define there-is-pair-base-mapping
@@ -981,15 +981,15 @@
 (define (tcar-eq eq) 
   (define res `(,(tcar (car eq)) . ,(tcar (cdr eq))))
   (match res 
-    [(cons (var _ _) _) res]
-    [(cons _ (var _ _)) (cons (cdr res) (car res))] 
+    [(cons (? term?) _) res]
+    [(cons _ (? term?)) (cons (cdr res) (car res))] 
     [_ res])
 )
 (define (tcdr-eq eq) 
   (define res `(,(tcdr (car eq)) . ,(tcdr (cdr eq))))
   (match res 
-    [(cons (var _ _) _) res]
-    [(cons _ (var _ _)) (cons (cdr res) (car res))] 
+    [(cons (? term?) _) res]
+    [(cons _ (? term?)) (cons (cdr res) (car res))] 
     [_ res])
 )
 
