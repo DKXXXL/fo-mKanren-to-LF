@@ -562,11 +562,12 @@
 )
 
 
-(define (is-singleton-type x) 
-  (define k (hash-ref singleton-type-map x 'False)) 
-  (if (equal? k 'False) #f #t)
-  )
-(define (not-singleton-type x) (not (is-singleton-type x)))
+;;; ;;; To check singleton-type or not
+;;; (define (is-singleton-type x) 
+;;;   (define k (hash-ref singleton-type-map x 'False)) 
+;;;   (if (equal? k 'False) #f #t)
+;;;   )
+;;; (define (not-singleton-type x) (not (is-singleton-type x)))
 
 ;;; check-as-inf-type-disj: set[inf-type-predicate] x term x state -> state
 ;;;  currently it will use predicate as marker
@@ -644,26 +645,26 @@
     st)
 )
 
-(define (map-matured-stream f stream)
-  (match stream
-    [#f #f]
-    [(cons h t) (cons (f h) (map-matured-stream f t))]
-  )
-)
+;;; (define (map-matured-stream f stream)
+;;;   (match stream
+;;;     [#f #f]
+;;;     [(cons h t) (cons (f h) (map-matured-stream f t))]
+;;;   )
+;;; )
 
-(define (fold-matured-stream binary initial-state stream)
-  (match stream
-    [#f initial-state]
-    [(cons h t) (fold-matured-stream binary (binary h initial-state) t)]
-  )
-)
+;;; (define (fold-matured-stream binary initial-state stream)
+;;;   (match stream
+;;;     [#f initial-state]
+;;;     [(cons h t) (fold-matured-stream binary (binary h initial-state) t)]
+;;;   )
+;;; )
 
-(define (append-matured-stream a b)
-  (match a 
-    [#f b]
-    [(cons h t) (cons h (append-matured-stream t b))]
-  )
-)
+;;; (define (append-matured-stream a b)
+;;;   (match a 
+;;;     [#f b]
+;;;     [(cons h t) (cons h (append-matured-stream t b))]
+;;;   )
+;;; )
 
 ;;; ;;; lift check-as-inf-type onto stream
 ;;; ;;; check-as-inf-type-on-each :: type-label  x term x matured-stream[st] -> matured-stream[st]

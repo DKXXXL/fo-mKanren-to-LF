@@ -328,18 +328,18 @@
 )
 
 
-(define there-is-pair-base-mapping
-  (hash
-    'default #f
-    '() #f
-    cons (lambda (x y) (or x y)) ;; no short-circuting anymore
-  )
-)
+;;; (define there-is-pair-base-mapping
+;;;   (hash
+;;;     'default #f
+;;;     '() #f
+;;;     cons (lambda (x y) (or x y)) ;; no short-circuting anymore
+;;;   )
+;;; )
 
 ;;; mapping every cons to or, '() to false, and others to default-v and fold the result
-(define (there-is-in-pair-base-functor default-v)
-  (define defaulted (hash-set there-is-pair-base-mapping 'default default-v))
-  (pair-base-functor (lambda (x) (hash-ref defaulted x 'NotFound))))
+;;; (define (there-is-in-pair-base-functor default-v)
+;;;   (define defaulted (hash-set there-is-pair-base-mapping 'default default-v))
+;;;   (pair-base-functor (lambda (x) (hash-ref defaulted x 'NotFound))))
   
 
 (define/contract (there-is-var-in vars pair-goal)
@@ -368,13 +368,13 @@
 )
 
 
-;;; example : replace 1 with 0 in an arbitrary list
-(define (replace-1-to-0 k)
-  (define (case1 prev-f extended-f g)
-    (if (equal? g 1) 0 (prev-f g)))
+;;; ;;; example : replace 1 with 0 in an arbitrary list
+;;; (define (replace-1-to-0 k)
+;;;   (define (case1 prev-f extended-f g)
+;;;     (if (equal? g 1) 0 (prev-f g)))
   
-  ((overloading-functor-list (list case1 pair-base-endofunctor  identity-endo-functor)) k)
-)
+;;;   ((overloading-functor-list (list case1 pair-base-endofunctor  identity-endo-functor)) k)
+;;; )
 
 
 ;;; currently implemented with side-effect,
@@ -467,12 +467,13 @@
     ;;; (debug-dump "\n maturing: ~a" s)
     (if (mature? s) s (mature (step s))))
   
-(define (total-mature s)
-  (match s
-    [(cons a b) (cons a (total-mature b))]
-    [#f #f]
-  )
-)
+;;; mature the whole stream (bad!)
+;;; (define (total-mature s)
+;;;   (match s
+;;;     [(cons a b) (cons a (total-mature b))]
+;;;     [#f #f]
+;;;   )
+;;; )
 
 ;;; given a stream of states, 
 ;;;   return another stream of states 
@@ -766,12 +767,12 @@
   ((overloading-functor-list (list basic-tactic goal-base-endofunctor  identity-endo-functor)) goal)
 )
 
-;;; appearances of nested list
-(define/contract (member-nested v l)
-  (any? list? . -> . list?)
-  (match l ['() #f] 
-    [(cons h t) 
-      (or (match h [(? pair?) (member-nested v h)] [_ (equal? h v)]) (member-nested v t))]))
+;;; ;;; appearances of nested list
+;;; (define/contract (member-nested v l)
+;;;   (any? list? . -> . list?)
+;;;   (match l ['() #f] 
+;;;     [(cons h t) 
+;;;       (or (match h [(? pair?) (member-nested v h)] [_ (equal? h v)]) (member-nested v t))]))
 
 
 ;;; (list true? false? null? pair? number? string? symbol?)
