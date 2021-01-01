@@ -116,10 +116,21 @@
   . test-reg!=> . 'succeed  
 )
 
+((run 1 ()  (fresh (x) (not-stringo x)))
+  . test-reg!=> . 'succeed  
+)
+
+
 (Easy-failing
   (run 1 ()  (fresh (x) (symbolo x) (not-symbolo x)))
   . test-reg!=> . 'fail  
 )
+
+(Easy-failing-2
+  (run 1 ()  (fresh (x) (stringo x) (not-stringo x)))
+  . test-reg!=> . 'fail  
+)
+
 
 ((run 1 ()  (fresh (x) (symbolo x) (stringo x)))
   . test-reg!=> . 'fail  
