@@ -17,7 +17,13 @@
 ;;;  wholeType == goal!
 ;;;  construct CH correspondence for miniKanren goals
 
+;;; proof terms
+
+;;; introduction rule
 (struct LFsigma (ex body wholeType)  #:prefab)
+;;; elimination rule
+(struct LFsigma-pi-1 (term) #:prefab)
+(struct LFsigma-pi-2 (term) #:prefab)
 ;;;   #:methods gen:custom-write
 ;;;   [(define (write-proc val output-port output-mode)
 ;;;      (fprintf output-port "{~a ~a}" (LFsigma-ex val) (LFsigma-body val)))]
@@ -31,11 +37,20 @@
 ;;; (5, refl) : (ex x, x == 5)
 ;;; (5, refl) : (ex x, 5 == 5)
 
+
+;;; introduction rule
 (struct LFpair  (left right) #:prefab)
 ;;; I think induction tells you that here wholeType is unnecessary
+;;; elimination rule
+(struct LFpair-pi-1 (term) #:prefab)
+(struct LFpair-pi-2 (term) #:prefab)
 
+;;; introduction rule
 (struct LFinjl  (left wholeType) #:prefab)
 (struct LFinjr  (right wholeType) #:prefab)
+
+;;; No elimination rule for coproduct?
+
 ;;; the wholeType is actually the wholeProp
 (struct LFrefl    (x) #:prefab)
 ;;; wholeType here is trivial, (== x x)
@@ -44,6 +59,13 @@
 
 ;;; (struct var (index) #:prefab) ;;; object variable, only used for lambda term
 ;;; (struct const (term type) #:prefab) ;;; all the lisp terms should be here
+
+
+;;; for constructive implication type
+;;; ? and maybe universal quantifier type
+(struct LFlambda (params body) #:prefab)
+(struct LFapply (func args) #:prefab)
+(struct LFparam (index name) #:prefab)
 
 ;;; the above consists the BNF definition of LF-lambda-term
 ;;; also exactly the definition of proof tree, except the wholeType

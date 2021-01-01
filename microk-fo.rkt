@@ -195,6 +195,15 @@
      (fprintf output-port "(~a ∧ ~a)" (conj-g1 val) (conj-g2 val)))]
 )
 
+;;; constructive implication, basically will skip the 
+;;;   handling of antec but directly proceed to conseq
+(struct cimpl (g1 g2)
+  #:transparent
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "(~a ⟶ ~a)" (cimpl-g1 val) (cimpl-g2 val)))]
+)
+
 (define succeed (Top))
 (define fail    (Bottom))
 (define-syntax conj*
@@ -207,6 +216,19 @@
     ((_)           fail)
     ((_ g)         g)
     ((_ g0 gs ...) (disj g0 (disj* gs ...)))))
+
+
+(struct assumption-base (base)
+  #:transparent
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "{~a}" (assumption-base-base val)))]
+)
+
+
+(define (new-assumption-base)
+  (assumption-base (set)))
+;;; operation for assumption-base
 
 
 ;;; Denote Goal-EndoFunctor type as
@@ -483,11 +505,12 @@
   ;;; (debug-dump "TO-DNF computing \n")
   (mapped-stream (lambda (st) (to-dnf st (get-state-DNF-initial-index st))) stream))
 
-;;; make sure the state has valid type
-(define (CHECK-TYPE-VALID stream)
-  (define (valid-type-stream st) (wrap-state-stream (valid-type-constraints-check st)))
-  (mapped-stream valid-type-stream stream)
-)
+;;; ;;; make sure the state has valid type
+;;; ;;;  somehow it is useless...
+;;; (define (CHECK-TYPE-VALID stream)
+;;;   (define (valid-type-stream st) (wrap-state-stream (valid-type-constraints-check st)))
+;;;   (mapped-stream valid-type-stream stream)
+;;; )
 
 (define (TO-NON-Asymmetric stream)
   ;;; (debug-dump "TO-NON-Asymmetric computing \n")
@@ -564,7 +587,7 @@
                       (clear-about st (list->set (state-scope st)) var))]
           ;;; [(Bottom) (wrap-state-stream st)] 
           [_ (bind-forall (set-add (state-scope st) var)
-                          (TO-DNF (CHECK-TYPE-VALID (TO-NON-Asymmetric (pause st (ex var (conj domain_ goal))))) )  
+                          (TO-DNF (TO-NON-Asymmetric (pause st (ex var (conj domain_ goal)))) )  
                           var 
                           (forall var domain_ goal))]
         )
@@ -1405,7 +1428,7 @@
 ;;;   also remove things from scope
 (define/contract (clear-about state scope v)
   (state? set? var? . -> . any?)
-  (define dnf-sym-stream (TO-DNF (CHECK-TYPE-VALID (TO-NON-Asymmetric (wrap-state-stream state)))))
+  (define dnf-sym-stream (TO-DNF (TO-NON-Asymmetric (wrap-state-stream state))))
 
   (define mentioned-var (set-remove scope v))
   (define (map-clear-about st)
