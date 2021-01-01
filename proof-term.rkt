@@ -63,7 +63,10 @@
 
 ;;; for constructive implication type
 ;;; ? and maybe universal quantifier type
-(struct LFlambda (params body) #:prefab)
+;;;  it is not really "type", more like sum type of several type
+;;;     (more like a set)
+;;;  But constructivity requires us to consider proposition as types
+(struct LFlambda (params types body) #:prefab)
 (struct LFapply (func args) #:prefab)
 (struct LFparam (index name) #:prefab)
 
