@@ -12,16 +12,12 @@
   state-sub
   state-sub-set
   state-sub-update
-  state-direction-set
   state-diseq-set
   state-diseq-update
   state-scope-update
   state-scope-set
   state-typercd-cst-add
   state-typercd-set
-  shadow-idempotent-sub
-  trace-left
-  trace-right
   unify
   unify/sub
   walk*
@@ -250,20 +246,20 @@
 ;;;     similarly, [(v1 v1) (v1 v3) (v2 v1) (v3 v1)] won't work 
 
 
-;;; same as extend-sub, except the input has to be idempotent, 
-;;;   and its output is also idempotent 
-(define (extend-idempotent-sub x t sub)
-  ;;; TODO: to implement in the future, currently just use the non-idempotent version
-  (extend-sub x t sub)
-)
+;;; ;;; same as extend-sub, except the input has to be idempotent, 
+;;; ;;;   and its output is also idempotent 
+;;; (define (extend-idempotent-sub x t sub)
+;;;   ;;; TODO: to implement in the future, currently just use the non-idempotent version
+;;;   (extend-sub x t sub)
+;;; )
 
-;;; var x [(var . term)] -> [(var . term)]
-;;;  precondition: subst is already idempotent, 
-;;;   i.e. the range of subst doesn't intersect its domain 
-;;;  specification: it will substitute just as subst, except for x, it won't change
-(define (shadow-idempotent-sub x subst)
-  (filter (lambda (pair) (not (equal? (car pair) x))) subst)
-)
+;;; ;;; var x [(var . term)] -> [(var . term)]
+;;; ;;;  precondition: subst is already idempotent, 
+;;; ;;;   i.e. the range of subst doesn't intersect its domain 
+;;; ;;;  specification: it will substitute just as subst, except for x, it won't change
+;;; (define (shadow-idempotent-sub x subst)
+;;;   (filter (lambda (pair) (not (equal? (car pair) x))) subst)
+;;; )
 
 (define (true? v) (equal? v #t))
 (define (false? v) (equal? v #f))

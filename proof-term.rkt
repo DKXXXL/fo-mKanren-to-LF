@@ -122,7 +122,7 @@
       (let*
         ([ppt2- (ppt2 x)])
         (if (pt/h? ppt2-)
-          (apply-in-order ppt1 ppt2-)
+          (pth-compose ppt1 ppt2-)
           (ppt1 ppt2-))))))
 
 (define single-hole (pt/h (lambda (x) x)))
@@ -155,8 +155,8 @@
 ;;;  (return a pt/h obj)
 (define-syntax curried-pf/h
   (syntax-rules ()
-    ((_  (hole) body)) 
-      (pt/h (lambda (hole) body))
+    ((_  (hole) body)
+      (pt/h (lambda (hole) body)))
 
     ((_ (hole holes ... ) body) 
       (pt/h (lambda (hole) (curried-pf/h (holes ...) body))))

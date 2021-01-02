@@ -29,7 +29,7 @@
   step
   mature
   mature?
-  walk*/goal
+  ;;; walk*/goal
 
   there-is-var-in
   there-is-var-not-in
@@ -272,8 +272,8 @@
 
 (define (state-base-endo-functor prev-f rec g)
   (match g
-    [(state a scope trace direction d e)
-      (state (rec a) scope trace direction (rec d) (rec e))]
+    [(state a scope pfterm d e)
+      (state (rec a) scope pfterm (rec d) (rec e))]
     [_ (prev-f g)]
   )
 )
@@ -697,28 +697,28 @@
     (_            s)))
 
 
-;;; walk*/goals :: Goal x subst -> Goal
-;;;  precondition: subst has to be idempotent
-(define (walk*/goal goal subst)
-  (let* ([rec (lambda (g) (walk*/goal g subst))])
-    (match goal
-    ;;; non trivial parts
-    ;;;   deal with terms
-      ((== t1 t2) 
-        (== (walk* t1 subst) (walk* t2 subst)))
-    ;;; ex needs shadow the exvar
-      ((ex exvar gn) 
-        (ex exvar (walk*/goal gn (shadow-idempotent-sub exvar subst))))
-    ;;; dead recursion on others
-      ((disj g1 g2)
-        (disj (rec g1) (rec g2)))
-      ((conj g1 g2)
-        (conj (rec g1) (rec g2)))
-      ((relate thunk _)
-        (relate (lambda () (rec (thunk)))))
-    )
-  )
-)
+;;; ;;; walk*/goals :: Goal x subst -> Goal
+;;; ;;;  precondition: subst has to be idempotent
+;;; (define (walk*/goal goal subst)
+;;;   (let* ([rec (lambda (g) (walk*/goal g subst))])
+;;;     (match goal
+;;;     ;;; non trivial parts
+;;;     ;;;   deal with terms
+;;;       ((== t1 t2) 
+;;;         (== (walk* t1 subst) (walk* t2 subst)))
+;;;     ;;; ex needs shadow the exvar
+;;;       ((ex exvar gn) 
+;;;         (ex exvar (walk*/goal gn (shadow-idempotent-sub exvar subst))))
+;;;     ;;; dead recursion on others
+;;;       ((disj g1 g2)
+;;;         (disj (rec g1) (rec g2)))
+;;;       ((conj g1 g2)
+;;;         (conj (rec g1) (rec g2)))
+;;;       ((relate thunk _)
+;;;         (relate (lambda () (rec (thunk)))))
+;;;     )
+;;;   )
+;;; )
 
 ;;; trivially negate the goal, relies on the fact that
 ;;;  we have a dualized goals
@@ -849,7 +849,7 @@
       ;;; other extended construct -- like state
       ;;;  very untyped...
       ;;;  (a = a) (type-constrant a (number?))
-      [(state a scope trace direction d e) 
+      [(state a scope pfterm d e) 
         (let* ([new-sub-possible-with-cycle (rec a)] 
                [new-sub (filter (lambda (x) (not (equal? (car x) (cdr x)))) new-sub-possible-with-cycle)]
                 ;;; TODO: we will only remove (a = a) and 
@@ -859,7 +859,7 @@
                 (map (lambda (x) (cons (car x) (walk* (cdr x) new-sub))) old-hash-list)]
                [new-mapping (make-hash new-hash-list)]
                [rec (lambda (any) (literal-replace* new-mapping any)) ])
-          (state new-sub scope trace direction (rec d) (rec e)))]
+          (state new-sub scope pfterm (rec d) (rec e)))]
       ;;; or type constraint information,
       ;;;  we only need to deal with type information
 
