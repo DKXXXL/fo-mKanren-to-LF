@@ -19,6 +19,8 @@
 
 ;;; proof terms
 
+(struct proof-term () #:prefab)
+
 ;;; introduction rule
 (struct LFsigma (ex body wholeType)  #:prefab)
 ;;; elimination rule
@@ -82,9 +84,19 @@
 ;;;  hole as meta-variable
 (struct hole (index) #:prefab)
 
+;;; every partial proof tree can be considered as a 
+;;;   function from proof-terms to 
 
-;;; Partial-Proof-Tree(PPT) := [indicesOfHoles] x proof-tree
-(struct ppt (holes pt) #:prefab)
+
+;;;   proof-tree/hole is function from proof-terms to a complete proof-term
+;;;   but proof-tree/hole must be curried
+(struct pt/h (f) #:prefab)
+
+
+;;; Partial-Proof-Tree(PPT) := proof-tree/hole x [hole] x pair 
+
+;;;   reflection is for debugging purpose
+(struct ppt (pt holes) #:prefab)
 ;;; this is direct style, but at the end we only need something 
 ;;;   to represent a tree with a hole
 ;;;   the following traversal will be expensive... maybe
@@ -95,17 +107,35 @@
 ;;;    invariance... let's postpone it TODO!
 
 
-(define (subst ppt index term)
-  (match ppt
-    [(hole tindex) (if (equal? index tindex) term ppt)]
-    ;;; other cases are direct recursion
+(define/contract (fill-in ppt pt)
+  (ppt? any? . -> . any?)
+
+)
+
+;;; (ppt1 . compose . ppt2)(x) = ppt1(ppt2(x))
+;;; so ppt2 is the first to be filled in with x, and then
+;;;   ppt2 will be fill in the first hole of ppt1
+(define/contract (compose ppt1 ppt2)
+  (ppt? ppt? . -> . ppt?)
+
+  (define/contract (apply-in-order ppt1 ppt2)
+    (pt/h? pt/h? . -> . pt/h?)
+    (pt/h 
+      (lambda (x)
+        (let*
+          ([ppt2- (ppt2 x)])
+          (if (pt/h? ppt2-)
+            (apply-in-order ppt1 ppt2-)
+            (ppt1 ppt2-)))))
+  )
+  
+  (let*
+    ([pt/h1 (ppt-pt ppt1)]
+     [pt/h2 (ppt-pt ppt2)]
+     [holes1 (ppt-hole ppt1)]
+     [holes2 (ppt-hole ppt2)]
+     [holes (append holes2 (cdr holes1))]
+     )
+    (ppt (apply-in-order pt/h1 pt/h2) holes)
   )
 )
-
-;;; fill-in-partial-tree : partial-proof-tree x partial-proof-tree -> partial-proof-tree 
-;;;  it will fill in the first hole of 'withHole
-;;; note that the 'withHole should have at least one hole
-(define (fill-in-partial-tree stuffing withHole)
-  (void)
-)
-

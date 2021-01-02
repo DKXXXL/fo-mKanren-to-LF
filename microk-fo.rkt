@@ -422,6 +422,8 @@
 ;;; streams
 (struct bind   (bind-s bind-g)          #:prefab)
 (struct mplus  (mplus-s1 mplus-s2)      #:prefab)
+;;; (pause st g) will fill the generated proof term into st
+;;; it has the same specification as (start st g)
 (struct pause  (pause-state pause-goal) #:prefab)
 (struct mapped-stream (f stream) #:prefab)
 ;;; f :: state -> stream of states
