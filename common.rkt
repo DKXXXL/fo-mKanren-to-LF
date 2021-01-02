@@ -45,6 +45,7 @@
   assert-or-warn
   assert
   valid-type-constraints-check
+  <-pfg
   )
 
 ;;; bear with it now.... let me search if there is
@@ -52,7 +53,7 @@
 (require struct-update)
 (require racket/contract)
 (require errortrace)
-
+(require "proof-term.rkt")
 
 (instrumenting-enabled #t)
 
@@ -284,18 +285,26 @@
 ;;;   typercd : a dictionary index -> set of type-encoding 
 ;;;     "as disjunction of possible types"
 ;;;   
-(struct state (sub scope trace direction diseq typercd) #:prefab)
-(define empty-state (state empty-sub (list initial-var) '() '() '() (hash)))
+(struct state (sub scope pfterm diseq typercd) #:prefab)
+(define empty-state (state empty-sub (list initial-var) single-hole '() (hash)))
 (define-struct-updaters state)
+
+;;; lift <-pf/h-inc into state
+(define-syntax <-pfg
+  (syntax-rules ()
+    ((_ st term) 
+      (state-pfterm-update st 
+        (lambda (pft) (pft . <-pf/h-inc . term))) )     
+
+    ((_ st (hole holes ...) body) 
+      (state-pfterm-update st 
+        (lambda (pft) (pft . <-pf/h-inc . (hole holes ...) body))) )
+  ))
+
 
 ;;; we consider #f is the failed state, also one of the state
 (define (?state? obj) (or (equal? obj #f) (state? obj)))
 
-(define (trace-left st)
-  (state-trace-update st (lambda (x) (cons 'left x))))
-
-(define (trace-right st)
-  (state-trace-update st (lambda (x) (cons 'right x))))
 ;;;  purely functional structure update, 
 
 

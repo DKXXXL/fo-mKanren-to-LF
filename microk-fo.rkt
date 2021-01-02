@@ -42,7 +42,7 @@
   )
 
 (require "common.rkt")
-
+(require "proof-term.rkt")
 (require errortrace)
 
 (instrumenting-enabled #t)
@@ -528,6 +528,8 @@
 
 ;;; run a goal with a given state
 ;;; note that when st == #f, the returned stream will always be #f
+;;; Specificaion: 
+;;;   the partial proof term of st will be applied with the proof-term of g
 (define/contract (start st g)
   (?state? any? . -> . any?)
   (and st ;;; always circuit the st

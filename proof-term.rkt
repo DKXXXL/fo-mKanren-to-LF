@@ -6,6 +6,11 @@
   (struct-out LFinjr)
   (struct-out LFrefl)
   (struct-out LFpack)
+  pt/h
+  pth-compose
+  single-hole
+  curried-pf/h
+  <-pf/h-inc
   )
 
 
@@ -72,6 +77,8 @@
 (struct LFapply (func args) #:prefab)
 (struct LFparam (index name) #:prefab)
 
+(struct LFtrue () #:prefab)
+
 ;;; the above consists the BNF definition of LF-lambda-term
 ;;; also exactly the definition of proof tree, except the wholeType
 ;;;     which are the meta-data
@@ -93,49 +100,79 @@
 (struct pt/h (f) #:prefab)
 
 
-;;; Partial-Proof-Tree(PPT) := proof-tree/hole x [hole] x pair 
+;;; ;;; Partial-Proof-Tree(PPT) := proof-tree/hole x [hole] x pair 
 
-;;;   reflection is for debugging purpose
-(struct ppt (pt holes) #:prefab)
-;;; this is direct style, but at the end we only need something 
-;;;   to represent a tree with a hole
-;;;   the following traversal will be expensive... maybe
-;;;   use (prooftree -> prooftree) as a tree with one hole
-;;;   will be much less expensive
-;;;   but a tree with several holes inside requires some
-;;;   kind of algebraid design and interface to maintain the
-;;;    invariance... let's postpone it TODO!
+;;; ;;;   reflection is for debugging purpose
+;;; (struct ppt (pt holes) #:prefab)
+;;; ;;; this is direct style, but at the end we only need something 
+;;; ;;;   to represent a tree with a hole
+;;; ;;;   the following traversal will be expensive... maybe
+;;; ;;;   use (prooftree -> prooftree) as a tree with one hole
+;;; ;;;   will be much less expensive
+;;; ;;;   but a tree with several holes inside requires some
+;;; ;;;   kind of algebraid design and interface to maintain the
+;;; ;;;    invariance... let's postpone it TODO!
 
 
-(define/contract (fill-in ppt pt)
-  (ppt? any? . -> . any?)
+;;; ;;; (ppt1 . compose . ppt2)(x) = ppt1(ppt2(x))
+(define/contract (pth-compose ppt1 ppt2)
+  (pt/h? pt/h? . -> . pt/h?)
+  (pt/h 
+    (lambda (x)
+      (let*
+        ([ppt2- (ppt2 x)])
+        (if (pt/h? ppt2-)
+          (apply-in-order ppt1 ppt2-)
+          (ppt1 ppt2-))))))
 
-)
+(define single-hole (pt/h (lambda (x) x)))
 
-;;; (ppt1 . compose . ppt2)(x) = ppt1(ppt2(x))
-;;; so ppt2 is the first to be filled in with x, and then
-;;;   ppt2 will be fill in the first hole of ppt1
-(define/contract (compose ppt1 ppt2)
-  (ppt? ppt? . -> . ppt?)
+;;; (define/contract (fill-in ppt pt)
+;;;   (ppt? any? . -> . any?)
 
-  (define/contract (apply-in-order ppt1 ppt2)
-    (pt/h? pt/h? . -> . pt/h?)
-    (pt/h 
-      (lambda (x)
-        (let*
-          ([ppt2- (ppt2 x)])
-          (if (pt/h? ppt2-)
-            (apply-in-order ppt1 ppt2-)
-            (ppt1 ppt2-)))))
-  )
-  
-  (let*
-    ([pt/h1 (ppt-pt ppt1)]
-     [pt/h2 (ppt-pt ppt2)]
-     [holes1 (ppt-hole ppt1)]
-     [holes2 (ppt-hole ppt2)]
-     [holes (append holes2 (cdr holes1))]
-     )
-    (ppt (apply-in-order pt/h1 pt/h2) holes)
-  )
-)
+;;; )
+
+;;; ;;; (ppt1 . compose . ppt2)(x) = ppt1(ppt2(x))
+;;; ;;; so ppt2 is the first to be filled in with x, and then
+;;; ;;;   ppt2 will be fill in the first hole of ppt1
+;;; (define/contract (compose ppt1 ppt2)
+;;;   (ppt? ppt? . -> . ppt?)
+;;;   (let*
+;;;     ([pt/h1 (ppt-pt ppt1)]
+;;;      [pt/h2 (ppt-pt ppt2)]
+;;;      [holes1 (ppt-hole ppt1)]
+;;;      [holes2 (ppt-hole ppt2)]
+;;;      [holes (append holes2 (cdr holes1))]
+;;;      )
+;;;     (ppt (apply-in-order pt/h1 pt/h2) holes)
+;;;   )
+;;; )
+
+
+;;; sugar for creating proof-term-w/hole(s)
+;;; (curried-pf/h (a b c) body) will directly curry 
+;;;   this function and ask for filling on a b c in order
+;;;  (return a pt/h obj)
+(define-syntax curried-pf/h
+  (syntax-rules ()
+    ((_  (hole) body)) 
+      (pt/h (lambda (hole) body))
+
+    ((_ (hole holes ... ) body) 
+      (pt/h (lambda (hole) (curried-pf/h (holes ...) body))))
+  ))
+
+;;; A small sugar for creating proof-term
+;;; Usage 
+;;;  (single-hole . <-pf/h-inc . LFtrue) will directly return a LFtrue
+;;;  (single-hole . <-pf/h-inc . (_) (LFinjl _ True)) will give you back (LFinj _ True)
+;;;   . <-pf/h-inc . (_) (LFinjl _ True) will give you  (LFinjl (LFinjl _ True) True)
+(define-syntax <-pf/h-inc
+  (syntax-rules ()
+    ((_ org term) 
+      (org term) )     
+
+    ((_ org (hole holes ...) body) 
+      (let* [(new-pth (curried-pf/h (hole holes ...) body))]
+        (pth-compose org new-pth) ))
+  ))
