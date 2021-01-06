@@ -4,7 +4,7 @@
   (struct-out LFpair)
   (struct-out LFinjl)
   (struct-out LFinjr)
-  (struct-out LFrefl)
+  (struct-out LFprim-rel)
   (struct-out LFpack)
   pt/h
   pth-compose
@@ -43,6 +43,7 @@
 ;;; another issue is that wholeType is necessary here, because term 
 ;;; (5, refl) : (ex x, x == 5)
 ;;; (5, refl) : (ex x, 5 == 5)
+(struct LFlet (v bind bindT body) #:prefab)
 
 
 ;;; introduction rule
@@ -59,8 +60,14 @@
 ;;; No elimination rule for coproduct?
 
 ;;; the wholeType is actually the wholeProp
-(struct LFrefl    (x) #:prefab)
-;;; wholeType here is trivial, (== x x)
+
+;;; so we have a lot of primitive Relation (and dualizable)
+;;;   for each of them introduce a (almost no information) proof term
+;;;   is weird
+(struct LFprim-rel (goalType) #:prefab)
+;;; this is a place holder for each of them
+;;;   TODO: we will have to discuss how to deal with 
+;;;     them respectively
 
 (struct LFpack (subterm description) #:prefab)
 
@@ -76,6 +83,8 @@
 (struct LFlambda (params types body) #:prefab)
 (struct LFapply (func args) #:prefab)
 (struct LFparam (index name) #:prefab)
+
+
 
 (struct LFtrue () #:prefab)
 

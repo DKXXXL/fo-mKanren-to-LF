@@ -434,6 +434,13 @@
 ;;;   at the current stage, mark is used for pointing to
 ;;;     the disj component
 
+;;; this will force the v in st to be a stream of ground term
+;;; basically used for proof-term-generation for
+;;;    existential quantifier
+;;;  say we have state (v =/= 1) /\ (numbero v)
+;;; this will enumerate v to be each value
+(struct force-v-ground (v st) #:prefab)
+
 ;;; since a state has semantic of disjunction
 ;;;  we transform it into DNF and we should be able to index each disjunct component
 ;;; 
@@ -532,47 +539,64 @@
 ;;;   the partial proof term of st will be applied with the proof-term of g
 (define/contract (start st g)
   (?state? any? . -> . any?)
+  ;;; the following used when primitive goal is to fill in the
+  (define (prim-goal-filled-st)
+    (st . <-pfg . (LFprim-rel g)))
   (and st ;;; always circuit the st
     (match g
     ((disj g1 g2)
-     (step (mplus (pause st g1)
-                  (pause st g2))))
+     (step (mplus (pause [st . <-pfg . (_) (LFinjl _ g)] g1)
+                  (pause [st . <-pfg . (_) (LFinjr _ g)] g2))))
     ((conj g1 g2)
-     (step (bind (pause st g1) g2)))
-    ((relate thunk _)
-     (pause st (thunk)))
-    ((== t1 t2) (unify t1 t2 st))
-    ((=/= t1 t2) (neg-unify t1 t2 st))
-    ((symbolo t1)  (wrap-state-stream (check-as-inf-type symbol? t1 st)))
+     (step (bind (pause [st . <-pfg . (_1 _2) (LFpair _1 _2)] g1) g2)))
+    ((relate thunk descript)
+     (pause [st . <-pfg . (_) (LFpack _ descript)] (thunk)))
+    ((== t1 t2) (unify t1 t2 (prim-goal-filled-st) ))
+    ((=/= t1 t2) (neg-unify t1 t2 (prim-goal-filled-st) ))
+    ((symbolo t1)  (wrap-state-stream (check-as-inf-type symbol? t1 (prim-goal-filled-st))))
     ((not-symbolo t1) 
       (mplus 
-        (term-finite-type t1 st)
-        (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label symbol?) t1 st)))) 
-    ((numbero t1) (wrap-state-stream (check-as-inf-type number? t1 st)))
+        (term-finite-type t1 (prim-goal-filled-st))
+        (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label symbol?) t1 (prim-goal-filled-st))))) 
+    ((numbero t1) (wrap-state-stream (check-as-inf-type number? t1 (prim-goal-filled-st))))
     ((not-numbero t1)  
       (mplus 
-        (term-finite-type t1 st)
-        (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label number?) t1 st)))) 
-    ((stringo t1) (wrap-state-stream (check-as-inf-type string? t1 st)))
+        (term-finite-type t1 (prim-goal-filled-st))
+        (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label number?) t1 (prim-goal-filled-st))))) 
+    ((stringo t1) (wrap-state-stream (check-as-inf-type string? t1 (prim-goal-filled-st))))
     ((not-stringo t1)  
       (mplus 
-        (term-finite-type t1 st)
-        (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label string?) t1 st))))
+        (term-finite-type t1 (prim-goal-filled-st))
+        (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label string?) t1 (prim-goal-filled-st)))))
 
     ((type-constraint t types)
-      (wrap-state-stream (check-as-inf-type-disj types t st)))
+      (wrap-state-stream (check-as-inf-type-disj types t (prim-goal-filled-st))))
     ((ex v gn) 
       ;;; TODO: make scope a ordered set (or just a list)
       (let* (
+          ;;; we first need to make scope information on state correct
+          ;;; TODO: lift the scope information out of the state
           [add-to-scope (lambda (scope) (set-add scope v))]
           [remove-from-scope-stream 
             (lambda (st) 
               (wrap-state-stream (state-scope-update st (lambda (scope) (set-remove scope v)) )))]
           [scoped-st (state-scope-update st (lambda (scope) (set-add scope v)))]
-          [solving-gn (pause scoped-st gn)]
+          ;;; then we compose new proof-term hole
+          [body-to-fill-scoped-st (scoped-st . <-pfg . (_1 _2) (LFsigma _2 _1 g))]
+          [solving-gn (pause body-to-fill-scoped-st gn)]
+
+          ;;; we pop added scope information
+          ;;;  and then make sure v become ground term (by using force-v-ground)
+          ;;;  so that proof-term filling can succeed
           [remove-scoped-stream (mapped-stream remove-from-scope-stream solving-gn)]
+          [extract-ground-v-stream (mapped-stream (lambda (st) (force-v-ground v st)) remove-scoped-stream)]
+          [instantiate-v-from-state
+            (lambda (st)
+              (wrap-state-stream
+                (st . <-pfg . (walk* v (state-sub st)))))]
+          [term-filled-stream (mapped-stream instantiate-v-from-state extract-ground-v-stream)]
           )
-         remove-scoped-stream))
+         term-filled-stream))
     ;;; forall is tricky, 
     ;;;   we first use simplification to
     ;;;   we first need to consider forall as just another fresh
@@ -581,14 +605,19 @@
     ;;; 
     ((forall var domain goal) 
       (let* [(domain_ (simplify-wrt st domain var))
-             (k (begin (debug-dump "\n ~a : domain_ : ~a " var domain_)))
-            ] 
+             (k (begin (debug-dump "\n ~a : domain_ : ~a " var domain_)))] 
 
         (match domain_
           ;;; BUGFIX: shrink-into about st
-          [(Bottom) (begin 
-                      (debug-dump "\n one solution: ~a" st)
-                      (clear-about st (list->set (state-scope st)) var))]
+
+          ;;; in the bottom case, inside proof term
+          ;;;   we prove domain -> Bottom, and them prove Bottom -> goal
+          ;;;   then by composition we are done
+          [(Bottom) (let* 
+                      ([k (debug-dump "\n one solution: ~a" st)]
+                       [res (clear-about st (list->set (state-scope st)) var)])
+                      res 
+                      ) ]
           ;;; [(Bottom) (wrap-state-stream st)] 
           [_ (bind-forall (set-add (state-scope st) var)
                           (TO-DNF (TO-NON-Asymmetric (pause st (ex var (conj domain_ goal)))) )  
