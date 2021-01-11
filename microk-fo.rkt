@@ -52,20 +52,23 @@
 ;;; (coverage-counts-enabled #t)
 
 
-(struct relate (thunk description)      ;;;#:prefab
+(struct Goal () 
+  #:transparent)
+
+(struct relate Goal (thunk description)      ;;;#:prefab
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "{user-relation ~a}" (relate-description val)))]
 )
-(struct ==     (t1 t2)
+(struct == Goal    (t1 t2)
   #:transparent               
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "~a =ᴸ ~a" (==-t1 val) (==-t2 val)))]
      ;;; L stands for Lisp Elements
 )
-(struct ex     (varname g) 
+(struct ex Goal    (varname g) 
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
@@ -77,28 +80,28 @@
 
 ;;; we need implement the first version of complement,
 ;;;   so the complement version of each operation need to be defined
-(struct =/= (t1 t2)
+(struct =/= Goal (t1 t2)
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "~a ≠ᴸ ~a" (=/=-t1 val) (=/=-t2 val)))]
 )
 
-(struct forall (varname domain g)
+(struct forall Goal (varname domain g)
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "∀~a {~a}. ~a" (forall-varname val) (forall-domain val)  (forall-g val)))]
 )
 
-(struct symbolo (t)
+(struct symbolo Goal (t)
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "symbol ~a" (symbolo-t val)))]
 )
 
-(struct not-symbolo (t)
+(struct not-symbolo Goal (t)
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
@@ -106,14 +109,14 @@
 )
 
 
-(struct numbero (t)
+(struct numbero Goal (t)
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "number ~a" (numbero-t val)))]
 )
 
-(struct not-numbero (t)
+(struct not-numbero Goal (t)
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
@@ -121,14 +124,14 @@
 )
 
 
-(struct stringo (t)
+(struct stringo Goal (t)
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "string ~a" (stringo-t val)))]
 )
 
-(struct not-stringo (t)
+(struct not-stringo Goal (t)
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
@@ -139,7 +142,7 @@
 ;;; indicating t is union of these type
 ;;;   this goal is usually not interfaced to the user
 
-(struct type-constraint (t typeinfo)
+(struct type-constraint Goal (t typeinfo)
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
@@ -163,7 +166,7 @@
 ;;; )
 
 
-(struct Top ()
+(struct Top Goal ()
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
@@ -171,7 +174,7 @@
 )
 
 
-(struct Bottom ()
+(struct Bottom Goal ()
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
@@ -181,14 +184,14 @@
 
 ;; first-order microKanren
 ;;; goals
-(struct disj   (g1 g2) 
+(struct disj Goal   (g1 g2) 
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "(~a ∨ ~a)" (disj-g1 val) (disj-g2 val)))]
 )
 
-(struct conj   (g1 g2)  
+(struct conj  Goal (g1 g2)  
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
@@ -197,7 +200,7 @@
 
 ;;; constructive implication, basically will skip the 
 ;;;   handling of antec but directly proceed to conseq
-(struct cimpl (g1 g2)
+(struct cimpl  Goal (g1 g2)
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
@@ -218,12 +221,29 @@
     ((_ g0 gs ...) (disj g0 (disj* gs ...)))))
 
 
-(struct assumption-base (base)
-  #:transparent
-  #:methods gen:custom-write
-  [(define (write-proc val output-port output-mode)
-     (fprintf output-port "{~a}" (assumption-base-base val)))]
+;;; (struct assumption-base (base)
+;;;   #:transparent
+;;;   #:methods gen:custom-write
+;;;   [(define (write-proc val output-port output-mode)
+;;;      (fprintf output-port "{~a}" (assumption-base-base val)))]
+;;; )
+
+(define (any? _) #t)
+(define (assumption-base? k) (list? k))
+(define (empty-assumption-base? k) (equal? k '()))
+
+;;; return (cons (cons index assumption) remaining-assumptiob-base)
+;;;   return '() when assumption-base is empty
+(define/contract (iter-assumption-base k)
+  (assumption-base? . -> . any?)
+  k
 )
+
+(define/contract (cons-asumpt index prop org-asumpt)
+  (any? any? assumption-base? . -> . assumption-base?)
+  (cons (cons index prop) org-asumpt)  
+)
+
 
 
 (define (new-assumption-base)
@@ -420,26 +440,91 @@
 )
 
 ;;; streams
-(struct bind   (bind-s bind-g)          #:prefab)
-(struct mplus  (mplus-s1 mplus-s2)      #:prefab)
+(struct stream-struct () #:prefab)
+(struct bind  stream-struct (bind-s bind-g)          #:prefab)
+(struct mplus stream-struct (mplus-s1 mplus-s2)      #:prefab)
 ;;; (pause st g) will fill the generated proof term into st
 ;;; it has the same specification as (start st g)
-(struct pause  (pause-state pause-goal) #:prefab)
-(struct mapped-stream (f stream) #:prefab)
+(struct pause stream-struct (pause-state pause-goal) #:prefab)
+(struct mapped-stream stream-struct (f stream) #:prefab)
 ;;; f :: state -> stream of states
 ;;; mapped-stream f (cons a s) = mplus (f a) (mapped-stream f s)
-(struct to-dnf (state mark) #:prefab)
+(struct to-dnf stream-struct (state mark) #:prefab)
 ;;; semantically there is or in the "state"
 ;;;   this will lift the "or"s into stream
 ;;;   at the current stage, mark is used for pointing to
 ;;;     the disj component
+
+(struct syn-solve stream-struct (asumpt org-asumpt st g) #:prefab)
 
 ;;; this will force the v in st to be a stream of ground term
 ;;; basically used for proof-term-generation for
 ;;;    existential quantifier
 ;;;  say we have state (v =/= 1) /\ (numbero v)
 ;;; this will enumerate v to be each value
-(struct force-v-ground (v st) #:prefab)
+(struct force-v-ground stream-struct (v st) #:prefab)
+
+;;; detect stream or not
+(define (Stream? s)
+  (or (stream-struct? s)
+    (match s
+      [#f #t]
+      [(cons k r) (Stream? r)]
+      [o/w #f]
+    )))
+
+(define/contract (unify/goal ag bg st)
+  (Goal? Goal? ?state? . -> . Stream?)
+  (define solution 
+    ; this could be a state, a goal, and etc.
+    ;;; we will at the end transform it into a stream of state
+    (match (cons ag bg)
+    [(cons (relate a b) (relate c d))
+      (and (equal? a c) (equal? b d) st)]
+    [(cons (== a b) (== c d))
+      (conj* (== a c) (== b d))]
+    [(cons (=/= a b) (=/= c d))
+      (conj* (== a c) (== b d))]
+    ;;; composed goals
+    [(cons (ex a b) (ex c d))
+      (let* ([k (gen-sym)]
+             [LHS (b . subst . [k // a ])]
+             [RHS (d . subst . [k // c ])])
+        (unify/goal LHS RHS st) ; a stream to return
+      )]
+    [(cons (forall a b c) (forall d e f))
+      (let* ([k (gen-sym)]
+             [LHS (c . subst . [k // a])]
+             [LHS-D (b . subst . [k // a])]
+             [RHS (f . subst . [k // d])]
+             [RHS-D (e . subst . [k // d])])
+        (map-stream 
+          (lambda (st) (unify/goal LHS RHS st))
+          (unify/goal LHS-D RHS-D st)) ; a stream to return
+      )]
+    [(cons (conj a b) (conj c d))
+      (map-stream 
+        (lambda (st) (unify/goal b d st))
+        (unify/goal a c st)) ; a stream to return
+      ]
+    [(cons (disj a b) (disj c d))
+      (map-stream 
+        (lambda (st) (unify/goal b d st))
+        (unify/goal a c st)) ; a stream to return
+      ]
+    [(cons (cimpl a b) (cimpl c d))
+      (map-stream 
+        (lambda (st) (unify/goal b d st))
+        (unify/goal a c st)) ; a stream to return
+      ]
+  ))
+  (match solution
+    [#f #f]
+    [(? state?) (wrap-state-stream solution)]
+    [(? Goal?) (pause st solution)]
+    [(? Stream?) solution]
+  )
+)
 
 ;;; since a state has semantic of disjunction
 ;;;  we transform it into DNF and we should be able to index each disjunct component
@@ -487,14 +572,15 @@
 (struct bind-forall   (scope first-attempt-s dv bind-g)          #:prefab)
 
 
-(define (mature? s)
+(define/contract (mature? s)
+  (Stream? . -> . Stream?)
     (or (not s) (pair? s)))
 
 (define (not-state? x) (not (state? x)))
 
 (define/contract (mature s)
-    (not-state? . -> . any?)
-    (assert-or-warn (not-state? s) "It is not supposed to be a state here")
+    (Stream? . -> . Stream?)
+    ;;; (assert-or-warn (not-state? s) "It is not supposed to be a state here")
     ;;; (debug-dump "\n maturing: ~a" s)
     (if (mature? s) s (mature (step s))))
   
@@ -510,7 +596,8 @@
 ;;;   return another stream of states 
 ;;;   make sure there is no disjunction in meaning of each state and 
 ;;;     all the disjunction are lifted to mplus
-(define (TO-DNF stream)
+(define/contract (TO-DNF stream)
+  (Stream? . -> . Stream?)
   ;;; (debug-dump "TO-DNF computing \n")
   (mapped-stream (lambda (st) (to-dnf st (get-state-DNF-initial-index st))) stream))
 
@@ -521,24 +608,49 @@
 ;;;   (mapped-stream valid-type-stream stream)
 ;;; )
 
-(define (TO-NON-Asymmetric stream)
+(define/contract (TO-NON-Asymmetric stream)
+  (Stream? . -> . Stream?)
   ;;; (debug-dump "TO-NON-Asymmetric computing \n")
   (mapped-stream remove-assymetry-in-diseq stream)
 )
 
 ;;; term-finite-type : term x state -> stream
 ;;;  this will assert t is either #t, #f, or '()
-(define (term-finite-type t st)
+(define/contract (term-finite-type t st)
+  (any? ?state? . -> . Stream?)
   (pause st (disj* (== t '()) (== t #t) (== t #f)))
 )
-
 
 ;;; run a goal with a given state
 ;;; note that when st == #f, the returned stream will always be #f
 ;;; Specificaion: 
 ;;;   the partial proof term of st will be applied with the proof-term of g
-(define/contract (start st g)
-  (?state? any? . -> . any?)
+(define/contract (start asumpt st g)
+  (assumption-base? ?state? Goal? . -> . Stream?)
+  (mplus 
+    (syn-solving asumpt asumpt st g)
+    (sem-solving asumpt st g))
+)
+
+(define/contract (syn-solving asumpt org-asumpt st g)
+  (assumption-base? assumption-base? ?state? Goal? . -> . Stream?)
+  (if (empty-assumption-base? asumpt)
+    #f ;; TODO: change to re-invokable stream
+    (match-let* 
+        ([(cons (cons term-name ag) remain-asumpt) (iter-assumption-base asumpt)]
+         [if-one-solution ()]
+        )
+
+    )
+  )
+)
+
+;;; run a goal with a given state
+;;; note that when st == #f, the returned stream will always be #f
+;;; Specificaion: 
+;;;   the partial proof term of st will be applied with the proof-term of g
+(define/contract (sem-solving asumpt st g)
+  (assumption-base? ?state? Goal? . -> . Stream?)
   ;;; the following used when primitive goal is to fill in the
   (define (prim-goal-filled-st)
     (st . <-pfg . (LFprim-rel g)))
@@ -549,6 +661,12 @@
                   (pause [st . <-pfg . (_) (LFinjr _ g)] g2))))
     ((conj g1 g2)
      (step (bind (pause [st . <-pfg . (_1 _2) (LFpair _1 _2)] g1) g2)))
+    ((cimpl g1 g2)
+     (fresh-param (name-g1)
+      (let ([new-asumpt (cons-asumpt name-g1 g1 asumpt)])
+        (start new-asumpt st g2))
+     )
+    )
     ((relate thunk descript)
      (pause [st . <-pfg . (_) (LFpack _ descript)] (thunk)))
     ((== t1 t2) (unify t1 t2 (prim-goal-filled-st) ))
@@ -604,6 +722,12 @@
     ;;;   
     ;;; 
     ((forall var domain goal) 
+      ;;; Note: we won't support complicated (like recursive 
+      ;;;   relationship) in domain as the user
+      ;;;   can always use cimpl for complicated
+      ;;;   The good thing about this is that otherwise, the following
+      ;;;     "checking-domain-emptieness" will need to be 
+      ;;;     rewritten into stream computation, would be horrible
       (let* [(domain_ (simplify-wrt st domain var))
              (k (begin (debug-dump "\n ~a : domain_ : ~a " var domain_)))] 
 
@@ -615,6 +739,13 @@
           ;;;   then by composition we are done
           [(Bottom) (let* 
                       ([k (debug-dump "\n one solution: ~a" st)]
+                       [pf-term-to-fill-st 
+                          (st . <-pfg . 
+                            (_1 _2 _3)
+                            (fresh-param ()
+                              (lf-let* ([]))
+                            ))
+                       ]
                        [res (clear-about st (list->set (state-scope st)) var)])
                       res 
                       ) ]
@@ -632,7 +763,8 @@
 )
   
 
-(define (step s)
+(define/contract (step s)
+  (Stream? . -> . Stream?)
   ;;; (debug-dump "\n       step: I am going through ~a" s)
   (match s
     ((mplus s1 s2)
@@ -649,6 +781,8 @@
               (step (mplus (pause (car s) g)
                            (bind  (cdr s) g))))
              (else (bind s g)))))
+    ((syn-solve asm org-asm st g)
+     (syn-solving asm org-asm st g))
     ((to-dnf st mark)
       ;;; mark is the index
       (and mark
@@ -794,7 +928,8 @@
 ;;;   if satisfiable, then act as identity
 ;;;   otherwise return False
 ;;; simplify-wrt : state x goal x var -> goal
-(define (simplify-wrt st goal var) 
+(define/contract (simplify-wrt st goal var)
+  (?state? Goal? any? . -> . Goal?)
   ;;; just run miniKanren!
   (define (first-non-empty-mature stream)
     (match (mature stream)
@@ -804,7 +939,8 @@
   (if (first-non-empty-mature (pause st goal)) (syntactical-simplify goal) (Bottom)))
 
 ;;; some trivial rewrite to make things easier
-(define (syntactical-simplify goal)
+(define/contract (syntactical-simplify goal)
+  (Goal? . -> . Goal?)
   (define (basic-tactic prev-f rec goal)
     (define prev-result (prev-f goal))
     (define singlerewrite 
@@ -904,6 +1040,14 @@
   ;;; return the following
   (internal-f st)
 )
+
+(define-syntax subst
+  (syntax-rules ( // )   
+    ((_ X [to // from] ...) ; following the traditional subst syntax
+      (let ([smap (make-hash `((,from . ,to) ... ))])
+        (literal-replace* smap X)
+      ))
+  ))
 
 ;;; replace one var with another
 ;;;  var x var x state -> state

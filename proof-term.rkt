@@ -74,19 +74,57 @@
 ;;; (struct var (index) #:prefab) ;;; object variable, only used for lambda term
 ;;; (struct const (term type) #:prefab) ;;; all the lisp terms should be here
 
-
+(struct LispU #:prefab)
 ;;; for constructive implication type
-;;; ? and maybe universal quantifier type
+;;; and maybe universal quantifier type
+;;;   for the case 
 ;;;  it is not really "type", more like sum type of several type
 ;;;     (more like a set)
 ;;;  But constructivity requires us to consider proposition as types
 (struct LFlambda (params types body) #:prefab)
 (struct LFapply (func args) #:prefab)
 (struct LFparam (index name) #:prefab)
+(define newLFparam
+  ((lambda ()
+    (define idx 0)
+    (lambda (name)
+      (let* (
+          [ridx idx]
+          [k (set! idx (+ 1 idx))])
+        (LFparam idx name)))
+  )))
 
+;;; name several new LFparam and scope them
+(define-syntax fresh-param
+  (syntax-rules ()
+    ((_ (x ...) g0 gs ...)
+     (let ((x (newLFparam 'x)) ...) (begin g0 gs ...) ))
+  ))
+
+
+(define-syntax lf-let*
+  (syntax-rules (:)
+    ((_ () g0)
+     g0)
+
+    ((_ ((x0 y0 : T) xs ...) g0 )
+     (LFlet x y T (lf-let (xs ...) g0) ))
+  ))
 
 
 (struct LFtrue () #:prefab)
+
+;;; There are two universe -- one is lisp elements universe
+;;;  the other is the universe of propositions
+;;;   and each proposition is inhabited iff it is true
+;;;  to inhabit a proposition, a proof term is required
+(struct LFProofterm (goalType) #:prefab)
+
+;;; for axiom schema
+(struct LFaxiom LFProofterm () #:prefab)
+
+;;; usually just a (assumption) parameter
+(struct LFproof LFProofterm (term) #:prefab)
 
 ;;; the above consists the BNF definition of LF-lambda-term
 ;;; also exactly the definition of proof tree, except the wholeType

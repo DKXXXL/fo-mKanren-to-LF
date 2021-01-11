@@ -340,14 +340,7 @@
   (state-typercd-set st new-type-info)
 )
 
-(define (stream? x)
-  (match x
-    [#f #t]
-    [(cons h t) (stream? t)]
-  )
-)
 
-(define (any? _) #t)
 
 ;;; check if a given state has a valid/consistent type constraints
 ;;;   if not, return #f
@@ -361,7 +354,7 @@
     (check-as-inf-type-disj (cdr each-var-types) (car each-var-types) acc-st)))
 
 (define/contract (unify u v st)
-  (any? any? state? . -> . stream?)
+  (any? any? state? . -> . any?)
   ;;; inequality-recheck :: state -> state
   (define (inequality-recheck st)
     (define conj-all-diseq (state-diseq st))
