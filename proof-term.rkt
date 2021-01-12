@@ -57,7 +57,7 @@
 (struct LFinjl  (left wholeType) #:prefab)
 (struct LFinjr  (right wholeType) #:prefab)
 
-;;; No elimination rule for coproduct?
+
 
 ;;; the wholeType is actually the wholeProp
 

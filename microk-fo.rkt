@@ -473,6 +473,12 @@
       [o/w #f]
     )))
 
+
+;;; A lot of boiler-plate code
+;;;   unification on two goals, 
+;;;   the open/free variables will try to match
+;;;   the inner-declared variable will debrujin indexed
+;;;     for alpha-equivalence
 (define/contract (unify/goal ag bg st)
   (Goal? Goal? ?state? . -> . Stream?)
   (define solution 
@@ -517,10 +523,24 @@
         (lambda (st) (unify/goal b d st))
         (unify/goal a c st)) ; a stream to return
       ]
+    [(cons (symbolo a) (symbolo b))
+      (== a b)]
+    [(cons (not-symbolo a) (not-symbolo b))
+      (== a b)]
+    [(cons (numbero a) (numbero b))
+      (== a b)]
+    [(cons (not-numbero a) (not-numbero b))
+      (== a b)]
+    [(cons (stringo a) (stringo b))
+      (== a b)]
+    [(cons (not-stringo a) (not-stringo b))
+      (== a b)]
+    [(cons (type-constraint a T1) (type-constraint b T2))
+      (and (equal? T1 T2) (== a b))]
+    [_ #f]
   ))
   (match solution
-    [#f #f]
-    [(? state?) (wrap-state-stream solution)]
+    [(? ?state?) (wrap-state-stream solution)]
     [(? Goal?) (pause st solution)]
     [(? Stream?) solution]
   )
@@ -632,13 +652,76 @@
     (sem-solving asumpt st g))
 )
 
+;;; No elimination rule for coproduct?
+;;; Yes... no because we will just introduce an axiom
+;;;   instead of introducing LFcase or something
+;;; (disj A B) x (A -> C) x (B -> C)  -> C
+(define/contract (LFcase-analysis sumType retType sum-term left-case right-case)
+  (disj? Goal? proof-term? proof-term? proof-term? . -> . proof-term?)
+  (match-let* 
+    ([(disj A B) sumType]
+     [C retType]
+     [larrow (cimpl A C)]
+     [rarrow (cimpl B C)]
+     [case-type (cimpl (conj* sumType larrow rarrow) C)]
+     [case-term (LFaxiom case-type)]
+     [arguments (LFpair sum-term (LFpair left-case right-case))]
+    )
+    (LFapply case-term arguments)
+  )
+  
+)
+
 (define/contract (syn-solving asumpt org-asumpt st g)
   (assumption-base? assumption-base? ?state? Goal? . -> . Stream?)
+
+  ;;; we need to deconstruct the assumption base
+  ;;;   to syntactical pattern match on the sub-assumption
+  (define/contract (traversal-on-asumpt term-name top-asumpt remain-asumpt)
+    (any? Goal? assumption-base? . -> . Stream?)
+    (match top-asumpt
+      [(conj a b) 
+        (let* (
+          [a-name (LFpair-pi-1 term-name)]
+          [b-name (LFpair-pi-2 term-name)]
+          [new-rem (cons-asumpt a-name a
+                     (cons-asumpt b-name b remain-asumpt))]
+          )
+        (syn-solve new-rem org-asumpt st g)
+        )]
+      [(disj a b)
+        (fresh-param (lhs rhs lhs-asumpt rhs-asumpt)
+          (let* (
+              [st-pf-filled 
+                (st . <-pfg . (_1 _2) \
+                  (lf-let* 
+                      ([lhs (LFlambda lhs-asumpt a _1) : (cimpl a g)]
+                      [rhs (LFlambda rhs-asumpt b _2) : (cimpl b g)])
+                    (LFcase-analysis top-asumpt g term-name lhs rhs)))]
+              [with-disj-l
+                (syn-solve (cons-asumpt lhs-asumpt a '()) org-asumpt st-pf-filled g)]
+              [with-disj-l-r
+                (mapped-stream 
+                  (λ (st) (syn-solve (cons-asumpt rhs-asumpt b '()) org-asumpt st g))
+                  with-disj-l)]
+              [w/o-disj
+                (syn-solve remain-asumpt org-asumpt st g)]    
+              )
+            (mplus with-disj-l-r w/o-disj)))]
+      ;;; atomic prop! just ignore them
+      [o/w (syn-solve remain-asumpt org-asumpt st g)]
+    )
+  )
   (if (empty-assumption-base? asumpt)
     #f ;; TODO: change to re-invokable stream
     (match-let* 
-        ([(cons (cons term-name ag) remain-asumpt) (iter-assumption-base asumpt)]
-         [if-one-solution ()]
+        ([(cons (cons term-name ag) remain-asumpt) 
+            (iter-assumption-base asumpt)]
+         [if-top-level-match (unify/goal ag g st)] 
+         [if-top-level-match-filled 
+          (mapped-stream 
+            (lambda (st) (st . <-pfg . (LFproof term-name ag)))
+            if-top-level-match)];;; fill the current proof term
         )
 
     )
@@ -663,8 +746,9 @@
      (step (bind (pause [st . <-pfg . (_1 _2) (LFpair _1 _2)] g1) g2)))
     ((cimpl g1 g2)
      (fresh-param (name-g1)
-      (let ([new-asumpt (cons-asumpt name-g1 g1 asumpt)])
-        (start new-asumpt st g2))
+      (let* ([new-asumpt (cons-asumpt name-g1 g1 asumpt)]
+             [st-to-fill (st . <-pfg . (_) (LFlambda name-g1 g1 _))])
+        (start new-asumpt st-to-fill g2))
      )
     )
     ((relate thunk descript)
