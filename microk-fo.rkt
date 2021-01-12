@@ -475,7 +475,7 @@
 
 
 ;;; A lot of boiler-plate code
-;;;   unification on two goals, 
+;;;   (syntactical) unification on two goals, 
 ;;;   the open/free variables will try to match
 ;;;   the inner-declared variable will debrujin indexed
 ;;;     for alpha-equivalence
@@ -696,7 +696,7 @@
                 (st . <-pfg . (_1 _2) \
                   (lf-let* 
                       ([lhs (LFlambda lhs-asumpt a _1) : (cimpl a g)]
-                      [rhs (LFlambda rhs-asumpt b _2) : (cimpl b g)])
+                       [rhs (LFlambda rhs-asumpt b _2) : (cimpl b g)])
                     (LFcase-analysis top-asumpt g term-name lhs rhs)))]
               [with-disj-l
                 (syn-solve (cons-asumpt lhs-asumpt a '()) org-asumpt st-pf-filled g)]
@@ -708,6 +708,19 @@
                 (syn-solve remain-asumpt org-asumpt st g)]    
               )
             (mplus with-disj-l-r w/o-disj)))]
+      [(cimpl a b)
+          (fresh-param (applied argument)
+            (let* (
+                [st-pf-filled 
+                  (st . <-pfg . (_1 _2) \
+                    (lf-let* 
+                        ([argument _2 : a]
+                         [applied (LFapply term-name argument) : b])
+                      _1))])
+              (mapped-stream
+                (λ (st) (pause org-asumpt st a))
+                (syn-solve (cons-asumpt applied b remain-asumpt) org-asumpt st-pf-filled g))
+            ))]
       ;;; atomic prop! just ignore them
       [o/w (syn-solve remain-asumpt org-asumpt st g)]
     )
