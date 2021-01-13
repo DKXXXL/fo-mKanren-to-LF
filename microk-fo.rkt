@@ -721,6 +721,39 @@
                 (λ (st) (pause org-asumpt st a))
                 (syn-solve (cons-asumpt applied b remain-asumpt) org-asumpt st-pf-filled g))
             ))]
+      [(ex v g)
+          (fresh-param (dp1 dp2)
+            (let* (
+                [dp1_ (LFsigma-pi-1 term-name)]
+                [dp2-type (b . subst . [dp1_ // v]]
+                [st-pf-filled 
+                  (st . <-pfg . (_1) \
+                    (lf-let* 
+                        ([dp1 dp1_ : LispU]
+                         [dp2 (LFsigma-pi-2 term-name) : dp2-type)])
+                      _1))]
+                [new-asumpt (cons-asumpt dp2 dp2-type remain-asumpt)]
+                    )
+              (syn-solve new-asumpt org-asumpt st-pf-filled g))
+        ))]
+      [(forall v domain g)
+          (fresh (VT)
+            (fresh-param (applied-term dp2)
+            (let* (
+                [forall-internal (cimpl domain g)]
+                [applied-type (forall-internal . subst . [VT // v])]
+                [st-pf-filled 
+                  (st . <-pfg . (_1 _2)   
+                    (lf-let* 
+                        ([applied-term (LFapply term-name _2) 
+                            : (forall-internal . subst . [_2 // v])])
+                      _1))]
+                [new-asumpt (cons-asumpt applied-term applied-type remain-asumpt)]
+                    )
+              (mapped-stream
+                ;; fill in the second hole
+                (λ (st) (wrap-state-stream (st . <-pfg . (walk* v (state-sub st))))) 
+                (syn-solve new-asumpt org-asumpt st-pf-filled g)) )))]
       ;;; atomic prop! just ignore them
       [o/w (syn-solve remain-asumpt org-asumpt st g)]
     )
