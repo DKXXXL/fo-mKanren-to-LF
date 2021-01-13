@@ -6,6 +6,8 @@
   (struct-out LFinjr)
   (struct-out LFprim-rel)
   (struct-out LFpack)
+  (struct-out proof-term)
+  (struct-out LFProofterm)
   pt/h
   pth-compose
   single-hole
@@ -27,10 +29,10 @@
 (struct proof-term () #:prefab)
 
 ;;; introduction rule
-(struct LFsigma (ex body wholeType)  #:prefab)
+(struct LFsigma proof-term (ex body wholeType)  #:prefab)
 ;;; elimination rule
-(struct LFsigma-pi-1 (term) #:prefab)
-(struct LFsigma-pi-2 (term) #:prefab)
+(struct LFsigma-pi-1 proof-term (term) #:prefab)
+(struct LFsigma-pi-2 proof-term (term) #:prefab)
 ;;;   #:methods gen:custom-write
 ;;;   [(define (write-proc val output-port output-mode)
 ;;;      (fprintf output-port "{~a ~a}" (LFsigma-ex val) (LFsigma-body val)))]
@@ -43,19 +45,19 @@
 ;;; another issue is that wholeType is necessary here, because term 
 ;;; (5, refl) : (ex x, x == 5)
 ;;; (5, refl) : (ex x, 5 == 5)
-(struct LFlet (v bind bindT body) #:prefab)
+(struct LFlet proof-term (v bind bindT body) #:prefab)
 
 
 ;;; introduction rule
-(struct LFpair  (left right) #:prefab)
+(struct LFpair proof-term  (left right) #:prefab)
 ;;; I think induction tells you that here wholeType is unnecessary
 ;;; elimination rule
-(struct LFpair-pi-1 (term) #:prefab)
-(struct LFpair-pi-2 (term) #:prefab)
+(struct LFpair-pi-1 proof-term (term) #:prefab)
+(struct LFpair-pi-2 proof-term (term) #:prefab)
 
 ;;; introduction rule
-(struct LFinjl  (left wholeType) #:prefab)
-(struct LFinjr  (right wholeType) #:prefab)
+(struct LFinjl proof-term (left wholeType) #:prefab)
+(struct LFinjr proof-term (right wholeType) #:prefab)
 
 
 
@@ -64,26 +66,26 @@
 ;;; so we have a lot of primitive Relation (and dualizable)
 ;;;   for each of them introduce a (almost no information) proof term
 ;;;   is weird
-(struct LFprim-rel (goalType) #:prefab)
+(struct LFprim-rel proof-term (goalType) #:prefab)
 ;;; this is a place holder for each of them
 ;;;   TODO: we will have to discuss how to deal with 
 ;;;     them respectively
 
-(struct LFpack (subterm description) #:prefab)
+(struct LFpack proof-term (subterm description) #:prefab)
 
 ;;; (struct var (index) #:prefab) ;;; object variable, only used for lambda term
 ;;; (struct const (term type) #:prefab) ;;; all the lisp terms should be here
 
-(struct LispU #:prefab)
+(struct LispU () #:prefab)
 ;;; for constructive implication type
 ;;; and maybe universal quantifier type
 ;;;   for the case 
 ;;;  it is not really "type", more like sum type of several type
 ;;;     (more like a set)
 ;;;  But constructivity requires us to consider proposition as types
-(struct LFlambda (params types body) #:prefab)
-(struct LFapply (func args) #:prefab)
-(struct LFparam (index name) #:prefab)
+(struct LFlambda proof-term (params types body) #:prefab)
+(struct LFapply proof-term (func args) #:prefab)
+(struct LFparam proof-term (index name) #:prefab)
 (define newLFparam
   ((lambda ()
     (define idx 0)
@@ -112,13 +114,13 @@
   ))
 
 
-(struct LFtrue () #:prefab)
+;;; (struct LFtrue () #:prefab)
 
 ;;; There are two universe -- one is lisp elements universe
 ;;;  the other is the universe of propositions
 ;;;   and each proposition is inhabited iff it is true
 ;;;  to inhabit a proposition, a proof term is required
-(struct LFProofterm (goalType) #:prefab)
+(struct LFProofterm proof-term (goalType) #:prefab)
 
 ;;; for axiom schema
 (struct LFaxiom LFProofterm () #:prefab)

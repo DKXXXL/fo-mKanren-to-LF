@@ -579,6 +579,18 @@
   (index-incremenent-by-one index range))
 
 
+(define/contract (complementable-goal? g)
+  (Goal? . -> . Goal?)
+  (define (each-case prev-f rec g)
+    (match g
+      ;;; thiss pattern matching i a bit dangerous
+      ;;; TODO: make equation/inequality into a struct so that pattern-matching can be easier
+      [(relate _ _) ]
+
+    )
+  )
+)
+
 (define (get-state-DNF-by-index st index)
   (define conjs (state-diseq st))
   (define indexed-conjs (map (lambda (disjs pos) (list (list-ref disjs pos))) conjs index))
@@ -769,7 +781,8 @@
             (lambda (st) (st . <-pfg . (LFproof term-name ag)))
             if-top-level-match)];;; fill the current proof term
         )
-
+      (mplus if-top-level-match-filled
+             (traversal-on-asumpt term-name ag remain-asumpt))
     )
   )
 )
@@ -790,6 +803,15 @@
                   (pause [st . <-pfg . (_) (LFinjr _ g)] g2))))
     ((conj g1 g2)
      (step (bind (pause [st . <-pfg . (_1 _2) (LFpair _1 _2)] g1) g2)))
+    ((cimpl g1 (Bottom)) ;; the case we want to prove constructive negation
+    ;;; we will first see if g1 is decidable or not
+     (fresh-param (name-g1)
+      (let* ([new-asumpt (cons-asumpt name-g1 g1 asumpt)]
+             [st-to-fill (st . <-pfg . (_) (LFlambda name-g1 g1 _))])
+        (start new-asumpt st-to-fill g2))
+     )
+    )
+
     ((cimpl g1 g2)
      (fresh-param (name-g1)
       (let* ([new-asumpt (cons-asumpt name-g1 g1 asumpt)]
@@ -1022,6 +1044,8 @@
     (match g
       [(disj g1 g2) (conj (c g1) (c g2))]
       [(conj g1 g2) (disj (c g1) (c g2))]
+      [(cimpl _ _) 
+        (raise-and-warn "Constructive implication not supported.")]
       [(relate _ _) 
         (raise-and-warn "User-Relation not supported.")]
       [(== t1 t2) (=/= t1 t2)]
