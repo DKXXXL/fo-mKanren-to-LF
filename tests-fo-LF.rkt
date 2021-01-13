@@ -577,8 +577,8 @@
           (== x1s '())
           (== x2s '()))
          ((fresh (x)
-           (== xs '(x))
-           (== x1s '(x))
+           (== xs (list x))
+           (== x1s (list x))
            (== x2s '())))
          ((fresh (xs^ x y x1s^ x2s^)
            (== xs (cons x (cons y xs^)))
@@ -641,6 +641,37 @@
 . test-reg!=> . 'succeed
 )
 
+
+(Teenage-sort-2-1
+  (run 1 () (for-all (x)  (sort-boolo (list x #f) (list #f x))))
+
+. test-reg!=> . 'succeed
+)
+
+(Teenage-sort-2-2
+  (run 1 () (for-all (x)  (sort-boolo (list #f x) (list #f x))))
+. test-reg!=> . 'succeed
+)
+
+(Teenage-sort-2-3
+  (run 1 () (for-all (x)  (sort-boolo (list x #f #f) (list #f #f x))))
+. test-reg!=> . 'succeed
+)
+
+(Teenage-sort-2-4
+  (run 1 () (for-all (x)  (sort-boolo (list #f x #f) (list #f #f x))))
+. test-reg!=> . 'succeed
+)
+
+(Teenage-sort-2-5
+  (run 1 () (for-all (x)  (sort-boolo (list #f #f x) (list #f #f x))))
+. test-reg!=> . 'succeed
+)
+
+(Teenage-sort-2-6
+  (run 1 (a) (for-all (x)  (sort-boolo (list #f #f x) (list a #f x))))
+. test-reg!=> . 'succeed
+)
 
 
 ;;; 
