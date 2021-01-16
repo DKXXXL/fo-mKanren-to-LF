@@ -264,8 +264,9 @@
   (match g
     [(disj a b) (disj (rec a) (rec b))]
     [(conj a b) (conj (rec a) (rec b))]
+    [(cimpl a b) (cimpl (rec a) (rec b))]
     [(ex v g) (ex v (rec g))]
-    [(forall v b g) (forall v (rec v) (rec g))]
+    [(forall v b g) (forall v (rec b) (rec g))]
     [_ (prev-f g)] ;; otherwise do nothing
   )
 )
@@ -457,6 +458,7 @@
 
 (struct syn-solve stream-struct (asumpt org-asumpt st g) #:prefab)
 
+
 ;;; this will force the v in st to be a stream of ground term
 ;;; basically used for proof-term-generation for
 ;;;    existential quantifier
@@ -578,18 +580,44 @@
   (define range (get-state-DNF-range st))
   (index-incremenent-by-one index range))
 
-
+;;; the goal is complementable iff goal is without any relate
 (define/contract (complementable-goal? g)
-  (Goal? . -> . Goal?)
+  (Goal? . -> . boolean?)
+  (define res #t)
+  ;;; side-effect for folding
+  ;;;   on visitor pattern
   (define (each-case prev-f rec g)
     (match g
-      ;;; thiss pattern matching i a bit dangerous
-      ;;; TODO: make equation/inequality into a struct so that pattern-matching can be easier
-      [(relate _ _) ]
-
+      [(relate _ _) (begin (set! res #f) g)]
+      [(cimpl a b) (rec b)] ; only requires b complementable
+      [(forall _ b g) (rec (cimpl b g))] ; equivalent semantic
+      [_ (prev-f g)]
     )
   )
+  (define f (overloading-functor-list list each-case goal-base-endofunctor identity-endo-functor))
+  (f g)
+  res
 )
+
+;;; the goal is complementable iff goal is without any relate
+(define/contract (decidable-goal? g)
+  (Goal? . -> . boolean?)
+  (define res #t)
+  ;;; side-effect for folding
+  ;;;   on visitor pattern
+  (define (each-case prev-f rec g)
+    (match g
+      [(relate _ _) (begin (set! res #f) g)]
+      [(cimpl a b) (begin (set! res #f) g)] ; don't even allow implication to be inside g
+      [(forall _ b g) (rec (cimpl b g))] ; equivalent semantic
+      [_ (prev-f g)]
+    )
+  )
+  (define f (overloading-functor-list list each-case goal-base-endofunctor identity-endo-functor))
+  (f g)
+  res
+)
+
 
 (define (get-state-DNF-by-index st index)
   (define conjs (state-diseq st))
@@ -687,8 +715,9 @@
 (define/contract (syn-solving asumpt org-asumpt st g)
   (assumption-base? assumption-base? ?state? Goal? . -> . Stream?)
 
-  ;;; we need to deconstruct the assumption base
-  ;;;   to syntactical pattern match on the sub-assumption
+  ;;; first we look at top-level assumption to see if unification can succeed
+  ;;; then we need to deconstruct the (top)-assumption base
+  ;;;   to syntactical pattern match on all the sub-assumption
   (define/contract (traversal-on-asumpt term-name top-asumpt remain-asumpt)
     (any? Goal? assumption-base? . -> . Stream?)
     (match top-asumpt
@@ -705,7 +734,7 @@
         (fresh-param (lhs rhs lhs-asumpt rhs-asumpt)
           (let* (
               [st-pf-filled 
-                (st . <-pfg . (_1 _2) \
+                (st . <-pfg . (_1 _2) 
                   (lf-let* 
                       ([lhs (LFlambda lhs-asumpt a _1) : (cimpl a g)]
                        [rhs (LFlambda rhs-asumpt b _2) : (cimpl b g)])
@@ -724,7 +753,7 @@
           (fresh-param (applied argument)
             (let* (
                 [st-pf-filled 
-                  (st . <-pfg . (_1 _2) \
+                  (st . <-pfg . (_1 _2) 
                     (lf-let* 
                         ([argument _2 : a]
                          [applied (LFapply term-name argument) : b])
@@ -739,7 +768,7 @@
                 [dp1_ (LFsigma-pi-1 term-name)]
                 [dp2-type (b . subst . [dp1_ // v]]
                 [st-pf-filled 
-                  (st . <-pfg . (_1) \
+                  (st . <-pfg . (_1) 
                     (lf-let* 
                         ([dp1 dp1_ : LispU]
                          [dp2 (LFsigma-pi-2 term-name) : dp2-type)])
@@ -775,7 +804,7 @@
     (match-let* 
         ([(cons (cons term-name ag) remain-asumpt) 
             (iter-assumption-base asumpt)]
-         [if-top-level-match (unify/goal ag g st)] 
+         [if-top-level-match (unify/goal ag g st)] ;;; type: Stream?
          [if-top-level-match-filled 
           (mapped-stream 
             (lambda (st) (st . <-pfg . (LFproof term-name ag)))
@@ -785,6 +814,19 @@
              (traversal-on-asumpt term-name ag remain-asumpt))
     )
   )
+)
+
+;;; Try to prove g is unsatisfiable under st
+;;;   that is proving (cimpl g (Bottom)) semantically
+;;;     whose proof-term will also be put into Stream
+;;;   the whole proving thing is proceeded 
+;;;     "lazily"/asyncly/inside stream computation
+(define/contract (prove-goal-unsat asumpt st g)
+  (?state? Goal? . -> . Stream?)
+  (when-empty-stream (pause asumpt st g)
+
+  )
+
 )
 
 ;;; run a goal with a given state
@@ -802,20 +844,42 @@
      (step (mplus (pause [st . <-pfg . (_) (LFinjl _ g)] g1)
                   (pause [st . <-pfg . (_) (LFinjr _ g)] g2))))
     ((conj g1 g2)
+    ;;; will add g1 into assumption when solving g2
+    ;;;   different from cimpl that state will be impacted after solving g1
      (step (bind (pause [st . <-pfg . (_1 _2) (LFpair _1 _2)] g1) g2)))
-    ((cimpl g1 (Bottom)) ;; the case we want to prove constructive negation
-    ;;; we will first see if g1 is decidable or not
-     (fresh-param (name-g1)
-      (let* ([new-asumpt (cons-asumpt name-g1 g1 asumpt)]
-             [st-to-fill (st . <-pfg . (_) (LFlambda name-g1 g1 _))])
-        (start new-asumpt st-to-fill g2))
-     )
-    )
 
-    ((cimpl g1 g2)
+    ((cimpl g1 g2) 
+      ;;; semantic solving of implication is 
+      ;;; two ways : semantic + syntactic solving (changing state or not)
+      ;;; + two ways : prove bottom from g1 or prove g2 from g1
+      ;;;  (why choose proving bottom? Why bottom is special?)
+      ;;;     because bottom means some non-existential state/assumption collection
+      ;;;     which is helpful for relative complements to end
+      ;;; syntactical proving bottom from g1 
+      ;;;   and syntactic proving g2 from g1 will be covered with (start ..) 
+      ;;; semantic proving bottom from g1 is actually proving neg g1
+      ;;;   if g1 is complementable
+      ;;;  so there are three streams
      (fresh-param (name-g1)
-      (let* ([new-asumpt (cons-asumpt name-g1 g1 asumpt)]
-             [st-to-fill (st . <-pfg . (_) (LFlambda name-g1 g1 _))])
+      (let* ([st-to-fill (st . <-pfg . (_) (LFlambda name-g1 g1 _))]
+             [new-asumpt (cons-asumpt name-g1 g1 asumpt)]
+             [prove-g2 (start new-asumpt st-to-fill g2)]
+              ; syntactically assuming g1 (g1 doesn't impact on state)
+             [prove-g2- (start asumpt st-to-fill (conj g1 g2))] 
+              ; semantically assuming g1 (g1 impact on state)
+             [from-bottom-type (cimpl (Bottom) g2)]
+             [st-to-fill-by-bottom 
+                (fresh-param (to-bottom from-bottom)
+                  (st . <-pfg . (_)
+                    (lf-let* 
+                        ([to-bottom _ : (cimpl g1 (Bottom))]
+                         [from-bottom (LFaxiom from-bottom-ty) : from-bottom-ty])
+                      (LFapply from-bottom (LFapply to-bottom name-g1)))
+                  ))]
+             [prove-bottom (start new-asumpt st-to-fill-by-bottom (Bottom))]
+             [prove-neg-g1 (and (complementable-goal? g1) 
+                                (start asumpt st-to-fill-by-bottom ))]
+             )
         (start new-asumpt st-to-fill g2))
      )
     )
@@ -880,14 +944,18 @@
       ;;;   The good thing about this is that otherwise, the following
       ;;;     "checking-domain-emptieness" will need to be 
       ;;;     rewritten into stream computation, would be horrible
-      (let* [(domain_ (simplify-wrt st domain var))
+      
+      ;;;  the first step is actually trying prove bottom from domain or otherwise
+      ;;; TODO: add syntactical solving (i.e. put domain_ into the assumption but never solve it)
+      ;;;         as now we know domain is always decidable so we just need to solve it (to add into state)
+      (let* [(domain_ (simplify-wrt st domain var))  
              (k (begin (debug-dump "\n ~a : domain_ : ~a " var domain_)))] 
 
         (match domain_
           ;;; BUGFIX: shrink-into about st
 
           ;;; in the bottom case, inside proof term
-          ;;;   we prove domain -> Bottom, and them prove Bottom -> goal
+          ;;;   we try to prove domain -> Bottom, and them prove Bottom -> goal
           ;;;   then by composition we are done
           [(Bottom) (let* 
                       ([k (debug-dump "\n one solution: ~a" st)]
@@ -903,7 +971,7 @@
                       ) ]
           ;;; [(Bottom) (wrap-state-stream st)] 
           [_ (bind-forall (set-add (state-scope st) var)
-                          (TO-DNF (TO-NON-Asymmetric (pause st (ex var (conj domain_ goal)))) )  
+                          (TO-DNF (TO-NON-Asymmetric (pause st (conj domain_ goal))) )  
                           var 
                           (forall var domain_ goal))]
         )
@@ -1038,21 +1106,21 @@
 ;;; trivially negate the goal, relies on the fact that
 ;;;  we have a dualized goals
 ;;; doesn't support user-customized goal, and universal-quantification
-(define (complement g)
-  ;;; (goal? . -> . goal?)
+(define/contract (complement g)
+  (Goal? . -> . Goal?)
   (let ([c complement])
     (match g
       [(disj g1 g2) (conj (c g1) (c g2))]
       [(conj g1 g2) (disj (c g1) (c g2))]
-      [(cimpl _ _) 
-        (raise-and-warn "Constructive implication not supported.")]
+      [(cimpl a b) ;;; \neg a \lor b 
+        (conj a (complement b))]
       [(relate _ _) 
         (raise-and-warn "User-Relation not supported.")]
       [(== t1 t2) (=/= t1 t2)]
       [(=/= t1 t2) (== t1 t2)]
       [(ex a gn) (forall a (c gn))]
-      [(forall v bound gn) 
-        (raise-and-warn "Not supported complement on higher-ranked.") ]
+      [(forall v bound gn) ;; forall v. bound => g
+        (ex v (complement (cimpl bound gn))) ]
       [(numbero t) (not-numbero t)]
       [(not-numbero t) (numbero t)]
       [(stringo t) (not-stringo t)]
@@ -1083,7 +1151,7 @@
 ;;;   otherwise return False
 ;;; simplify-wrt : state x goal x var -> goal
 (define/contract (simplify-wrt st goal var)
-  (?state? Goal? any? . -> . Goal?)
+  (?state? decidable-goal? any? . -> . Goal?)
   ;;; just run miniKanren!
   (define (first-non-empty-mature stream)
     (match (mature stream)
