@@ -1101,6 +1101,24 @@
                               (debug-dump "\n"))
                               ]
                     [valid-shrinked-state (valid-type-constraints-check shrinked-st)] ;; clear up the incorrect state information
+                    [current-domain (state->goal st)]
+                    [solved-case-ty (forall v (conj current-domain domain) g)]
+                    [unsolved-case-ty (forall v (conj relative-complemented-goal domain) g)]
+                    [case-axiom-ty  ;; trust-base -- we later need to expand it into the proof
+                      (solved-case-ty
+                        . cimpl . (unsolved-case-ty
+                        . cimpl . (forall v domain g)))]
+                    [shrinked-pf-filled-st 
+                      (valid-shrinked-state . <-pfg . 
+                        (_)
+                        (fresh-param (solved-case unsolved-case case-axiom result)
+                          (lf-let* 
+                              ([solved-case (LFaxiom solved-case-ty) : solved-case-ty] ; TODO: need justification
+                               [unsolved-case _ : unsolved-case-ty]
+                               [case-axiom (LFaxiom case-axiom-ty) : case-axiom-ty] ; TODO: need justification
+                               [result (LFapply (LFapply case-axiom solved-case) unsolved-case) : (forall v domain g)])
+                            result)))
+                    ]
                     )
               ;;; forall x (== x 3) (== x 3)
               ;;;   forall x (conj (== x 3) (=/= x 3)) (== x 3)
@@ -1684,15 +1702,13 @@
   (foldl (lambda (tp g) (force-as-pair (tproj-v tp) g)) goal (set->list all-tprojs))
 )
 
-;;; (define (state->goal st)
-;;;   (define eqs (map (lambda (eq) (== (car eq) (cdr eq))) (state-sub st)))
-;;;   (define types)
-;;;   (define (disjunct-diseqs ls) 
-;;;     (define all-eqs (map (lambda (eq) (=/= (car eq) (cdr eq))) ls))
-;;;     (foldl disj (Top) all-eqs))
-;;;   (define diseqs ())
-;;;   (syntactical-simplify (conj (eqs types) disj))
-;;; )
+(define/contract (state->goal st)
+  (?state? . -> . Goal?)
+  (for/fold
+    ([acc-g (Top)])
+    ([each-g (conj-state->list-of-goals st)])
+    (conj acc-g each-g))
+)
 
 ;;; given a state with only conjunction, we go through and take out all the
 ;;;   atomic proposition
