@@ -828,15 +828,10 @@
 
 ;;; Try to prove g is unsatisfiable under st
 ;;;   that is proving (cimpl g (Bottom)) semantically
-;;;     whose proof-term will also be put into Stream
-;;;   the whole proving thing is proceeded 
-;;;     "lazily"/asyncly/inside stream computation
+;;;     whose proof-term will also be put into st
 (define/contract (prove-goal-unsat asumpt st g)
-  (?state? Goal? . -> . Stream?)
-  (when-empty-stream (pause asumpt st g)
-
-  )
-
+  (?state? Goal? . -> . ?state?)
+  (st . <-pfg . (raise-and-warn "Unimplemented"))
 )
 
 ;;; run a goal with a given state
@@ -887,9 +882,20 @@
                       (LFapply from-bottom (LFapply to-bottom name-g1)))
                   ))]
              [cg1 (and (complementable-goal? g1) (complement g1))]
+             [cg1-bottom-ty (cimpl cg1 (cimpl g1 (Bottom)))]
+             [st-to-fill-by-bottom-2
+                (fresh-param (to-bottom from-bottom neg-to-bottom neg-g1)
+                  (st . <-pfg . (_)
+                    (lf-let* 
+                        ([neg-g1 _ : cg1]
+                         [neg-to-bottom (LFaxiom cg1-bottom-ty) : cg1-bottom-ty]
+                         [to-bottom (LFapply neg-to-bottom neg-g1) : (cimpl g1 (Bottom))]
+                         [from-bottom (LFaxiom from-bottom-ty) : from-bottom-ty])
+                      (LFapply from-bottom (LFapply to-bottom name-g1)))
+                  ))]
              [prove-bottom (start new-asumpt st-to-fill-by-bottom (Bottom))]
              [prove-neg-g1 (and (complementable-goal? g1) 
-                                (start asumpt st-to-fill-by-bottom (complement g1)))]
+                                (start asumpt st-to-fill-by-bottom-2 cg1))]
              )
         (mplus prove-g2 prove-g2- prove-bottom prove-neg-g1))
      )
@@ -968,23 +974,34 @@
           ;;; in the bottom case, inside proof term
           ;;;   we try to prove domain -> Bottom, and them prove Bottom -> goal
           ;;;   then by composition we are done
+          ;;; TODO: also prove bottom from syntactical aspect, I think simplify-wrt is not returning
+          ;;;       precise result
           [(Bottom) (let* 
                       ([k (debug-dump "\n one solution: ~a" st)]
+                       [from-bottom-ty (cimpl (Bottom) goal)]
                        [pf-term-to-fill-st 
                           (st . <-pfg . 
-                            (_1 _2 _3)
-                            (fresh-param ()
-                              (lf-let* ([]))
-                            ))
-                       ]
-                       [res (clear-about st (list->set (state-scope st)) var)])
+                            (_)
+                            (fresh-param (v domain-term from-bottom)
+                              (lf-let* 
+                                  ([to-bottom _ : (cimpl domain (Bottom))]
+                                   [from-bottom (LFaxiom from-bottom-ty) : from-bottom-ty])
+                                (LFlambda (v)
+                                  (LFlambda (domain-term)
+                                    (LFapply from-bottom (LFapply to-bottom domain-term))
+                                  )))))]
+                       [st-terminating (prove-goal-unsat asumpt pf-term-to-fill-st domain)]
+                       [res (clear-about st (list->set (state-scope st-terminating)) var)])
                       res 
                       ) ]
           ;;; [(Bottom) (wrap-state-stream st)] 
-          [_ (bind-forall (set-add (state-scope st) var)
-                          (TO-DNF (TO-NON-Asymmetric (pause st (conj domain_ goal))) )  
-                          var 
-                          (forall var domain_ goal))]
+          [_ 
+            (let* ([ignore-one-hole-st (st . <-pfg . (_1 _2) _2)]
+                   [])
+              (bind-forall (set-add (state-scope st) var)
+                            (TO-DNF (TO-NON-Asymmetric (pause ignore-one-hole-st (conj domain_ goal))) )  
+                            var 
+                            (forall var domain_ goal)))]
         )
       )
     )
