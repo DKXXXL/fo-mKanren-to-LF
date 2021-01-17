@@ -778,9 +778,14 @@
                         ([axiom-deconstructor (LFaxiom axiom-decons-ty) : axiom-decons-ty]
                          [subgoal _1 : subgoal-ty)])
                       (LFapply (LFapply axiom-deconstructor subgoal-ty) term-name)))]
-                    )
-                    ;;; TODO: apparently there are some duplicate computation, fixing is a good idea
-              (pause org-asumpt st-pf-filled subgoal-ty))
+            ;;; remove that existential assumption as well
+            ;;; TODO: apparently there are some duplicate computation, 
+            ;;;   with these unremoved assumption before top asumpt
+            ;;;     (because the new subgoal-ty barely changed)
+                [reduced-asumpt (filter (λ (a) (not (equal? top-asumpt a))) org-asumpt)]
+              (mplus 
+                (syn-solve remain-asumpt org-asumpt st g)
+                (pause reduced-asumpt st-pf-filled subgoal-ty))))
         ))]
       [(forall v domain t)
           (fresh (VT)
