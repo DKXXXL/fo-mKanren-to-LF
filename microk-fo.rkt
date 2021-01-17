@@ -762,26 +762,31 @@
                 (λ (st) (pause org-asumpt st a))
                 (syn-solve (cons-asumpt applied b remain-asumpt) org-asumpt st-pf-filled g))
             ))]
-      [(ex v g)
-          (fresh-param (dp1 dp2)
+      [(ex v t)
+      ;;; the key is
+      ;;; ((forall v (R . cimpl . g)) and (ex v R)) . cimpl . g
+          (fresh-param (axiom-deconstructor subgoal)
             (let* (
-                [dp1_ (LFsigma-pi-1 term-name)]
-                [dp2-type (b . subst . [dp1_ // v]]
+                [subgoal-ty (for-all (x) ( (t . subst . [x // v]) . cimpl . g ))]
+                [axiom-decons-ty
+                  (subgoal . cimpl . 
+                   ((ex v t) . cimpl . g))]
                 [st-pf-filled 
                   (st . <-pfg . (_1) 
                     (lf-let* 
-                        ([dp1 dp1_ : LispU]
-                         [dp2 (LFsigma-pi-2 term-name) : dp2-type)])
-                      _1))]
-                [new-asumpt (cons-asumpt dp2 dp2-type remain-asumpt)]
+                        ;;; TODO: axiom-deconstructor is actually provable
+                        ([axiom-deconstructor (LFaxiom axiom-decons-ty) : axiom-decons-ty]
+                         [subgoal _1 : subgoal-ty)])
+                      (LFapply (LFapply axiom-deconstructor subgoal-ty) term-name)))]
                     )
-              (syn-solve new-asumpt org-asumpt st-pf-filled g))
+                    ;;; TODO: apparently there are some duplicate computation, fixing is a good idea
+              (pause org-asumpt st-pf-filled subgoal-ty))
         ))]
-      [(forall v domain g)
+      [(forall v domain t)
           (fresh (VT)
             (fresh-param (applied-term dp2)
             (let* (
-                [forall-internal (cimpl domain g)]
+                [forall-internal (cimpl domain t)]
                 [applied-type (forall-internal . subst . [VT // v])]
                 [st-pf-filled 
                   (st . <-pfg . (_1 _2)   
@@ -876,11 +881,12 @@
                          [from-bottom (LFaxiom from-bottom-ty) : from-bottom-ty])
                       (LFapply from-bottom (LFapply to-bottom name-g1)))
                   ))]
+             [cg1 (and (complementable-goal? g1) (complement g1))]
              [prove-bottom (start new-asumpt st-to-fill-by-bottom (Bottom))]
              [prove-neg-g1 (and (complementable-goal? g1) 
-                                (start asumpt st-to-fill-by-bottom ))]
+                                (start asumpt st-to-fill-by-bottom (complement g1)))]
              )
-        (start new-asumpt st-to-fill g2))
+        (mplus prove-g2 prove-g2- prove-bottom prove-neg-g1))
      )
     )
     ((relate thunk descript)
