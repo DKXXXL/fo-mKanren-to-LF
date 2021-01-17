@@ -442,11 +442,11 @@
 
 ;;; streams
 (struct stream-struct () #:prefab)
-(struct bind  stream-struct (bind-s bind-g)          #:prefab)
+(struct bind  stream-struct (asumpt bind-s bind-g)          #:prefab)
 (struct mplus stream-struct (mplus-s1 mplus-s2)      #:prefab)
 ;;; (pause st g) will fill the generated proof term into st
 ;;; it has the same specification as (start st g)
-(struct pause stream-struct (pause-state pause-goal) #:prefab)
+(struct pause stream-struct (asumpt pause-state pause-goal) #:prefab)
 (struct mapped-stream stream-struct (f stream) #:prefab)
 ;;; f :: state -> stream of states
 ;;; mapped-stream f (cons a s) = mplus (f a) (mapped-stream f s)
@@ -846,12 +846,19 @@
   (and st ;;; always circuit the st
     (match g
     ((disj g1 g2)
-     (step (mplus (pause [st . <-pfg . (_) (LFinjl _ g)] g1)
-                  (pause [st . <-pfg . (_) (LFinjr _ g)] g2))))
+     (step (mplus (pause asumpt [st . <-pfg . (_) (LFinjl _ g)] g1)
+                  (pause asumpt [st . <-pfg . (_) (LFinjr _ g)] g2))))
     ((conj g1 g2)
     ;;; will add g1 into assumption when solving g2
     ;;;   different from cimpl that state will be impacted after solving g1
-     (step (bind (pause [st . <-pfg . (_1 _2) (LFpair _1 _2)] g1) g2)))
+     (fresh-param (left-v)
+       (let* ([st-pf-filled 
+              (st . <-pfg . 
+                (_1 _2) 
+                    (lf-let* ([left-v _1 : g1])
+                      (LFpair left-v _2)))]
+              [new-asumpt (cons-asumpt left-v g1 asumpt)])
+       (step (bind new-asumpt (pause asumpt st-pf-filled g1) g2)))))
 
     ((cimpl g1 g2) 
       ;;; semantic solving of implication is 
@@ -1022,13 +1029,13 @@
               (cons (car s1)
                     (mplus s2 (cdr s1))))
              (else (mplus s2 s1)))))
-    ((bind s g)
+    ((bind asumpt s g)
      (let ((s (if (mature? s) s (step s))))
        (cond ((not s) #f)
              ((pair? s)
-              (step (mplus (pause (car s) g)
-                           (bind  (cdr s) g))))
-             (else (bind s g)))))
+              (step (mplus (pause asumpt (car s) g)
+                           (bind asumpt (cdr s) g))))
+             (else (bind asumpt s g)))))
     ((syn-solve asm org-asm st g)
      (syn-solving asm org-asm st g))
     ((to-dnf st mark)
@@ -1104,7 +1111,7 @@
         (else (bind-forall current-vars s v (forall v domain goal))))
 
              ))
-    ((pause st g) (start st g))
+    ((pause asumpt st g) (start asumpt st g))
     (_            s)))
 
 
