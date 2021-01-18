@@ -628,7 +628,7 @@
       [_ (prev-f g)]
     )
   )
-  (define f (overloading-functor-list list each-case goal-base-endofunctor identity-endo-functor))
+  (define f (overloading-functor-list (list each-case goal-base-endofunctor identity-endo-functor)))
   (f g)
   res
 )
@@ -647,7 +647,7 @@
       [_ (prev-f g)]
     )
   )
-  (define f (overloading-functor-list list each-case goal-base-endofunctor identity-endo-functor))
+  (define f (overloading-functor-list (list each-case goal-base-endofunctor identity-endo-functor)))
   (f g)
   res
 )
@@ -667,7 +667,7 @@
 
 
 (define/contract (mature? s)
-  (Stream? . -> . Stream?)
+  (Stream? . -> . boolean?)
     (or (not s) (pair? s)))
 
 (define (not-state? x) (not (state? x)))
@@ -695,17 +695,11 @@
   ;;; (debug-dump "TO-DNF computing \n")
   (mapped-stream (lambda (st) (to-dnf st (get-state-DNF-initial-index st))) stream))
 
-;;; ;;; make sure the state has valid type
-;;; ;;;  somehow it is useless...
-;;; (define (CHECK-TYPE-VALID stream)
-;;;   (define (valid-type-stream st) (wrap-state-stream (valid-type-constraints-check st)))
-;;;   (mapped-stream valid-type-stream stream)
-;;; )
 
 (define/contract (TO-NON-Asymmetric asumpt stream)
   (assumption-base? Stream? . -> . Stream?)
   ;;; (debug-dump "TO-NON-Asymmetric computing \n")
-  (mapped-stream remove-assymetry-in-diseq asumpt stream)
+  (mapped-stream (λ (st) (remove-assymetry-in-diseq asumpt st)) stream)
 )
 
 ;;; term-finite-type : term x state -> stream
@@ -1006,7 +1000,7 @@
       ;;;  the first step is actually trying prove bottom from domain or otherwise
       ;;; TODO: add syntactical solving (i.e. put domain_ into the assumption but never solve it)
       ;;;         as now we know domain is always decidable so we just need to solve it (to add into state)
-      (let* [(domain_ (simplify-wrt st domain var))  
+      (let* [(domain_ (simplify-wrt asumpt st domain var))  
              (k (begin (debug-dump "\n ~a : domain_ : ~a " var domain_)))] 
 
         (match domain_
@@ -1238,7 +1232,7 @@
 ;;;   otherwise return False
 ;;; simplify-wrt : state x goal x var -> goal
 (define/contract (simplify-wrt asumpt st goal var)
-  (?state? assumption-base? decidable-goal? any? . -> . Goal?)
+  (assumption-base? ?state? decidable-goal? any? . -> . Goal?)
   ;;; just run miniKanren!
   (define (first-non-empty-mature stream)
     (match (mature stream)

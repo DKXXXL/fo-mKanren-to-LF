@@ -156,7 +156,11 @@
 
 ;;;   proof-tree/hole is function from proof-terms to a complete proof-term
 ;;;   but proof-tree/hole must be curried
-(struct pt/h (f) #:prefab)
+(struct pt/h (f) 
+  #:transparent
+  #:property prop:procedure
+             (struct-field-index f)
+)
 
 
 ;;; ;;; Partial-Proof-Tree(PPT) := proof-tree/hole x [hole] x pair 
