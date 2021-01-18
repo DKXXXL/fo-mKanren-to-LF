@@ -694,7 +694,7 @@
 (define/contract (mature s)
     (Stream? . -> . Stream?)
     ;;; (assert-or-warn (not-state? s) "It is not supposed to be a state here")
-    ;;; (debug-dump "\n maturing: ~a" s)
+    (debug-dump "\n maturing: ~a" s)
     (if (mature? s) s (mature (step s))))
   
 ;;; mature the whole stream (bad!)
@@ -1011,12 +1011,14 @@
           ;;;  and then make sure v become ground term (by using force-v-ground)
           ;;;  so that proof-term filling can succeed
           [remove-scoped-stream (mapped-stream remove-from-scope-stream solving-gn)]
-          [extract-ground-v-stream (mapped-stream (lambda (st) (force-v-ground v st)) remove-scoped-stream)]
-          [instantiate-v-from-state
-            (lambda (st)
-              (wrap-state-stream
-                (st . <-pfg . (walk* v (state-sub st)))))]
-          [term-filled-stream (mapped-stream instantiate-v-from-state extract-ground-v-stream)]
+          ;;; TODO: turn on the constructive existential
+          ;;; [extract-ground-v-stream (mapped-stream (lambda (st) (force-v-ground v st)) remove-scoped-stream)]
+          ;;; [instantiate-v-from-state
+          ;;;   (lambda (st)
+          ;;;     (wrap-state-stream
+          ;;;       (st . <-pfg . (walk* v (state-sub st)))))]
+          ;;; [term-filled-stream (mapped-stream instantiate-v-from-state extract-ground-v-stream)]
+          [term-filled-stream remove-scoped-stream]
           )
          term-filled-stream))
     ;;; forall is tricky, 
