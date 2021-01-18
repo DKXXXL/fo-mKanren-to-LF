@@ -1192,7 +1192,7 @@
               ;;; forall x (== x 3) (== x 3)
               ;;;   forall x (conj (== x 3) (=/= x 3)) (== x 3)
               ;;;  forall x () (symbolo x) /\ (not-symbolo x)
-              (step (mplus (pause asumpt valid-shrinked-state (forall v (conj relative-complemented-goal domain) goal))
+              (step (mplus (pause asumpt shrinked-pf-filled-st (forall v (conj relative-complemented-goal domain) goal))
                            (bind-forall asumpt current-vars (cdr s) v (forall v domain goal)))))) ;;; other possible requirements search
 
         (else (bind-forall asumpt current-vars s v (forall v domain goal))))
