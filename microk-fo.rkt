@@ -475,8 +475,24 @@
 
 ;;; streams
 (struct stream-struct () #:prefab)
-(struct bind  stream-struct (asumpt bind-s bind-g)          #:prefab)
-(struct mplus stream-struct (mplus-s1 mplus-s2)      #:prefab)
+(struct bind  stream-struct (asumpt bind-s bind-g)   
+  #:transparent
+  #:guard (lambda (asumpt bind-s bind-g type-name)
+                    (cond
+                      [(and (assumption-base? asumpt) (Stream? bind-s) (Goal? bind-g))
+                       (values asumpt bind-s bind-g)]
+                      [else (error type-name)]))
+)
+(struct mplus stream-struct (mplus-s1 mplus-s2) 
+  #:transparent
+  #:guard (lambda (mplus-s1 mplus-s2 type-name)
+                    (cond
+                      [(and (Stream? mplus-s1) (Stream? mplus-s2))
+                       (values mplus-s1 mplus-s2)]
+                      [else (error type-name
+                              "Should both be Stream: ~e"
+                              (list mplus-s1 mplus-s2) )]))
+)
 ;;; (pause st g) will fill the generated proof term into st
 ;;; it has the same specification as (start st g)
 (struct pause stream-struct (asumpt pause-state pause-goal) #:prefab)
@@ -663,7 +679,7 @@
 ;;;   all the possibe results of first-attempt-s
 ;;;   will be complemented and intersect with the domain of the bind-g
 ;;;   bind-g will have to be a forall goal
-(struct bind-forall   (asumpt scope first-attempt-s dv bind-g)          #:prefab)
+(struct bind-forall  stream-struct (asumpt scope first-attempt-s dv bind-g)          #:prefab)
 
 
 (define/contract (mature? s)
@@ -903,9 +919,9 @@
      (fresh-param (name-g1)
       (let* ([st-to-fill (st . <-pfg . (_) (LFlambda name-g1 g1 _))]
              [new-asumpt (cons-asumpt name-g1 g1 asumpt)]
-             [prove-g2 (start new-asumpt st-to-fill g2)]
+             [prove-g2 (pause new-asumpt st-to-fill g2)]
               ; syntactically assuming g1 (g1 doesn't impact on state)
-             [prove-g2- (start asumpt st-to-fill (conj g1 g2))] 
+             [prove-g2- (pause asumpt st-to-fill (conj g1 g2))] 
               ; semantically assuming g1 (g1 impact on state)
              [from-bottom-ty (cimpl (Bottom) g2)]
              [st-to-fill-by-bottom 
@@ -928,9 +944,9 @@
                          [from-bottom (LFaxiom from-bottom-ty) : from-bottom-ty])
                       (LFapply from-bottom (LFapply to-bottom name-g1)))
                   ))]
-             [prove-bottom (start new-asumpt st-to-fill-by-bottom (Bottom))]
+             [prove-bottom (pause new-asumpt st-to-fill-by-bottom (Bottom))]
              [prove-neg-g1 (and (complementable-goal? g1) 
-                                (start asumpt st-to-fill-by-bottom-2 cg1))]
+                                (pause asumpt st-to-fill-by-bottom-2 cg1))]
              )
         (mplus prove-g2 prove-g2- prove-bottom prove-neg-g1))
      )
@@ -1456,6 +1472,11 @@
 
 
 
+(define-syntax fresh-var
+  (syntax-rules ()
+    ((_ x)
+     (let ((x (var/fresh 'x))) x))))
+
 ;;; given a tproj, we construct a tproj-ectable term for it
 ;;;  return the equation for removing the tproj
 ;;; tproj -> pair as var, cons/tree of vars
@@ -1463,9 +1484,9 @@
   ;;; (define field-projection-list (tproj-cxr x))
   (define (construct-sketch path)
     (match path
-      [(cons 'car rest)  (cons (construct-sketch rest) (fresh (fpu) fpu))]
-      [(cons 'cdr rest)  (cons (fresh (fpu) fpu) (construct-sketch rest))]
-      ['() (fresh (fpu) fpu)]
+      [(cons 'car rest)  (cons (construct-sketch rest) (fresh-var fpu))]
+      [(cons 'cdr rest)  (cons (fresh-var fpu) (construct-sketch rest))]
+      ['() (fresh-var fpu)]
     )
   )
   ;;; TODO: figure out why this reverse is necessary! -_-
