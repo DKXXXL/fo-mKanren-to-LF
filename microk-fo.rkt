@@ -1072,7 +1072,8 @@
             (let* ([ignore-one-hole-st (st . <-pfg . (_1 _2) _2)])
               (bind-forall  asumpt
                             (set-add (state-scope st) var)
-                            (TO-DNF (TO-NON-Asymmetric asumpt (pause asumpt ignore-one-hole-st (conj domain_ goal))) )  
+                            ;;; NOTE: the following "(ex var ..)" ex var is non-trivial and not removable.
+                            (TO-DNF (TO-NON-Asymmetric asumpt (pause asumpt ignore-one-hole-st (ex var (conj domain_ goal)))) )  
                             var 
                             (forall var domain_ goal)))]
         )
