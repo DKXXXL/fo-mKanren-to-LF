@@ -16,7 +16,7 @@
   (struct-out LFlambda)
   (struct-out LFapply)
   (struct-out LispU)
-  pt/h
+  (struct-out pt/h)
   pth-compose
   single-hole
   curried-pf/h
@@ -156,7 +156,8 @@
 
 ;;;   proof-tree/hole is function from proof-terms to a complete proof-term
 ;;;   but proof-tree/hole must be curried
-(struct pt/h (f) 
+;;; hole-num is used for detect invariance
+(struct pt/h (f hole-num) 
   #:transparent
   #:property prop:procedure
              (struct-field-index f)
@@ -180,15 +181,20 @@
 ;;; ;;; (ppt1 . compose . ppt2)(x) = ppt1(ppt2(x))
 (define/contract (pth-compose ppt1 ppt2)
   (pt/h? pt/h? . -> . pt/h?)
-  (pt/h 
-    (lambda (x)
-      (let*
-        ([ppt2- (ppt2 x)])
-        (if (pt/h? ppt2-)
-          (pth-compose ppt1 ppt2-)
-          (ppt1 ppt2-))))))
 
-(define single-hole (pt/h (lambda (x) x)))
+  (let* ([hole-num1 (pt/h-hole-num ppt1)]
+         [hole-num2 (pt/h-hole-num ppt2)])
+    (pt/h 
+      (lambda (x)
+        (let*
+          ([ppt2- (ppt2 x)])
+          (if (pt/h? ppt2-)
+            (pth-compose ppt1 ppt2-)
+            (ppt1 ppt2-)))) 
+        (+ hole-num1 hole-num2 -1)))
+    )
+
+(define single-hole (pt/h (lambda (x) x) 1))
 
 ;;; (define/contract (fill-in ppt pt)
 ;;;   (ppt? any? . -> . any?)
@@ -219,10 +225,12 @@
 (define-syntax curried-pf/h
   (syntax-rules ()
     ((_  (hole) body)
-      (pt/h (lambda (hole) body)))
+      (pt/h (lambda (hole) body) 1))
 
     ((_ (hole holes ... ) body) 
-      (pt/h (lambda (hole) (curried-pf/h (holes ...) body))))
+      (pt/h 
+        (lambda (hole) (curried-pf/h (holes ...) body)) 
+        (length '(hole holes ... ))))
   ))
 
 ;;; A small sugar for creating proof-term

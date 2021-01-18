@@ -286,17 +286,26 @@
 (define-struct-updaters state)
 
 ;;; lift <-pf/h-inc into state
+;;; (define-syntax <-pfg
+;;;   (syntax-rules ()
+;;;     ((_ st term) 
+;;;       (state-pfterm-update st 
+;;;         (lambda (pft) (pft . <-pf/h-inc . term))) )     
+
+;;;     ((_ st (hole holes ...) body) 
+;;;       (state-pfterm-update st 
+;;;         (lambda (pft) (pft . <-pf/h-inc . (hole holes ...) body))) )
+;;;   ))
+
+;;; TODO: uncomment above
 (define-syntax <-pfg
   (syntax-rules ()
     ((_ st term) 
-      (state-pfterm-update st 
-        (lambda (pft) (pft . <-pf/h-inc . term))) )     
+      st )     
 
     ((_ st (hole holes ...) body) 
-      (state-pfterm-update st 
-        (lambda (pft) (pft . <-pf/h-inc . (hole holes ...) body))) )
+      st )
   ))
-
 
 ;;; we consider #f is the failed state, also one of the state
 (define (?state? obj) (or (equal? obj #f) (state? obj)))

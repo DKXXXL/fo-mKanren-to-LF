@@ -734,9 +734,26 @@
 ;;;   the partial proof term of st will be applied with the proof-term of g
 (define/contract (start asumpt st g)
   (assumption-base? ?state? Goal? . -> . Stream?)
-  (mplus 
-    (syn-solving asumpt asumpt st g)
-    (sem-solving asumpt st g))
+  ;;; Invariant check:
+  ;;; (define current-hole-number (pt/h-hole-num (state-pfterm st)))
+  ;;; (define (pf/hole-num-guard x s)
+  ;;;   (define/contract (guarding st)
+  ;;;     (?state? . -> . Stream?)
+  ;;;     (if (equal? (pt/h-hole-num (state-pfterm st)) x)
+  ;;;       (wrap-state-stream st)
+  ;;;       (raise-and-warn "Invariance Breach!")))
+  ;;;   (mapped-stream guarding s)
+  ;;; )
+
+  ;;; (let*
+  ;;;   ([two-approach 
+  ;;;       (mplus 
+  ;;;         (syn-solving asumpt asumpt st g)
+  ;;;         (sem-solving asumpt st g))])
+  ;;;   ;;; (pf/hole-num-guard (- current-hole-number 1) two-approach)
+  ;;;   two-approach
+  ;;; )
+  (sem-solving asumpt st g)
 )
 
 ;;; No elimination rule for coproduct?
