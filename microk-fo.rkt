@@ -39,6 +39,18 @@
   syntactical-simplify
   complement
   ;;; replace-1-to-0
+
+  ==
+
+  define-relation
+  fresh
+  conde
+  query
+  run
+  run*
+
+  conj*
+  disj*
   )
 
 (require "common.rkt")
@@ -73,6 +85,13 @@
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "∃~a. ~a" (ex-varname val) (ex-g val)))]
+  #:guard (lambda (varname g type-name)
+                    (cond
+                      [(Goal? g) 
+                       (values varname g)]
+                      [else (error type-name
+                                   "Should be Goal: ~e"
+                                   g)]))
 )
 ;;; meta-data ex, actually will be ignored at this stage
 ;;;   indicating the scope of varname, 
@@ -92,6 +111,13 @@
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "∀~a {~a}. ~a" (forall-varname val) (forall-domain val)  (forall-g val)))]
+  #:guard (lambda (varname domain g type-name)
+                    (cond
+                      [(Goal? g) 
+                       (values varname domain g)]
+                      [else (error type-name
+                                   "Should be Goal: ~e"
+                                   g)]))
 )
 
 (struct symbolo Goal (t)
@@ -189,6 +215,13 @@
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "(~a ∨ ~a)" (disj-g1 val) (disj-g2 val)))]
+  #:guard (lambda (g1 g2 type-name)
+                    (cond
+                      [(andmap Goal? (list g1 g2)) 
+                       (values g1 g2)]
+                      [else (error type-name
+                                   "All should be Goal: ~e"
+                                   (list g1 g2))]))
 )
 
 (struct conj  Goal (g1 g2)  
@@ -196,6 +229,13 @@
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "(~a ∧ ~a)" (conj-g1 val) (conj-g2 val)))]
+  #:guard (lambda (g1 g2 type-name)
+                    (cond
+                      [(andmap Goal? (list g1 g2)) 
+                       (values g1 g2)]
+                      [else (error type-name
+                                   "All should be Goal: ~e"
+                                   (list g1 g2))]))
 )
 
 ;;; constructive implication, basically will skip the 
@@ -205,20 +245,15 @@
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "(~a ⟶ ~a)" (cimpl-g1 val) (cimpl-g2 val)))]
+  #:guard (lambda (g1 g2 type-name)
+                    (cond
+                      [(andmap Goal? (list g1 g2)) 
+                       (values g1 g2)]
+                      [else (error type-name
+                                   "All should be Goal: ~e"
+                                   (list g1 g2))]))
 )
 
-(define succeed (Top))
-(define fail    (Bottom))
-(define-syntax conj*
-  (syntax-rules ()
-    ((_)                succeed)
-    ((_ g)              g)
-    ((_ gs ... g-final) (conj (conj* gs ...) g-final))))
-(define-syntax disj*
-  (syntax-rules ()
-    ((_)           fail)
-    ((_ g)         g)
-    ((_ g0 gs ...) (disj g0 (disj* gs ...)))))
 
 
 ;;; (struct assumption-base (base)
@@ -246,8 +281,6 @@
 
 
 
-(define (new-assumption-base)
-  (assumption-base (set)))
 ;;; operation for assumption-base
 
 
@@ -495,33 +528,33 @@
       (conj* (== a c) (== b d))]
     ;;; composed goals
     [(cons (ex a b) (ex c d))
-      (let* ([k (gen-sym)]
+      (let* ([k (gensym)]
              [LHS (b . subst . [k // a ])]
              [RHS (d . subst . [k // c ])])
         (unify/goal LHS RHS st) ; a stream to return
       )]
     [(cons (forall a b c) (forall d e f))
-      (let* ([k (gen-sym)]
+      (let* ([k (gensym)]
              [LHS (c . subst . [k // a])]
              [LHS-D (b . subst . [k // a])]
              [RHS (f . subst . [k // d])]
              [RHS-D (e . subst . [k // d])])
-        (map-stream 
+        (mapped-stream 
           (lambda (st) (unify/goal LHS RHS st))
           (unify/goal LHS-D RHS-D st)) ; a stream to return
       )]
     [(cons (conj a b) (conj c d))
-      (map-stream 
+      (mapped-stream 
         (lambda (st) (unify/goal b d st))
         (unify/goal a c st)) ; a stream to return
       ]
     [(cons (disj a b) (disj c d))
-      (map-stream 
+      (mapped-stream 
         (lambda (st) (unify/goal b d st))
         (unify/goal a c st)) ; a stream to return
       ]
     [(cons (cimpl a b) (cimpl c d))
-      (map-stream 
+      (mapped-stream 
         (lambda (st) (unify/goal b d st))
         (unify/goal a c st)) ; a stream to return
       ]
@@ -543,7 +576,8 @@
   ))
   (match solution
     [(? ?state?) (wrap-state-stream solution)]
-    [(? Goal?) (pause st solution)]
+    [(? Goal?) (pause '() st solution)] 
+    ;; TODO: Really without assumption? 
     [(? Stream?) solution]
   )
 )
@@ -629,7 +663,7 @@
 ;;;   all the possibe results of first-attempt-s
 ;;;   will be complemented and intersect with the domain of the bind-g
 ;;;   bind-g will have to be a forall goal
-(struct bind-forall   (scope first-attempt-s dv bind-g)          #:prefab)
+(struct bind-forall   (asumpt scope first-attempt-s dv bind-g)          #:prefab)
 
 
 (define/contract (mature? s)
@@ -668,17 +702,17 @@
 ;;;   (mapped-stream valid-type-stream stream)
 ;;; )
 
-(define/contract (TO-NON-Asymmetric stream)
-  (Stream? . -> . Stream?)
+(define/contract (TO-NON-Asymmetric asumpt stream)
+  (assumption-base? Stream? . -> . Stream?)
   ;;; (debug-dump "TO-NON-Asymmetric computing \n")
-  (mapped-stream remove-assymetry-in-diseq stream)
+  (mapped-stream remove-assymetry-in-diseq asumpt stream)
 )
 
 ;;; term-finite-type : term x state -> stream
 ;;;  this will assert t is either #t, #f, or '()
-(define/contract (term-finite-type t st)
-  (any? ?state? . -> . Stream?)
-  (pause st (disj* (== t '()) (== t #t) (== t #f)))
+(define/contract (term-finite-type asumpt t st)
+  (assumption-base? any? ?state? . -> . Stream?)
+  (pause asumpt st (disj* (== t '()) (== t #t) (== t #f)))
 )
 
 ;;; run a goal with a given state
@@ -769,24 +803,23 @@
             (let* (
                 [subgoal-ty (for-all (x) ( (t . subst . [x // v]) . cimpl . g ))]
                 [axiom-decons-ty
-                  (subgoal . cimpl . 
+                  (subgoal-ty . cimpl . 
                    ((ex v t) . cimpl . g))]
                 [st-pf-filled 
                   (st . <-pfg . (_1) 
                     (lf-let* 
                         ;;; TODO: axiom-deconstructor is actually provable
                         ([axiom-deconstructor (LFaxiom axiom-decons-ty) : axiom-decons-ty]
-                         [subgoal _1 : subgoal-ty)])
+                         [subgoal _1 : subgoal-ty])
                       (LFapply (LFapply axiom-deconstructor subgoal-ty) term-name)))]
             ;;; remove that existential assumption as well
             ;;; TODO: apparently there are some duplicate computation, 
             ;;;   with these unremoved assumption before top asumpt
             ;;;     (because the new subgoal-ty barely changed)
-                [reduced-asumpt (filter (λ (a) (not (equal? top-asumpt a))) org-asumpt)]
+                [reduced-asumpt (filter (λ (a) (not (equal? top-asumpt a))) org-asumpt)])
               (mplus 
                 (syn-solve remain-asumpt org-asumpt st g)
-                (pause reduced-asumpt st-pf-filled subgoal-ty))))
-        ))]
+                (pause reduced-asumpt st-pf-filled subgoal-ty))))]
       [(forall v domain t)
           (fresh (VT)
             (fresh-param (applied-term dp2)
@@ -830,8 +863,9 @@
 ;;;   that is proving (cimpl g (Bottom)) semantically
 ;;;     whose proof-term will also be put into st
 (define/contract (prove-goal-unsat asumpt st g)
-  (?state? Goal? . -> . ?state?)
-  (st . <-pfg . (raise-and-warn "Unimplemented"))
+  (assumption-base? ?state? Goal? . -> . ?state?)
+  ;;; TODO: to justify
+  (st . <-pfg . (LFaxiom (cimpl g (Bottom)))) 
 )
 
 ;;; run a goal with a given state
@@ -879,7 +913,7 @@
               ; syntactically assuming g1 (g1 doesn't impact on state)
              [prove-g2- (start asumpt st-to-fill (conj g1 g2))] 
               ; semantically assuming g1 (g1 impact on state)
-             [from-bottom-type (cimpl (Bottom) g2)]
+             [from-bottom-ty (cimpl (Bottom) g2)]
              [st-to-fill-by-bottom 
                 (fresh-param (to-bottom from-bottom)
                   (st . <-pfg . (_)
@@ -908,23 +942,23 @@
      )
     )
     ((relate thunk descript)
-     (pause [st . <-pfg . (_) (LFpack _ descript)] (thunk)))
+     (pause asumpt [st . <-pfg . (_) (LFpack _ descript)] (thunk)))
     ((== t1 t2) (unify t1 t2 (prim-goal-filled-st) ))
     ((=/= t1 t2) (neg-unify t1 t2 (prim-goal-filled-st) ))
     ((symbolo t1)  (wrap-state-stream (check-as-inf-type symbol? t1 (prim-goal-filled-st))))
     ((not-symbolo t1) 
       (mplus 
-        (term-finite-type t1 (prim-goal-filled-st))
+        (term-finite-type asumpt t1 (prim-goal-filled-st))
         (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label symbol?) t1 (prim-goal-filled-st))))) 
     ((numbero t1) (wrap-state-stream (check-as-inf-type number? t1 (prim-goal-filled-st))))
     ((not-numbero t1)  
       (mplus 
-        (term-finite-type t1 (prim-goal-filled-st))
+        (term-finite-type asumpt t1 (prim-goal-filled-st))
         (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label number?) t1 (prim-goal-filled-st))))) 
     ((stringo t1) (wrap-state-stream (check-as-inf-type string? t1 (prim-goal-filled-st))))
     ((not-stringo t1)  
       (mplus 
-        (term-finite-type t1 (prim-goal-filled-st))
+        (term-finite-type asumpt t1 (prim-goal-filled-st))
         (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label string?) t1 (prim-goal-filled-st)))))
 
     ((type-constraint t types)
@@ -941,7 +975,7 @@
           [scoped-st (state-scope-update st (lambda (scope) (set-add scope v)))]
           ;;; then we compose new proof-term hole
           [body-to-fill-scoped-st (scoped-st . <-pfg . (_1 _2) (LFsigma _2 _1 g))]
-          [solving-gn (pause body-to-fill-scoped-st gn)]
+          [solving-gn (pause asumpt body-to-fill-scoped-st gn)]
 
           ;;; we pop added scope information
           ;;;  and then make sure v become ground term (by using force-v-ground)
@@ -989,7 +1023,7 @@
                        [pf-term-to-fill-st 
                           (st . <-pfg . 
                             (_)
-                            (fresh-param (v domain-term from-bottom)
+                            (fresh-param (v domain-term to-bottom from-bottom)
                               (lf-let* 
                                   ([to-bottom _ : (cimpl domain (Bottom))]
                                    [from-bottom (LFaxiom from-bottom-ty) : from-bottom-ty])
@@ -1003,10 +1037,10 @@
                       ) ]
           ;;; [(Bottom) (wrap-state-stream st)] 
           [_ 
-            (let* ([ignore-one-hole-st (st . <-pfg . (_1 _2) _2)]
-                   [])
-              (bind-forall (set-add (state-scope st) var)
-                            (TO-DNF (TO-NON-Asymmetric (pause ignore-one-hole-st (conj domain_ goal))) )  
+            (let* ([ignore-one-hole-st (st . <-pfg . (_1 _2) _2)])
+              (bind-forall  asumpt
+                            (set-add (state-scope st) var)
+                            (TO-DNF (TO-NON-Asymmetric asumpt (pause asumpt ignore-one-hole-st (conj domain_ goal))) )  
                             var 
                             (forall var domain_ goal)))]
         )
@@ -1056,7 +1090,7 @@
     ;;; bind-forall is a bit complicated
     ;;;   it will first need to collect all possible solution of
     ;;;   s, and complement it, and intersect with 
-    ((bind-forall current-vars s v (forall v domain goal))
+    ((bind-forall asumpt current-vars s v (forall v domain goal))
      (let ((s (if (mature? s) s (step s))))
        (cond 
         ;;; unsatisfiable, then the whole is unsatisfiable
@@ -1102,12 +1136,12 @@
                               ]
                     [valid-shrinked-state (valid-type-constraints-check shrinked-st)] ;; clear up the incorrect state information
                     [current-domain (state->goal st)]
-                    [solved-case-ty (forall v (conj current-domain domain) g)]
-                    [unsolved-case-ty (forall v (conj relative-complemented-goal domain) g)]
+                    [solved-case-ty (forall v (conj current-domain domain) goal)]
+                    [unsolved-case-ty (forall v (conj relative-complemented-goal domain) goal)]
                     [case-axiom-ty  ;; trust-base -- we later need to expand it into the proof
                       (solved-case-ty
                         . cimpl . (unsolved-case-ty
-                        . cimpl . (forall v domain g)))]
+                        . cimpl . (forall v domain goal)))]
                     [shrinked-pf-filled-st 
                       (valid-shrinked-state . <-pfg . 
                         (_)
@@ -1116,17 +1150,17 @@
                               ([solved-case (LFaxiom solved-case-ty) : solved-case-ty] ; TODO: need justification
                                [unsolved-case _ : unsolved-case-ty]
                                [case-axiom (LFaxiom case-axiom-ty) : case-axiom-ty] ; TODO: need justification
-                               [result (LFapply (LFapply case-axiom solved-case) unsolved-case) : (forall v domain g)])
+                               [result (LFapply (LFapply case-axiom solved-case) unsolved-case) : (forall v domain goal)])
                             result)))
                     ]
                     )
               ;;; forall x (== x 3) (== x 3)
               ;;;   forall x (conj (== x 3) (=/= x 3)) (== x 3)
               ;;;  forall x () (symbolo x) /\ (not-symbolo x)
-              (step (mplus (pause valid-shrinked-state (forall v (conj relative-complemented-goal domain) goal))
-                           (bind-forall current-vars (cdr s) v (forall v domain goal)))))) ;;; other possible requirements search
+              (step (mplus (pause asumpt valid-shrinked-state (forall v (conj relative-complemented-goal domain) goal))
+                           (bind-forall asumpt current-vars (cdr s) v (forall v domain goal)))))) ;;; other possible requirements search
 
-        (else (bind-forall current-vars s v (forall v domain goal))))
+        (else (bind-forall asumpt current-vars s v (forall v domain goal))))
 
              ))
     ((pause asumpt st g) (start asumpt st g))
@@ -1203,15 +1237,15 @@
 ;;;   if satisfiable, then act as identity
 ;;;   otherwise return False
 ;;; simplify-wrt : state x goal x var -> goal
-(define/contract (simplify-wrt st goal var)
-  (?state? decidable-goal? any? . -> . Goal?)
+(define/contract (simplify-wrt asumpt st goal var)
+  (?state? assumption-base? decidable-goal? any? . -> . Goal?)
   ;;; just run miniKanren!
   (define (first-non-empty-mature stream)
     (match (mature stream)
       [#f #f]
       [(cons #f next) (first-non-empty-mature next)]
       [v v]))
-  (if (first-non-empty-mature (pause st goal)) (syntactical-simplify goal) (Bottom)))
+  (if (first-non-empty-mature (pause asumpt st goal)) (syntactical-simplify goal) (Bottom)))
 
 ;;; some trivial rewrite to make things easier
 (define/contract (syntactical-simplify goal)
@@ -1244,15 +1278,6 @@
 
 ;;; (list true? false? null? pair? number? string? symbol?)
 
-(define-syntax fresh_
-  (syntax-rules ()
-    ((_ (x ...) g0 gs ...)
-     (let ((x (var/fresh 'x)) ...)  (conj* g0 gs ...)))))
-
-(define-syntax fresh-var
-  (syntax-rules ()
-    ((_ x)
-     (let ((x (var/fresh 'x)))  x))))
 
 
 
@@ -1260,7 +1285,7 @@
 (define type-label-to-type-goal
   (hash
     symbol? symbolo
-    pair? (lambda (term) (fresh_ (y z) (== term (cons y z))))
+    pair? (lambda (term) (fresh (y z) (== term (cons y z))))
     number? numbero
     string? stringo
   )
@@ -1400,7 +1425,8 @@
 )
 ;;; given the st, we will break down a bunch of v's domain by the domain axiom
 ;;;  return an equivalent stream of states s.t. v is pair in one state and not pair in the others
-(define (pair-or-not-pair-by-axiom vs st)
+(define/contract (pair-or-not-pair-by-axiom asumpt vs st)
+  (assumption-base? any? ?state? . -> . Stream?)
   (define (decides-pair-goal v) 
     (disj* 
        (type-constraint v (set pair?)) 
@@ -1413,19 +1439,19 @@
   (define conj-axioms
     (foldl conj (Top) axioms-on-each))
   
-  (pause st (conj conj-axioms (== 1 1)))
+  (pause asumpt st (conj conj-axioms (== 1 1)))
 )
 
 ;;; return an equivalent stream of state, given a state
 ;;;  but in each state, there is no assymetric disequality
 ;;;     i.e. (var s) =/= (cons ...)
 ;;;   This is usually where unhalting happening 
-(define (remove-assymetry-in-diseq st)
+(define (remove-assymetry-in-diseq asumpt st)
   (define asymmetric-vars (record-vars-on-asymmetry-in-diseq st))
   ;;; (debug-dump "\n assymetric-st:  ~a \n asymmetric-vars: ~a" st asymmetric-vars)
   (if (equal? (length asymmetric-vars) 0)
     (wrap-state-stream st)
-    (mapped-stream remove-assymetry-in-diseq (pair-or-not-pair-by-axiom asymmetric-vars st))))
+    (mapped-stream remove-assymetry-in-diseq (pair-or-not-pair-by-axiom asumpt asymmetric-vars st))))
 
 
 ;;; tproj :: var x List of ['car, 'cdr] 
@@ -1443,9 +1469,9 @@
   ;;; (define field-projection-list (tproj-cxr x))
   (define (construct-sketch path)
     (match path
-      [(cons 'car rest)  (cons (construct-sketch rest) (fresh-var fpu))]
-      [(cons 'cdr rest)  (cons (fresh-var fpu) (construct-sketch rest))]
-      ['() (fresh-var fpu)]
+      [(cons 'car rest)  (cons (construct-sketch rest) (fresh (fpu) fpu))]
+      [(cons 'cdr rest)  (cons (fresh (fpu) fpu) (construct-sketch rest))]
+      ['() (fresh (fpu) fpu)]
     )
   )
   ;;; TODO: figure out why this reverse is necessary! -_-
@@ -1894,3 +1920,5 @@
         ))
   (mapped-stream map-clear-about dnf-sym-stream)
 )
+
+(include "mk-syntax.rkt")

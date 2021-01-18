@@ -3,30 +3,12 @@
   (all-from-out "common.rkt")
   ;;; (all-from-out "microk-fo-det.rkt")
   (all-from-out "microk-fo.rkt")
-  ==
 
-  define-relation
-  fresh
-  conde
-  query
-  run
-  run*
-
-  ;;; run/trace
-  ;;; run*/trace
-
-  ;;; run/directed
-  ;;; run*/directed
-
-  ;;; stream-take
-  ;;; stream-take/directed
-  conj*
-  disj*
   )
 ;;; (require "microk-fo-det.rkt")
 (require "microk-fo.rkt")
 (require "common.rkt" )
-(include "mk-syntax.rkt")
+
 
 ;;; Move run/trace to here because
 ;;;  mk-syntax.rkt is public common code

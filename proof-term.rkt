@@ -1,18 +1,28 @@
 #lang racket
 (provide
   (struct-out LFsigma)
+  (struct-out LFsigma-pi-1)
+  (struct-out LFsigma-pi-2)
   (struct-out LFpair)
+  (struct-out LFpair-pi-1)
+  (struct-out LFpair-pi-2)
   (struct-out LFinjl)
   (struct-out LFinjr)
   (struct-out LFprim-rel)
   (struct-out LFpack)
   (struct-out proof-term)
-  (struct-out LFProofterm)
+  (struct-out LFaxiom)
+  (struct-out LFproof)
+  (struct-out LFlambda)
+  (struct-out LFapply)
+  (struct-out LispU)
   pt/h
   pth-compose
   single-hole
   curried-pf/h
   <-pf/h-inc
+  fresh-param
+  lf-let*
   )
 
 
@@ -109,8 +119,8 @@
     ((_ () g0)
      g0)
 
-    ((_ ((x0 y0 : T) xs ...) g0 )
-     (LFlet x y T (lf-let (xs ...) g0) ))
+    ((_ ((x y : T) xs ...) g0 )
+     (LFlet x y T (lf-let* (xs ...) g0) ))
   ))
 
 

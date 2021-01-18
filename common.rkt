@@ -340,7 +340,7 @@
   (state-typercd-set st new-type-info)
 )
 
-
+(define (any? _) #t)
 
 ;;; check if a given state has a valid/consistent type constraints
 ;;;   if not, return #f
