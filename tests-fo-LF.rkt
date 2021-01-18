@@ -206,7 +206,7 @@
 
 
 
-(define-relation (boolo a)
+(define (boolo a)
   (disj* (== a #t) (== a #f)))
 
 (define-relation (not-pairo a)
@@ -577,8 +577,8 @@
           (== x1s '())
           (== x2s '()))
          ((fresh (x)
-           (== xs '(x))
-           (== x1s '(x))
+           (== xs (list x))
+           (== x1s (list x))
            (== x2s '())))
          ((fresh (xs^ x y x1s^ x2s^)
            (== xs (cons x (cons y xs^)))
@@ -600,8 +600,8 @@
 (define-relation (sort-boolo xs ys)
   (conde ((== xs '()) (== ys '()))
          ((fresh (x)
-           (== xs '(x))
-           (== ys '(x))))
+           (== xs (list x))
+           (== ys (list x))))
          ((fresh (x1s x2s y1s y2s)
               (splito xs x1s x2s)
               (sort-boolo x1s y1s)

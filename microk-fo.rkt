@@ -1486,7 +1486,7 @@
   ;;; (debug-dump "\n assymetric-st:  ~a \n asymmetric-vars: ~a" st asymmetric-vars)
   (if (equal? (length asymmetric-vars) 0)
     (wrap-state-stream st)
-    (mapped-stream remove-assymetry-in-diseq (pair-or-not-pair-by-axiom asumpt asymmetric-vars st))))
+    (mapped-stream (lambda (st) (remove-assymetry-in-diseq asumpt st)) (pair-or-not-pair-by-axiom asumpt asymmetric-vars st))))
 
 
 ;;; tproj :: var x List of ['car, 'cdr] 
@@ -1944,7 +1944,8 @@
 ;;;   also remove things from scope
 (define/contract (clear-about state scope v)
   (state? set? var? . -> . any?)
-  (define dnf-sym-stream (TO-DNF (TO-NON-Asymmetric (wrap-state-stream state))))
+  ;;; TODO: I will just currently make this assumption to empty...
+  (define dnf-sym-stream (TO-DNF (TO-NON-Asymmetric '() (wrap-state-stream state))))
 
   (define mentioned-var (set-remove scope v))
   (define (map-clear-about st)
