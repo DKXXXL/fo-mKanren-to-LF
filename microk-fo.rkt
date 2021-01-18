@@ -479,7 +479,9 @@
   #:transparent
   #:guard (lambda (asumpt bind-s bind-g type-name)
                     (cond
-                      [(and (assumption-base? asumpt) (Stream? bind-s) (Goal? bind-g))
+                      [(and (assumption-base? asumpt) 
+                            (Stream? bind-s) 
+                            (Goal? bind-g))
                        (values asumpt bind-s bind-g)]
                       [else (error type-name)]))
 )
@@ -487,7 +489,8 @@
   #:transparent
   #:guard (lambda (mplus-s1 mplus-s2 type-name)
                     (cond
-                      [(and (Stream? mplus-s1) (Stream? mplus-s2))
+                      [(and (Stream? mplus-s1) 
+                            (Stream? mplus-s2))
                        (values mplus-s1 mplus-s2)]
                       [else (error type-name
                               "Should both be Stream: ~e"
@@ -860,7 +863,7 @@
          [if-top-level-match (unify/goal ag g st)] ;;; type: Stream?
          [if-top-level-match-filled 
           (mapped-stream 
-            (lambda (st) (st . <-pfg . (LFproof term-name ag)))
+            (lambda (st) (wrap-state-stream (st . <-pfg . (LFproof term-name ag))))
             if-top-level-match)];;; fill the current proof term
         )
       (mplus if-top-level-match-filled
@@ -1094,8 +1097,11 @@
       (let ((s (if (mature? stream) stream (step stream))))
         (cond ((not s) #f)
               ((pair? s)
-                (step (mplus (f (car s))
-                             (mapped-stream f (cdr s)))))
+                (let* ([s- (f (car s))]
+                       [sk (if (?state? s-) (wrap-state-stream s-) s-)]
+                       [check (or (Stream? sk) (raise-and-warn "~a is not [?state? -> Stream? U ?state?] \n" f))])
+                  (step (mplus sk
+                               (mapped-stream f (cdr s))))) )
               (else (mapped-stream f s)))))
     ;;; bind-forall is a bit complicated
     ;;;   it will first need to collect all possible solution of
