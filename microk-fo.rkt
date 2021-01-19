@@ -274,6 +274,7 @@
   k
 )
 
+;;; TODO: try to make assumption base smaller
 (define/contract (cons-asumpt index prop org-asumpt)
   (any? any? assumption-base? . -> . assumption-base?)
   (cons (cons index prop) org-asumpt)  
@@ -744,7 +745,10 @@
   ;;;       (raise-and-warn "Invariance Breach!")))
   ;;;   (mapped-stream guarding s)
   ;;; )
-
+  (define heuristic-to-syn-solve
+    (and (relate? g) 
+         (not (empty-assumption-base? asumpt)))
+  )
   ;;; (let*
   ;;;   ([two-approach 
   ;;;       (mplus 
@@ -753,7 +757,13 @@
   ;;;   ;;; (pf/hole-num-guard (- current-hole-number 1) two-approach)
   ;;;   two-approach
   ;;; )
-  (sem-solving asumpt st g)
+  (if heuristic-to-syn-solve
+    (mplus 
+      (syn-solve asumpt asumpt st g)
+      (sem-solving asumpt st g))
+    (sem-solving asumpt st g)  
+  )
+  
 )
 
 ;;; No elimination rule for coproduct?
@@ -921,7 +931,12 @@
                 (_1 _2) 
                     (lf-let* ([left-v _1 : g1])
                       (LFpair left-v _2)))]
-              [new-asumpt (cons-asumpt left-v g1 asumpt)])
+              ;;; Note: Also a stupid heurstic
+              ;;; Warning!!!: later we will use cons-asumpt to sieve
+              ;;;   the valid assumption into assumption base
+              ;;;   instead of this incomplete relate check
+              ;;;       Trivial assumption doesn't need to be added into asumpt 
+              [new-asumpt (if (relate? g1) (cons-asumpt left-v g1 asumpt) asumpt)])
        (step (bind new-asumpt (pause asumpt st-pf-filled g1) g2)))))
 
     ((cimpl g1 g2) 
