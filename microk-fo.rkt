@@ -280,6 +280,7 @@
 (define (any? _) #t)
 (define (assumption-base? k) (list? k))
 (define (empty-assumption-base? k) (equal? k '()))
+(define empty-assumption-base '())
 
 ;;; return (cons (cons index assumption) remaining-assumptiob-base)
 ;;;   return '() when assumption-base is empty
@@ -947,7 +948,9 @@
     )
   )
   (if (empty-assumption-base? asumpt)
-    #f ;; TODO: change to re-invokable stream
+    (and org-asumpt (unfold-assumption org-asumpt st g)) 
+    ;; TODO: change to re-invokable stream
+    ;;; currently we expand the assumption to extract more information
     (match-let* 
         ([(cons (cons term-name ag) remain-asumpt) 
             (iter-assumption-base asumpt)]
@@ -963,12 +966,62 @@
   )
 )
 
+;;; Also no justification for this part
+(define/contract (unfold-one-level-relate g)
+  (Goal? . -> . Goal?)  
+  (define (each-case prev-f rec g)
+    (match g
+      [(relate thunk _) (thunk)] 
+      [o/w (prev-f g)]
+    )
+  )
+  (define result-f 
+    (overloading-functor-list (list each-case goal-base-endofunctor pair-base-endofunctor identity-endo-functor))
+  )
+  (result-f anything)
+)
+
+;;; asumpt x state x Goal -> Stream
+;;;  it will first collapse all the assumptions
+;;;   and then use unfold-one-level-relate on these assumptions
+;;;   
+;;;  this is different from others in that it is stepping assumption
+;;;  precondition: asumpt != empty
+(define/contract (unfold-assumption asumpt st goal)
+  (assumption-base? ?state? Goal? . -> . Stream?)
+  (define/contract (push-axiom st ty)
+    (?state? . Goal? . -> . pair?)
+    (push-lflet st (LFaxiom ty) : ty))
+  (define conj-assumpt-ty (foldl conj (Top) ))
+  (define conj-assumpt-term (foldl ))
+  
+  (define unfold-conj-assumpt-ty (unfold-one-level-relate conj-assumpt-ty))
+  (define s-unfold-conj-asumpt-ty (syntactical-simplify unfold-conj-assumpt-ty))
+  (define unfolded-goal (cimpl s-unfold-conj-asumpt-ty goal)) 
+  ;;; use cimpl here to make the 
+  (match-let*
+      ([(cons st all-asumpt-term) (push-lflet st conj-assumpt-term : conj-assumpt-ty)]
+      [(cons st axiom-unfold)    (push-axiom st (cimpl conj-assumpt-ty unfold-conj-assumpt-ty))]
+      [(cons st axiom-simplify)  (push-axiom st (cimpl unfold-conj-assumpt-ty s-unfold-conj-asumpt-ty))]
+      [(cons st s-unfold-conj-term) 
+            (push-lflet st 
+              (LFapply axiom-simplify (LFapply axiom-unfold all-asumpt-term)) : s-unfold-conj-asumpt-ty)]
+      [final-st (st . <-pfg . (_) 
+        (fresh-param (unfolded-goal-term)
+          (lf-let* ([unfolded-goal-term _ : unfolded-goal])
+            (LFapply unfolded-goal-term s-unfold-conj-term))))]
+      )
+    ;;; every might be useful assumption is already in the unfolded goal
+    (pause empty-assumption-base final-st unfolded-goal)
+  )
+)
+
 ;;; Try to prove g is unsatisfiable under st
 ;;;   that is proving (cimpl g (Bottom)) semantically
 ;;;     whose proof-term will also be put into st
 (define/contract (prove-goal-unsat asumpt st g)
   (assumption-base? ?state? Goal? . -> . ?state?)
-  ;;; TODO: to justify
+  ;;; TODO: to justify 
   (st . <-pfg . (LFaxiom (cimpl g (Bottom)))) 
 )
 
@@ -1002,19 +1055,14 @@
               ;;;       Trivial assumption doesn't need to be added into asumpt 
               [new-asumpt (if (relate? g1) (cons-asumpt left-v g1 asumpt) asumpt)])
        (step (bind new-asumpt (pause asumpt st-pf-filled g1) g2)))))
+    ;;; the real syntactical solving for cimpl
     ((cimpl-syn g1 g2)
-      (pause (cons-asumpt ))
-    )
+      (fresh-param (name-g1)
+        (let* ([st-to-fill . <-pfg . (_) (LFlambda name-g1 g1 _)])
+          (pause (cons-asumpt name-g1 g1 asumpt) st-to-fill g2))
+      ))
     ((cimpl g1 g2) 
       ;;; semantic solving of implication is 
-      ;;; 1. check if g1 is decidable; if it is then we directly try to solve (~g1 \/ (g1 /\ g2)) 
-      ;;; 2. if it is not trivially-decidable,
-      ;;;     then (a) we assume g1' , and solve (g1'' /\ g2) 
-      ;;;       where g1'' is decidable conjunction component of g1 <=> g1'' /\ g1'
-      ;;;       and g1' is what remains
-      ;;;          (b) we try to prove "g1 -> Bottom" = [(g1' /\ g1'') -> Bottom]
-      ;;;              = [g1'' /\ (g1' -> bottom)] \/ [~g1'']
-      ;;; 
       ;;;  g1 = g1-dec /\ g1-ndec
       ;;;     g1 -> g2 = g1-dec -> (g1-ndec -> g2)
       ;;;     = ~g1-dec \/ 
@@ -1025,6 +1073,7 @@
                    g1-dec-conj-~g1-ndec-term g1-dec-conj-g1-ndec-g2-term
                    g1-dec-term g1-ndec-term g1-ndec-g2-term
                    bot->g2-term bot1)
+      ;;; TODO: rewrite the following into ANF-style (the push-let form)
       (match-let* 
             ([(cons g1-dec g1-ndec) (dec+non-dec-simpl g1)]
              [Axiom-DEC+NDEC-ty (cimpl g1 (conj g1-dec g1-ndec))]
@@ -1072,12 +1121,10 @@
         (mplus 
           (pause asumpt st-~g1-dec ~g1-dec-ty)
           (pause asumpt st-~g1ndec (conj g1-dec (cimpl-syn g1-ndec (Bottom))))
-          (pause asumpt st-g1ndec-g2 (conj g1-dec (cimpl-syn g1-ndec g2))))
-        )
-     )
-    )
+          (pause asumpt st-g1ndec-g2 (conj g1-dec (cimpl-syn g1-ndec g2)))))
+    ))
     ((relate thunk descript)
-     (pause asumpt [st . <-pfg . (_) (LFpack _ descript)] (thunk)))
+      (pause asumpt [st . <-pfg . (_) (LFpack _ descript)] (thunk)))
     ((== t1 t2) (unify t1 t2 (prim-goal-filled-st) ))
     ((=/= t1 t2) (neg-unify t1 t2 (prim-goal-filled-st) ))
     ((symbolo t1)  (wrap-state-stream (check-as-inf-type symbol? t1 (prim-goal-filled-st))))

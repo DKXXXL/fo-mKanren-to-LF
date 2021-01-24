@@ -81,7 +81,9 @@
 ;;;   TODO: we will have to discuss how to deal with 
 ;;;     them respectively
 
+;;; introduction/elimination for relate
 (struct LFpack proof-term (subterm description) #:prefab)
+(struct LFunpack proof-term (term pack-description) #:prefab)
 
 ;;; (struct var (index) #:prefab) ;;; object variable, only used for lambda term
 ;;; (struct const (term type) #:prefab) ;;; all the lisp terms should be here
