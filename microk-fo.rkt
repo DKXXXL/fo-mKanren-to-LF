@@ -261,7 +261,7 @@
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "(~a ⟶ ~a)" (cimpl-syn-g1 val) (cimpl-syn-g2 val)))]
+     (fprintf output-port "(~a ⟶ ~a)" (cimpl-g1 val) (cimpl-g2 val)))]
   #:guard (lambda (g1 g2 type-name)
                     (cond
                       [(andmap Goal? (list g1 g2)) 
@@ -300,13 +300,13 @@
 ;;; return a list of goals from assumption
 (define/contract (all-assumption-goals asumpt)
   (assumption-base? . -> . list?)
-  (map (lambda (x) (cdr x)))
+  (map (lambda (x) (cdr x)) asumpt)
 )
 
 ;;; return a list of terms from assumption
 (define/contract (all-assumption-terms asumpt)
   (assumption-base? . -> . list?)
-  (map (lambda (x) (car x)))
+  (map (lambda (x) (car x)) asumpt)
 )
 
 ;;; operation for assumption-base
@@ -524,6 +524,13 @@
                               "Should both be Stream: ~e"
                               (list mplus-s1 mplus-s2) )]))
 )
+
+(define-syntax mplus*
+  (syntax-rules ()
+    ((_ x) x)
+    ((_ x y ...) 
+      (mplus x (mplus y ...)))))
+
 ;;; (pause st g) will fill the generated proof term into st
 ;;; it has the same specification as (start st g)
 (struct pause stream-struct (asumpt pause-state pause-goal) #:prefab)
@@ -748,7 +755,8 @@
 
 (define/contract (dec+non-dec-simpl g)
   (Goal? . -> . pair?)
-  (map syntactical-simplify (dec+non-dec g)))
+  (match-let* ([(cons a b) (dec+non-dec g)])
+    `(,(syntactical-simplify a) . ,(syntactical-simplify b))))
 
 (define (get-state-DNF-by-index st index)
   (define conjs (state-diseq st))
@@ -869,6 +877,8 @@
   ;;; first we look at top-level assumption to see if unification can succeed
   ;;; then we need to deconstruct the (top)-assumption base
   ;;;   to syntactical pattern match on all the sub-assumption
+  ;;; TODO: here destruction on asumption 
+  ;;;       doesn't integrate the sub-asumpt into the state... some information is loss
   (define/contract (traversal-on-asumpt term-name top-asumpt remain-asumpt)
     (any? Goal? assumption-base? . -> . Stream?)
     (match top-asumpt
@@ -973,8 +983,10 @@
             (lambda (st) (wrap-state-stream (st . <-pfg . (LFproof term-name ag))))
             if-top-level-match)];;; fill the current proof term
         )
-      (mplus if-top-level-match-filled
-             (traversal-on-asumpt term-name ag remain-asumpt))
+      (if if-top-level-match
+          (mplus if-top-level-match-filled
+                (traversal-on-asumpt term-name ag remain-asumpt))
+          (traversal-on-asumpt term-name ag remain-asumpt))
     )
   )
 )
@@ -991,7 +1003,7 @@
   (define result-f 
     (overloading-functor-list (list each-case goal-base-endofunctor pair-base-endofunctor identity-endo-functor))
   )
-  (result-f anything)
+  (result-f g)
 )
 
 ;;; asumpt x state x Goal -> Stream
@@ -1003,7 +1015,7 @@
 (define/contract (unfold-assumption-solve asumpt st goal)
   (assumption-base? ?state? Goal? . -> . Stream?)
   (define/contract (push-axiom st ty)
-    (?state? . Goal? . -> . pair?)
+    (?state? Goal? . -> . pair?)
     (push-lflet st (LFaxiom ty) : ty))
   (define conj-assumpt-ty (foldl conj (Top) (all-assumption-goals asumpt)))
   (define conj-assumpt-term (foldl LFpair (LFaxiom (Top)) (all-assumption-terms asumpt)))
@@ -1071,7 +1083,7 @@
     ;;; the real syntactical solving for cimpl
     ((cimpl-syn g1 g2)
       (fresh-param (name-g1)
-        (let* ([st-to-fill . <-pfg . (_) (LFlambda name-g1 g1 _)])
+        (let* ([st-to-fill (st . <-pfg . (_) (LFlambda name-g1 g1 _))])
           (pause (cons-asumpt name-g1 g1 asumpt) st-to-fill g2))
       ))
     ((cimpl g1 g2) 
@@ -1092,7 +1104,7 @@
              [Axiom-DEC+NDEC-ty (cimpl g1 (conj g1-dec g1-ndec))]
              [Axiom-Bottom-g2-ty (cimpl (Bottom) g2)]
              [~g1-dec-ty (complement g1-dec)]
-             [~g1-dec->g1-dec->bot (cimpl ~g1-dec (cimpl g1-dec (Bottom)))]
+             [~g1-dec->g1-dec->bot (cimpl ~g1-dec-ty (cimpl g1-dec (Bottom)))]
              [~g1ndec (cimpl-syn g1-ndec (Bottom))]
              [g1ndec-g2 (cimpl-syn g1-ndec g2)]
              [st-to-fill 
@@ -1131,7 +1143,7 @@
                             : g1ndec-g2])
                     (LFapply g1-ndec-g2-term g1-ndec-term)))]
             )
-        (mplus 
+        (mplus*
           (pause asumpt st-~g1-dec ~g1-dec-ty)
           (pause asumpt st-~g1ndec (conj g1-dec (cimpl-syn g1-ndec (Bottom))))
           (pause asumpt st-g1ndec-g2 (conj g1-dec (cimpl-syn g1-ndec g2)))))
@@ -1406,7 +1418,7 @@
         (raise-and-warn "User-Relation not supported.")]
       [(== t1 t2) (=/= t1 t2)]
       [(=/= t1 t2) (== t1 t2)]
-      [(ex a gn) (forall a (c gn))]
+      [(ex a gn) (forall a (Top) (c gn))]
       [(forall v bound gn) ;; forall v. bound => g
         (ex v (complement (cimpl bound gn))) ]
       [(numbero t) (not-numbero t)]

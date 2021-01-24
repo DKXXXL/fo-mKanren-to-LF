@@ -52,8 +52,8 @@
     ((_ name e-actual e-expected)
      (time (begin
 
-            ;;;  (printf "Testing ~a ~s: \n  ~s ~a \n  \n ==> " 
-            ;;;           blue-colour name 'e-actual blue-colour-end)
+             (printf "Testing ~a ~s: \n  ~s ~a \n  \n ==> " 
+                      blue-colour name 'e-actual blue-colour-end)
 
             ;;;  (inc-total-tested-number)
              (let* (
@@ -642,6 +642,49 @@
 )
 
 
+;;; 
+;;; Following test-cases are for cimpl
+;;; 
+
+((run 1 (x)  (cimpl (== x 1) (=/= x 2)))
+  . test-reg!=> . 'succeed  
+)
+
+((run 1 (x a)  (cimpl (== x a) (=/= x 2)))
+  . test-reg!=> . 'succeed  
+)
+
+((run 1 (x a)  (cimpl (== x a) (=/= x a)))
+  . test-reg!=> . 'succeed  
+)
+
+((run 1 (a)  (cimpl (stringo a) (symbolo a)))
+  . test-reg!=> . 'succeed  
+)
+
+((run 1 (a)  (cimpl (== a 1) (symbolo a)))
+  . test-reg!=> . 'succeed  
+)
+
+((run 1 (a)  (cimpl (=/= a 1) (symbolo a)))
+  . test-reg!=> . 'succeed  
+)
+
+((run 1 (a)  (conj (== a 1) (cimpl (=/= a 1) (symbolo a))))
+  . test-reg!=> . 'succeed  
+)
+
+((run 1 (a)  (conj (numbero a) (cimpl (stringo a) (symbolo a))) )
+  . test-reg!=> . 'fail  
+)
+
+((run 1 (a)  (conj (== a 1) (cimpl (== a 1) (symbolo a))))
+  . test-reg!=> . 'fail  
+)
+
+(define-relation (False x)
+  (False x))
+
 
 ;;; 
 ;;; 
@@ -685,4 +728,6 @@
 
 (module+ test
   (require rackunit/text-ui)
+  (require errortrace)
+  (instrumenting-enabled #t)
   (run-tests all-tests))
