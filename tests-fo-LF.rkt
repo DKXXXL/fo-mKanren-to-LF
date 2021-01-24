@@ -52,8 +52,8 @@
     ((_ name e-actual e-expected)
      (time (begin
 
-             (printf "Testing ~a ~s: \n  ~s ~a \n  \n ==> " 
-                      blue-colour name 'e-actual blue-colour-end)
+            ;;;  (printf "Testing ~a ~s: \n  ~s ~a \n  \n ==> " 
+            ;;;           blue-colour name 'e-actual blue-colour-end)
 
             ;;;  (inc-total-tested-number)
              (let* (
@@ -675,7 +675,7 @@
 )
 
 ((run 1 (a)  (conj (numbero a) (cimpl (stringo a) (symbolo a))) )
-  . test-reg!=> . 'fail  
+  . test-reg!=> . 'succeed  
 )
 
 ((run 1 (a)  (conj (== a 1) (cimpl (== a 1) (symbolo a))))

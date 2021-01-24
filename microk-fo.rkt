@@ -755,8 +755,14 @@
 
 (define/contract (dec+non-dec-simpl g)
   (Goal? . -> . pair?)
-  (match-let* ([(cons a b) (dec+non-dec g)])
-    `(,(syntactical-simplify a) . ,(syntactical-simplify b))))
+  (if (decidable-goal? g)
+      `(,g . ,(Top))
+      (match-let* ([(cons a b) (dec+non-dec g)])
+      `(,(syntactical-simplify a) . ,(syntactical-simplify b)))
+  )
+  
+    
+)
 
 (define (get-state-DNF-by-index st index)
   (define conjs (state-diseq st))
