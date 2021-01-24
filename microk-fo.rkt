@@ -3,6 +3,7 @@
   (all-from-out "common.rkt")
   (struct-out disj)
   (struct-out conj)
+  (struct-out cimpl)
   (struct-out relate)
   (struct-out ==)
   (struct-out =/=)
@@ -18,6 +19,7 @@
   (struct-out not-symbolo)
   (struct-out not-numbero)
   (struct-out not-stringo)
+  
 
 
   (struct-out mplus)
@@ -672,6 +674,56 @@
   res
 )
 
+;;; Goal? -> Goal? x Goal? 
+;;; g <=> g-dec /\ g-non-dec
+(define/contract (dec+non-dec g)
+  (Goal? . -> . pair?)
+  (define rec dec+non-dec)
+
+  (match g
+    [(conj a b)
+      (match-let* 
+          ([(cons a-dec a-ndec) (rec a)]
+           [(cons b-dec b-ndec) (rec b)])
+        (cons (conj a-dec b-dec) (conj a-ndec b-ndec)))]
+    ;;; g = (disj (a-dec /\ a-ndec) (b-dec /\ b-non-dec))
+    ;;; (a-dec \/ b-dec) /\ [(a-non-dec \/ b-dec) /\ (a-non-dec \/ b-non-dec) ...]
+    [(disj a b)
+      (match-let* 
+          ([(cons a-dec a-ndec) (rec a)]
+           [(cons b-dec b-ndec) (rec b)])
+        (cons (disj a-dec b-dec) 
+              (conj* (disj a-dec b-ndec)
+                     (disj a-ndec b-dec)
+                     (disj a-ndec b-ndec) )))]
+    ;;; g = (a-dec /\ a-non-dec) -> (b-dec /\ b-non-dec)
+    ;;; g = (a-dec /\ a-non-dec) -> b-dec) /\ (a-dec /\ a-non-dec) -> b-non-dec)
+    ;;; = [(a-dec -> b-dec) \/ (a-non-dec -> b-dec)] /\
+    ;;;   [(a-dec -> b-non-dec) \/ (a-non-dec -> b-non-dec)]
+    [(cimpl a b) 
+        (if (decidable-goal? a)
+          (match-let* ([(cons b-dec b-ndec) (rec b)]) 
+                      (cons (cimpl a b-dec) (cimpl a b-ndec)))
+          (cons (Top) g))]
+    
+    [(forall v D g)
+        ;;; remember that D is always decidable (by deifnition)
+        (match-let* 
+          ([(cons g-dec g-ndec) (rec g)])
+        (cons (forall v D g-dec) (forall v D g-ndec)))]
+
+    ;;; others are considered as primitive case
+    [_ 
+      (if (decidable-goal? g)
+        (cons g (Top))
+        (cons (Top) g))
+    ]
+  )
+)
+
+(define/contract (dec+non-dec-simpl g)
+  (Goal? . -> . pair?)
+  (syntactical-simplify (dec+non-dec g)))
 
 (define (get-state-DNF-by-index st index)
   (define conjs (state-diseq st))
@@ -941,49 +993,59 @@
 
     ((cimpl g1 g2) 
       ;;; semantic solving of implication is 
-      ;;; two ways : semantic + syntactic solving (changing state or not)
-      ;;; + two ways : prove bottom from g1 or prove g2 from g1
-      ;;;  (why choose proving bottom? Why bottom is special?)
-      ;;;     because bottom means some non-existential state/assumption collection
-      ;;;     which is helpful for relative complements to end
-      ;;; syntactical proving bottom from g1 
-      ;;;   and syntactic proving g2 from g1 will be covered with (start ..) 
-      ;;; semantic proving bottom from g1 is actually proving neg g1
-      ;;;   if g1 is complementable
-      ;;;  so there are three streams
+      ;;; 1. check if g1 is decidable; if it is then we directly try to solve (~g1 \/ (g1 /\ g2)) 
+      ;;; 2. if it is not trivially-decidable,
+      ;;;     then (a) we assume g1' , and solve (g1'' /\ g2) 
+      ;;;       where g1'' is decidable conjunction component of g1 <=> g1'' /\ g1'
+      ;;;       and g1' is what remains
+      ;;;          (b) we try to prove "g1 -> Bottom" = [(g1' /\ g1'') -> Bottom]
+      ;;;              = [g1'' /\ (g1' -> bottom)] \/ [~g1'']
+      ;;;  g1 = g1-dec /\ g1-ndec
+      ;;;     g1 -> g2 = g1-dec -> (g1-ndec -> g2)
+      ;;;     = ~g1-dec \/ [g1-dec /\ (g1-ndec -> g2)]
      (fresh-param (name-g1)
       (let* ([st-to-fill (st . <-pfg . (_) (LFlambda name-g1 g1 _))]
-             [new-asumpt (cons-asumpt name-g1 g1 asumpt)]
-             [prove-g2 (pause new-asumpt st-to-fill g2)]
-              ; syntactically assuming g1 (g1 doesn't impact on state)
-             [prove-g2- (pause asumpt st-to-fill (conj g1 g2))] 
-              ; semantically assuming g1 (g1 impact on state)
-             [from-bottom-ty (cimpl (Bottom) g2)]
-             [st-to-fill-by-bottom 
-                (fresh-param (to-bottom from-bottom)
-                  (st . <-pfg . (_)
-                    (lf-let* 
-                        ([to-bottom _ : (cimpl g1 (Bottom))]
-                         [from-bottom (LFaxiom from-bottom-ty) : from-bottom-ty])
-                      (LFapply from-bottom (LFapply to-bottom name-g1)))
-                  ))]
-             [cg1 (and (complementable-goal? g1) (complement g1))]
-             [cg1-bottom-ty (cimpl cg1 (cimpl g1 (Bottom)))]
-             [st-to-fill-by-bottom-2
-                (fresh-param (to-bottom from-bottom neg-to-bottom neg-g1)
-                  (st . <-pfg . (_)
-                    (lf-let* 
-                        ([neg-g1 _ : cg1]
-                         [neg-to-bottom (LFaxiom cg1-bottom-ty) : cg1-bottom-ty]
-                         [to-bottom (LFapply neg-to-bottom neg-g1) : (cimpl g1 (Bottom))]
-                         [from-bottom (LFaxiom from-bottom-ty) : from-bottom-ty])
-                      (LFapply from-bottom (LFapply to-bottom name-g1)))
-                  ))]
-             [prove-bottom (pause new-asumpt st-to-fill-by-bottom (Bottom))]
-             [prove-neg-g1 (and (complementable-goal? g1) 
-                                (pause asumpt st-to-fill-by-bottom-2 cg1))]
-             )
-        (mplus prove-g2 prove-g2- prove-bottom prove-neg-g1))
+             [trivially-decidable? (decidable-goal? g1)]
+             [branch-trivially-decidable
+                (lambda ()
+                    (let* 
+                      ([neg-g1-ty (complement g1)]
+                      [axiom-neg-type (cimpl neg-g1-ty (cimpl g1 (Bottom)))]
+                      [st-dec-case-bot 
+                        (st-to-fill . <-pfg . (_)
+                          (lf-let* 
+                              ([axiom-neg (LFaxiom axiom-neg-type) : axiom-neg-type]
+                              [neg-g1 _ : neg-g1-ty])
+                            (LFapply (LFapply axiom-neg neg-g1) name-g1)))]
+                      [st-dec-case-g2
+                        (st-to-fill . <-pfg . (_)
+                          (lf-let* 
+                              ([g1/\g2 _ : (conj g1 g2)])
+                            (LFpair-pi-2 g1/\g2)))])
+                    (mplus (pause asumpt st-dec-case-g2 (conj g1 g2))
+                          (pause asumpt st-dec-case-bot (neg-g1-ty)))))]
+             [branch-non-trivially-decidable
+                (lambda ()
+                    (let* 
+                      ([neg-g1-ty (complement g1)]
+                      [axiom-neg-type (cimpl neg-g1-ty (cimpl g1 (Bottom)))]
+                      [st-dec-case-bot 
+                        (st-to-fill . <-pfg . (_)
+                          (lf-let* 
+                              ([axiom-neg (LFaxiom axiom-neg-type) : axiom-neg-type]
+                              [neg-g1 _ : neg-g1-ty])
+                            (LFapply (LFapply axiom-neg neg-g1) name-g1)))]
+                      [st-dec-case-g2
+                        (st-to-fill . <-pfg . (_)
+                          (lf-let* 
+                              ([g1/\g2 _ : (conj g1 g2)])
+                            (LFpair-pi-2 g1/\g2)))])
+                    (mplus (pause asumpt st-dec-case-g2 (conj g1 g2))
+                          (pause asumpt st-dec-case-bot (neg-g1-ty)))))]
+            )
+        (if trivially-decidable?
+
+        ))
      )
     )
     ((relate thunk descript)
@@ -1077,7 +1139,7 @@
                                 (LFlambda (v)
                                   (LFlambda (domain-term)
                                     (LFapply from-bottom (LFapply to-bottom domain-term))
-                                  )))))]
+                                  ))) ))]
                        [st-terminating (prove-goal-unsat asumpt pf-term-to-fill-st domain)]
                        [res (clear-about st (list->set (state-scope st-terminating)) var)])
                       res 
@@ -1094,7 +1156,7 @@
         )
       )
     )
-    ((Top) (wrap-state-stream st))
+    ((Top) (wrap-state-stream [st . <-pfg . (LFprim-rel (Top))]))
     ((Bottom) (wrap-state-stream #f))
     ))
 )
