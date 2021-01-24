@@ -282,6 +282,7 @@
 (define (empty-assumption-base? k) (equal? k '()))
 (define empty-assumption-base '())
 
+
 ;;; return (cons (cons index assumption) remaining-assumptiob-base)
 ;;;   return '() when assumption-base is empty
 (define/contract (iter-assumption-base k)
@@ -296,6 +297,17 @@
 )
 
 
+;;; return a list of goals from assumption
+(define/contract (all-assumption-goals asumpt)
+  (assumption-base? . -> . list?)
+  (map (lambda (x) (cdr x)))
+)
+
+;;; return a list of terms from assumption
+(define/contract (all-assumption-terms asumpt)
+  (assumption-base? . -> . list?)
+  (map (lambda (x) (car x)))
+)
 
 ;;; operation for assumption-base
 
@@ -948,7 +960,8 @@
     )
   )
   (if (empty-assumption-base? asumpt)
-    (and org-asumpt (unfold-assumption org-asumpt st g)) 
+    (and (not (empty-assumption-base? org-asumpt)) 
+         (unfold-assumption-solve org-asumpt st g)) 
     ;; TODO: change to re-invokable stream
     ;;; currently we expand the assumption to extract more information
     (match-let* 
@@ -987,13 +1000,13 @@
 ;;;   
 ;;;  this is different from others in that it is stepping assumption
 ;;;  precondition: asumpt != empty
-(define/contract (unfold-assumption asumpt st goal)
+(define/contract (unfold-assumption-solve asumpt st goal)
   (assumption-base? ?state? Goal? . -> . Stream?)
   (define/contract (push-axiom st ty)
     (?state? . Goal? . -> . pair?)
     (push-lflet st (LFaxiom ty) : ty))
-  (define conj-assumpt-ty (foldl conj (Top) ))
-  (define conj-assumpt-term (foldl ))
+  (define conj-assumpt-ty (foldl conj (Top) (all-assumption-goals asumpt)))
+  (define conj-assumpt-term (foldl LFpair (LFaxiom (Top)) (all-assumption-terms asumpt)))
   
   (define unfold-conj-assumpt-ty (unfold-one-level-relate conj-assumpt-ty))
   (define s-unfold-conj-asumpt-ty (syntactical-simplify unfold-conj-assumpt-ty))
