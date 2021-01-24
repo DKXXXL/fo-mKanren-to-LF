@@ -256,8 +256,20 @@
                                    (list g1 g2))]))
 )
 
-
-
+;;; Syntactic assumption all the time
+(struct cimpl-syn  cimpl ()  
+  #:transparent
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "(~a ⟶ ~a)" (cimpl-syn-g1 val) (cimpl-syn-g2 val)))]
+  #:guard (lambda (g1 g2 type-name)
+                    (cond
+                      [(andmap Goal? (list g1 g2)) 
+                       (values g1 g2)]
+                      [else (error type-name
+                                   "All should be Goal: ~e"
+                                   (list g1 g2))]))
+)
 ;;; (struct assumption-base (base)
 ;;;   #:transparent
 ;;;   #:methods gen:custom-write
@@ -723,7 +735,7 @@
 
 (define/contract (dec+non-dec-simpl g)
   (Goal? . -> . pair?)
-  (syntactical-simplify (dec+non-dec g)))
+  (map syntactical-simplify (dec+non-dec g)))
 
 (define (get-state-DNF-by-index st index)
   (define conjs (state-diseq st))
@@ -990,7 +1002,9 @@
               ;;;       Trivial assumption doesn't need to be added into asumpt 
               [new-asumpt (if (relate? g1) (cons-asumpt left-v g1 asumpt) asumpt)])
        (step (bind new-asumpt (pause asumpt st-pf-filled g1) g2)))))
-
+    ((cimpl-syn g1 g2)
+      (pause (cons-asumpt ))
+    )
     ((cimpl g1 g2) 
       ;;; semantic solving of implication is 
       ;;; 1. check if g1 is decidable; if it is then we directly try to solve (~g1 \/ (g1 /\ g2)) 
@@ -1000,52 +1014,66 @@
       ;;;       and g1' is what remains
       ;;;          (b) we try to prove "g1 -> Bottom" = [(g1' /\ g1'') -> Bottom]
       ;;;              = [g1'' /\ (g1' -> bottom)] \/ [~g1'']
+      ;;; 
       ;;;  g1 = g1-dec /\ g1-ndec
       ;;;     g1 -> g2 = g1-dec -> (g1-ndec -> g2)
-      ;;;     = ~g1-dec \/ [g1-dec /\ (g1-ndec -> g2)]
-     (fresh-param (name-g1)
-      (let* ([st-to-fill (st . <-pfg . (_) (LFlambda name-g1 g1 _))]
-             [trivially-decidable? (decidable-goal? g1)]
-             [branch-trivially-decidable
-                (lambda ()
-                    (let* 
-                      ([neg-g1-ty (complement g1)]
-                      [axiom-neg-type (cimpl neg-g1-ty (cimpl g1 (Bottom)))]
-                      [st-dec-case-bot 
-                        (st-to-fill . <-pfg . (_)
-                          (lf-let* 
-                              ([axiom-neg (LFaxiom axiom-neg-type) : axiom-neg-type]
-                              [neg-g1 _ : neg-g1-ty])
-                            (LFapply (LFapply axiom-neg neg-g1) name-g1)))]
-                      [st-dec-case-g2
-                        (st-to-fill . <-pfg . (_)
-                          (lf-let* 
-                              ([g1/\g2 _ : (conj g1 g2)])
-                            (LFpair-pi-2 g1/\g2)))])
-                    (mplus (pause asumpt st-dec-case-g2 (conj g1 g2))
-                          (pause asumpt st-dec-case-bot (neg-g1-ty)))))]
-             [branch-non-trivially-decidable
-                (lambda ()
-                    (let* 
-                      ([neg-g1-ty (complement g1)]
-                      [axiom-neg-type (cimpl neg-g1-ty (cimpl g1 (Bottom)))]
-                      [st-dec-case-bot 
-                        (st-to-fill . <-pfg . (_)
-                          (lf-let* 
-                              ([axiom-neg (LFaxiom axiom-neg-type) : axiom-neg-type]
-                              [neg-g1 _ : neg-g1-ty])
-                            (LFapply (LFapply axiom-neg neg-g1) name-g1)))]
-                      [st-dec-case-g2
-                        (st-to-fill . <-pfg . (_)
-                          (lf-let* 
-                              ([g1/\g2 _ : (conj g1 g2)])
-                            (LFpair-pi-2 g1/\g2)))])
-                    (mplus (pause asumpt st-dec-case-g2 (conj g1 g2))
-                          (pause asumpt st-dec-case-bot (neg-g1-ty)))))]
+      ;;;     = ~g1-dec \/ 
+      ;;; [g1-dec /\ (g1-ndec -> bot)] \/ 
+      ;;; [g1-dec /\ (g1-ndec -> g2)]
+     (fresh-param (name-g1 adnd adnd-conj ~g1-dec-term 
+                   ~g1-dec->g1-dec->bot-term 
+                   g1-dec-conj-~g1-ndec-term g1-dec-conj-g1-ndec-g2-term
+                   g1-dec-term g1-ndec-term g1-ndec-g2-term
+                   bot->g2-term bot1)
+      (match-let* 
+            ([(cons g1-dec g1-ndec) (dec+non-dec-simpl g1)]
+             [Axiom-DEC+NDEC-ty (cimpl g1 (conj g1-dec g1-ndec))]
+             [Axiom-Bottom-g2-ty (cimpl (Bottom) g2)]
+             [~g1-dec-ty (complement g1-dec)]
+             [~g1-dec->g1-dec->bot (cimpl ~g1-dec (cimpl g1-dec (Bottom)))]
+             [~g1ndec (cimpl-syn g1-ndec (Bottom))]
+             [g1ndec-g2 (cimpl-syn g1-ndec g2)]
+             [st-to-fill 
+                (st . <-pfg . (_) 
+                  (LFlambda name-g1 g1 
+                    (lf-let* 
+                        ([adnd (LFaxiom Axiom-DEC+NDEC-ty) : Axiom-DEC+NDEC-ty]
+                         [adnd-conj (LFapply adnd name-g1)]
+                         [g1-dec-term (LFpair-pi-1 adnd) : g1-dec]
+                         [g2-dec-term (LFpair-pi-2 adnd) : g1-ndec]
+                         [bot->g2-term (LFaxiom Axiom-Bottom-g2-ty) : Axiom-Bottom-g2-ty])
+                      _)
+                  ))]
+             [st-~g1-dec 
+                (st-to-fill . <-pfg . (_)
+                  (lf-let* 
+                      ([~g1-dec-term _ : ~g1-dec-ty]
+                       [~g1-dec->g1-dec->bot-term (LFaxiom ~g1-dec->g1-dec->bot) : ~g1-dec->g1-dec->bot]
+                       [bot1 (LFapply (LFapply ~g1-dec->g1-dec->bot-term ~g1-dec-term) g1-dec-term) : (Bottom)])
+                    (LFapply bot->g2-term bot1)))]
+             [st-~g1ndec
+                (st-to-fill . <-pfg . (_)
+                  (lf-let* 
+                      ([g1-dec-conj-~g1-ndec-term _ 
+                            : (conj g1-dec ~g1ndec)]
+                       [~g1-ndec-term (LFpair-pi-2 g1-dec-conj-~g1-ndec-term) 
+                            : ~g1ndec]
+                       [bot2 (LFapply ~g1-ndec-term g1-ndec-term)])
+                    (LFapply bot->g2-term bot2)))]
+             [st-g1ndec-g2
+                (st-to-fill . <-pfg . (_)
+                  (lf-let* 
+                      ([g1-dec-conj-g1-ndec-g2-term _ 
+                            : (conj g1-dec g1ndec-g2)]
+                       [g1-ndec-g2-term (LFpair-pi-2 g1-dec-conj-g1-ndec-g2-term) 
+                            : g1ndec-g2])
+                    (LFapply g1-ndec-g2-term g1-ndec-term)))]
             )
-        (if trivially-decidable?
-
-        ))
+        (mplus 
+          (pause asumpt st-~g1-dec ~g1-dec-ty)
+          (pause asumpt st-~g1ndec (conj g1-dec (cimpl-syn g1-ndec (Bottom))))
+          (pause asumpt st-g1ndec-g2 (conj g1-dec (cimpl-syn g1-ndec g2))))
+        )
      )
     )
     ((relate thunk descript)

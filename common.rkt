@@ -307,6 +307,15 @@
       st )
   ))
 
+;;; ANF-style push-let
+(define-syntax push-lflet
+  (syntax-rules (:)
+    ((_ st term : Type) 
+      (fresh-param (new)
+        (let
+          ([new-st (st . <-pfg . (_) (lf-let* ([new term : Type]) _))])
+          `(,new-st . ,new))))))
+
 ;;; we consider #f is the failed state, also one of the state
 (define (?state? obj) (or (equal? obj #f) (state? obj)))
 
