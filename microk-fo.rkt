@@ -976,7 +976,7 @@
     )
   )
   (if (empty-assumption-base? asumpt)
-    (and (not (empty-assumption-base? org-asumpt)) 
+    (and (ormap has-relate (all-assumption-goals org-asumpt)) 
          (unfold-assumption-solve org-asumpt st g)) 
     ;; TODO: change to re-invokable stream
     ;;; currently we expand the assumption to extract more information
@@ -1013,12 +1013,30 @@
   (result-f g)
 )
 
+(define/contract (has-relate g)
+  (Goal? . -> . boolean?)  
+  (define result #f)
+  (define (each-case prev-f rec g)
+    (if result
+        g
+        (match g
+          [(relate thunk _) (begin (set! result #t) g)] 
+          [o/w (prev-f g)]))
+  )
+  (define result-f 
+    (overloading-functor-list (list each-case goal-base-endofunctor pair-base-endofunctor identity-endo-functor))
+  )
+  (result-f g)
+  result
+)
+
+
 ;;; asumpt x state x Goal -> Stream
 ;;;  it will first collapse all the assumptions
 ;;;   and then use unfold-one-level-relate on these assumptions
 ;;;   
 ;;;  this is different from others in that it is stepping assumption
-;;;  precondition: asumpt != empty
+;;;  precondition: asumpt != empty, (has-relate asumpt)
 (define/contract (unfold-assumption-solve asumpt st goal)
   (assumption-base? ?state? Goal? . -> . Stream?)
   (define/contract (push-axiom st ty)
@@ -1032,7 +1050,7 @@
   (define unfolded-goal (cimpl s-unfold-conj-asumpt-ty goal)) 
   ;;; use cimpl here to make the 
   (match-let*
-      ([(cons st all-asumpt-term) (push-lflet st conj-assumpt-term : conj-assumpt-ty)]
+     ([(cons st all-asumpt-term) (push-lflet st conj-assumpt-term : conj-assumpt-ty)]
       [(cons st axiom-unfold)    (push-axiom st (cimpl conj-assumpt-ty unfold-conj-assumpt-ty))]
       [(cons st axiom-simplify)  (push-axiom st (cimpl unfold-conj-assumpt-ty s-unfold-conj-asumpt-ty))]
       [(cons st s-unfold-conj-term) 
