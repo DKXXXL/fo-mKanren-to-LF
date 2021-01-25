@@ -574,8 +574,8 @@
     ; this could be a state, a goal, and etc.
     ;;; we will at the end transform it into a stream of state
     (match (cons ag bg)
-    [(cons (relate a b) (relate c d))
-      (and (equal? a c) (equal? b d) st)]
+    [(cons (relate _ b) (relate _ d))
+      (and (equal? (car b) (car d)) (== b d))]
     [(cons (== a b) (== c d))
       (conj* (== a c) (== b d))]
     [(cons (=/= a b) (=/= c d))
@@ -786,7 +786,7 @@
 (define/contract (mature s)
     (Stream? . -> . Stream?)
     ;;; (assert-or-warn (not-state? s) "It is not supposed to be a state here")
-    (debug-dump "\n maturing: ~a" s)
+    ;;; (debug-dump "\n maturing: ~a" s)
     (if (mature? s) s (mature (step s))))
   
 ;;; mature the whole stream (bad!)
@@ -838,8 +838,7 @@
   ;;; )
   (define heuristic-to-syn-solve
     (and (relate? g) 
-         (not (empty-assumption-base? asumpt)))
-  )
+         (not (empty-assumption-base? asumpt))))
   ;;; (let*
   ;;;   ([two-approach 
   ;;;       (mplus 
@@ -879,7 +878,8 @@
 
 (define/contract (syn-solving asumpt org-asumpt st g)
   (assumption-base? assumption-base? ?state? Goal? . -> . Stream?)
-
+  (debug-dump "\n syn-solving asumpt: ~a" asumpt)
+  (debug-dump "\n syn-solving goal: ~a" g)
   ;;; first we look at top-level assumption to see if unification can succeed
   ;;; then we need to deconstruct the (top)-assumption base
   ;;;   to syntactical pattern match on all the sub-assumption
@@ -984,6 +984,7 @@
         ([(cons (cons term-name ag) remain-asumpt) 
             (iter-assumption-base asumpt)]
          [if-top-level-match (unify/goal ag g st)] ;;; type: Stream?
+         [k (debug-dump "\n current asumpt: ~a, matching ~a" ag if-top-level-match)]
          [if-top-level-match-filled 
           (mapped-stream 
             (lambda (st) (wrap-state-stream (st . <-pfg . (LFproof term-name ag))))
