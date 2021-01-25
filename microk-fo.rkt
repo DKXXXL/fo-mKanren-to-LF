@@ -837,7 +837,7 @@
   ;;;   (mapped-stream guarding s)
   ;;; )
   (define heuristic-to-syn-solve
-    (and (relate? g) 
+    (and (or (relate? g) (Bottom? g)) 
          (not (empty-assumption-base? asumpt))))
   ;;; (let*
   ;;;   ([two-approach 

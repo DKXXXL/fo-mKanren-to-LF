@@ -765,6 +765,20 @@
 ((run 1 (a)  (conj (cimpl (False a) (False3 2)) (== a 2)))
   . test-reg!=> . 'succeed  
 )
+
+((run 1 (a)  (cimpl (conj (a . == . 1)  
+                          ((a . == . 1) . → . (symbolo a))) 
+                    (Bottom)) )
+  . test-reg!=> . 'succeed  
+)
+
+(define → cimpl)
+
+((run 1 (a)  (cimpl ((== a 1) . → . (False a)) 
+                    (False a)) )
+  . test-reg!=> . 'succeed  
+)
+
 ;;; 
 ;;; 
 ;;; 
