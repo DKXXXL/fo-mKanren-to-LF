@@ -813,7 +813,7 @@
 ;;; Some tautology
 (Syn-solve-taut-1
   (random-goal (A B C)
-    (run 1 (a)  (ciff 
+    (run 1 ()  (ciff 
                     (conj (A . → . C) (B . → . C)) 
                     ((disj A B) . → . C)) ))
   . test-reg!=> . 'succeed  
@@ -821,7 +821,7 @@
 
 (Syn-solve-taut-2
   (random-goal (A B C)
-    (run 1 (a)  (cimpl  ;;; TODO: ciff here will makes unhalt
+    (run 1 ()  (cimpl  ;;; TODO: ciff here will makes unhalt
                         ;;; is that intuitionstically provable?
                     (disj (A . → . C) (B . → . C)) 
                     ((conj A B) . → . C)) ))
@@ -830,9 +830,23 @@
 
 (Syn-solve-taut-curry
   (random-goal (A B C)
-    (run 1 (a)  (ciff 
+    (run 1 ()  (ciff 
                     (A . → . (B . → . C)) 
                     ((conj A B) . → . C)) ))
+  . test-reg!=> . 'succeed  
+)
+
+(Syn-solve-taut-comp
+  (random-goal (A B C D E X Z)
+    (run 1 ()  (cimpl 
+                    (conj* 
+                      (A . → . B)
+                      (B . → . C)
+                      (C . → . D)
+                      (Z . → . D)
+                      (D . → . E) 
+                      (X . → . E))
+                    (A . → . E)) ))
   . test-reg!=> . 'succeed  
 )
 
