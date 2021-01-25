@@ -686,7 +686,6 @@
   (False x))
 
 
-
 (Syn-solve-1
   (run 1 (a)  (cimpl (False a) (False a)))
   . test-reg!=> . 'succeed  
@@ -709,6 +708,31 @@
 )
 
 
+(define-relation (False1 x)
+  (False2 x))
+
+(define-relation (False2 x)
+  (False1 x))
+
+(define-relation (False3 x)
+  (False x))
+
+
+((run 1 (a)  (conj (cimpl (False1 a) (False2 2)) (== a 2)))
+  . test-reg!=> . 'succeed  
+)
+
+((run 1 (a)  (conj (cimpl (False2 a) (False1 2)) (== a 2)))
+  . test-reg!=> . 'succeed  
+)
+
+((run 1 (a)  (conj (cimpl (False3 a) (False 2)) (== a 2)))
+  . test-reg!=> . 'succeed  
+)
+
+((run 1 (a)  (conj (cimpl (False a) (False3 2)) (== a 2)))
+  . test-reg!=> . 'succeed  
+)
 ;;; 
 ;;; 
 ;;; 
