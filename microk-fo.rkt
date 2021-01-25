@@ -898,6 +898,7 @@
         (syn-solve new-rem org-asumpt st g)
         )]
       [(disj a b)
+        ;;; TODO: remove duplicate computation. (syn-solve on g with org-asumpt)
         (fresh-param (lhs rhs lhs-asumpt rhs-asumpt)
           (let* (
               [st-pf-filled 

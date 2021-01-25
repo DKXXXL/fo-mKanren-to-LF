@@ -781,6 +781,73 @@
   . test-reg!=> . 'succeed  
 )
 
+(Syn-solve-lor
+  (run 1 (a)  (cimpl ((disj (== a 1) (Bottom)) . → . (False a)) 
+                    (False a)) )
+  . test-reg!=> . 'succeed  
+)
+
+
+(Syn-solve-land
+  (run 1 (a)  (cimpl ((conj (== a 1) (Top)) . → . (False a)) 
+                    (False a)) )
+  . test-reg!=> . 'succeed  
+)
+
+;;; This goal can only be satisfied from outside
+(define (Opaque-Goal)
+  (let* ([k (gensym)])
+    (letrec ([g (λ () (relate (λ () (fresh () (g))) `(,k))) ])
+      (g)
+    )
+  )
+)
+
+(define (ciff X Y) (conj (cimpl X Y) (cimpl Y X)))
+
+(define-syntax random-goal
+  (syntax-rules ()
+    ((_ (x ...) g0 gs ...)
+     (let ((x (Opaque-Goal)) ...)  (conj* g0 gs ...)))))
+
+;;; Some tautology
+(Syn-solve-taut-1
+  (random-goal (A B C)
+    (run 1 (a)  (ciff 
+                    (conj (A . → . C) (B . → . C)) 
+                    ((disj A B) . → . C)) ))
+  . test-reg!=> . 'succeed  
+)
+
+(Syn-solve-taut-2
+  (random-goal (A B C)
+    (run 1 (a)  (ciff 
+                    (disj (A . → . C) (B . → . C)) 
+                    ((conj A B) . → . C)) ))
+  . test-reg!=> . 'succeed  
+)
+
+(Syn-solve-taut-curry
+  (random-goal (A B C)
+    (run 1 (a)  (ciff 
+                    (A . → . (B . → . C)) 
+                    ((conj A B) . → . C)) ))
+  . test-reg!=> . 'succeed  
+)
+
+((random-goal (A B C)
+    (run 1 (a)  (cimpl
+                    (conj 
+                      ((disj A B) . → . C)
+                      A) 
+                    C) ))
+  . test-reg!=> . 'succeed  
+)
+;;; At this point it is cartesian closed bi-category
+;;; we should also try to prove pierce-law (call/cc)
+
+;;; Next for quantifiers
+
 ;;; 
 ;;; 
 ;;; 
