@@ -650,7 +650,15 @@
   . test-reg!=> . 'succeed  
 )
 
+((run 1 ()  (for-all (x) (cimpl (== x 1) (=/= x 2))))
+  . test-reg!=> . 'succeed  
+)
+
 ((run 1 (x a)  (cimpl (== x a) (=/= x 2)))
+  . test-reg!=> . 'succeed  
+)
+
+((run 1 (a)  (for-all (x) (cimpl (== x a) (=/= x 2))) )
   . test-reg!=> . 'succeed  
 )
 
@@ -658,11 +666,29 @@
   . test-reg!=> . 'succeed  
 )
 
+((run 1 (a)  (for-all (x) (cimpl (== x a) (=/= x a))) )
+  . test-reg!=> . 'fail  
+)
+
+
 ((run 1 (a)  (cimpl (stringo a) (symbolo a)))
   . test-reg!=> . 'succeed  
 )
 
+((run 1 ()  (for-all (a) (cimpl (stringo a) (symbolo a))) )
+  . test-reg!=> . 'fail  
+)
+
 ((run 1 (a)  (cimpl (== a 1) (symbolo a)))
+  . test-reg!=> . 'succeed  
+)
+
+((run 1 ()  (for-all (a) (cimpl (== a 1) (symbolo a))))
+  . test-reg!=> . 'fail  
+)
+
+
+((run 1 ()  (for-all (a) (cimpl (== a 1) (numbero a))))
   . test-reg!=> . 'succeed  
 )
 
@@ -670,9 +696,15 @@
   . test-reg!=> . 'succeed  
 )
 
+((run 1 ()  (for-all (a) (cimpl (=/= a 1) (symbolo a))) )
+  . test-reg!=> . 'fail  
+)
+
+
 ((run 1 (a)  (conj (== a 1) (cimpl (=/= a 1) (symbolo a))))
   . test-reg!=> . 'succeed  
 )
+
 
 ((run 1 (a)  (conj (numbero a) (cimpl (stringo a) (symbolo a))) )
   . test-reg!=> . 'succeed  
