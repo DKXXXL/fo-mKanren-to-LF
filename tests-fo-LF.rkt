@@ -821,7 +821,8 @@
 
 (Syn-solve-taut-2
   (random-goal (A B C)
-    (run 1 (a)  (ciff 
+    (run 1 (a)  (cimpl  ;;; TODO: ciff here will makes unhalt
+                        ;;; is that intuitionstically provable?
                     (disj (A . → . C) (B . → . C)) 
                     ((conj A B) . → . C)) ))
   . test-reg!=> . 'succeed  

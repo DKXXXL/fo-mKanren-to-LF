@@ -885,6 +885,8 @@
   ;;;   to syntactical pattern match on all the sub-assumption
   ;;; TODO: here destruction on asumption 
   ;;;       doesn't integrate the sub-asumpt into the state... some information is loss
+  ;;;       so currently paying the price of duplicate computation, 
+  ;;;         we will keep calling sem-solving on cimpl which is the 
   (define/contract (traversal-on-asumpt term-name top-asumpt remain-asumpt)
     (any? Goal? assumption-base? . -> . Stream?)
     (match top-asumpt
@@ -898,25 +900,24 @@
         (syn-solve new-rem org-asumpt st g)
         )]
       [(disj a b)
-        ;;; TODO: remove duplicate computation. (syn-solve on g with org-asumpt)
-        (fresh-param (lhs rhs lhs-asumpt rhs-asumpt)
+        ;;; TODO: remove duplicate computation. 
+        ;;;   (syn-solve on g with org-asumpt)
+        ;;;   w/-disj will calculate above stream again
+        (fresh-param (lhs rhs split lhs-asumpt rhs-asumpt)
           (let* (
+              [split-goal (conj (cimpl a g) (cimpl b g))]
               [st-pf-filled 
                 (st . <-pfg . (_1 _2) 
                   (lf-let* 
-                      ([lhs (LFlambda lhs-asumpt a _1) : (cimpl a g)]
-                       [rhs (LFlambda rhs-asumpt b _2) : (cimpl b g)])
+                      ([split _ : split-goal]
+                       [lhs (LFpair-pi-1 split) : (cimpl a g)]
+                       [rhs (LFpair-pi-2 split) : (cimpl b g)])
                     (LFcase-analysis top-asumpt g term-name lhs rhs)))]
-              [with-disj-l
-                (syn-solve (cons-asumpt lhs-asumpt a '()) org-asumpt st-pf-filled g)]
-              [with-disj-l-r
-                (mapped-stream 
-                  (λ (st) (syn-solve (cons-asumpt rhs-asumpt b '()) org-asumpt st g))
-                  with-disj-l)]
-              [w/o-disj
-                (syn-solve remain-asumpt org-asumpt st g)]    
+              [reduced-asumpt (filter (lambda (x) (not (equal? x top-asumpt))) org-asumpt)]
+              [w/-disj  (pause reduced-asumpt st-pf-filled split-goal)]
+              [w/o-disj (syn-solve remain-asumpt org-asumpt st g)]    
               )
-            (mplus with-disj-l-r w/o-disj)))]
+            (mplus w/-disj w/o-disj)))]
       [(cimpl a b)
           (fresh-param (applied argument)
             (let* (
@@ -925,10 +926,16 @@
                     (lf-let* 
                         ([argument _2 : a]
                          [applied (LFapply term-name argument) : b])
-                      _1))])
-              (mapped-stream
-                (λ (st) (pause org-asumpt st a))
-                (syn-solve (cons-asumpt applied b remain-asumpt) org-asumpt st-pf-filled g))
+                      _1))]
+                [reduced-asumpt (filter (lambda (x) (not (equal? x top-asumpt))) org-asumpt)]
+                [new-asumpt (cons-asumpt applied b reduced-asumpt)]
+                [w/-cimpl
+                  (mapped-stream
+                    (λ (st) (pause org-asumpt st a))
+                    (pause new-asumpt st-pf-filled g))]
+                [w/o-cimpl
+                  (syn-solve remain-asumpt org-asumpt st-pf-filled g)])
+              (mplus w/-cimpl w/o-cimpl)
             ))]
       [(ex v t)
       ;;; the key is
@@ -1103,8 +1110,11 @@
               ;;; Warning!!!: later we will use cons-asumpt to sieve
               ;;;   the valid assumption into assumption base
               ;;;   instead of this incomplete relate check
-              ;;;       Trivial assumption doesn't need to be added into asumpt 
-              [new-asumpt (if (relate? g1) (cons-asumpt left-v g1 asumpt) asumpt)])
+              ;;;       Trivial assumption doesn't need to be added into asumpt
+              ;;; TODO: to make things more informed 
+              ;;; [new-asumpt (if (relate? g1) (cons-asumpt left-v g1 asumpt) asumpt)]
+              [new-asumpt asumpt]
+            )
        (step (bind new-asumpt (pause asumpt st-pf-filled g1) g2)))))
     ;;; the real syntactical solving for cimpl
     ((cimpl-syn g1 g2)
@@ -1446,7 +1456,7 @@
       [(=/= t1 t2) (== t1 t2)]
       [(ex a gn) (forall a (Top) (c gn))]
       [(forall v bound gn) ;; forall v. bound => g
-        (ex v (complement (cimpl bound gn))) ]
+        (ex v (conj bound (complement gn))) ]
       [(numbero t) (not-numbero t)]
       [(not-numbero t) (numbero t)]
       [(stringo t) (not-stringo t)]
