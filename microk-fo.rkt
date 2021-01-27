@@ -1375,6 +1375,7 @@
                    
                    
                    [relative-complemented-goal (relative-complement unmention-substed-st current-vars v)]
+                  ;;;  remove more than one variable is good, make state as small as possible
                    [shrinked-st (shrink-away unmention-substed-st current-vars v)]
                    [k (begin  (debug-dump "\n domain ~a" domain)
                               (debug-dump "\n initial st: ~a" st)
@@ -2144,6 +2145,7 @@
 ;;;    st is in field-projected-form, where mentioned var are scope + var
 ;;;   st is domain-enforced
 ;;; BUG: this is unsound as unmentioned-substed-form is unsound
+;;;       remove more than 
 (define/contract (shrink-away st scope var)
   (state? set? var? . -> . state?)
   (define mentioned-vars (set-remove scope var))
