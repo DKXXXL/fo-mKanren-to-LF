@@ -55,7 +55,7 @@
 (instrumenting-enabled #t)
 
 ;;; set the following to 'ON then we will have debug info
-(define debug-output-info 'OFF)
+(define debug-output-info 'ON)
 
 
 ;; Logic variables
@@ -302,10 +302,10 @@
 (define-syntax <-pfg
   (syntax-rules ()
     ((_ st term) 
-      st )     
+      (let ([st_ st]) st_) )     
 
     ((_ st (hole holes ...) body) 
-      st )
+      (let ([st_ st]) st_) )
   ))
 
 ;;; ANF-style push-let
@@ -485,6 +485,7 @@
   `(,tm-result : ≠ ,conj-disj-diseqs )
   )           
 (define (reify/initial-var st)
+  (debug-dump "\n reify with state: ~a" st)
   (reify initial-var st))
 
 ;;; reify the variable toggether with the constraints

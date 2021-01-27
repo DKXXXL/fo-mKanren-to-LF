@@ -529,7 +529,7 @@
   (syntax-rules ()
     ((_ x) x)
     ((_ x y ...) 
-      (mplus x (mplus y ...)))))
+      (mplus x (mplus* y ...)))))
 
 ;;; (pause st g) will fill the generated proof term into st
 ;;; it has the same specification as (start st g)
@@ -962,9 +962,9 @@
                 (syn-solve remain-asumpt org-asumpt st g)
                 (pause reduced-asumpt st-pf-filled subgoal-ty))))]
       [(forall v domain t)
-          (fresh (VT)
             (fresh-param (applied-term dp2)
             (let* (
+                [VT (fresh-var VT)]
                 [forall-internal (cimpl domain t)]
                 [applied-type (forall-internal . subst . [VT // v])]
                 [st-pf-filled 
@@ -978,7 +978,7 @@
               (mapped-stream
                 ;; fill in the second hole
                 (λ (st) (wrap-state-stream (st . <-pfg . (walk* v (state-sub st))))) 
-                (syn-solve new-asumpt org-asumpt st-pf-filled g)) )))]
+                (syn-solve new-asumpt org-asumpt st-pf-filled g)) ))]
       ;;; atomic prop! just ignore them
       [o/w (syn-solve remain-asumpt org-asumpt st g)]
     )
@@ -1181,7 +1181,9 @@
             )
         (mplus*
           (pause asumpt st-~g1-dec ~g1-dec-ty)
-          (pause asumpt st-~g1ndec (conj g1-dec (cimpl-syn g1-ndec (Bottom))))
+          ;;; A -> bot /\ A
+          (pause asumpt st-~g1ndec (conj g1-dec (cimpl-syn g1-ndec (Bottom)))) 
+          ;;; give up syntactical falsifying 
           (pause asumpt st-g1ndec-g2 (conj g1-dec (cimpl-syn g1-ndec g2)))))
     ))
     ((relate thunk descript)
@@ -1277,7 +1279,11 @@
                                     (LFapply from-bottom (LFapply to-bottom domain-term))
                                   ))) ))]
                        [st-terminating (prove-goal-unsat asumpt pf-term-to-fill-st domain)]
-                       [res (clear-about st (list->set (state-scope st-terminating)) var)])
+                       [w/scope (state-scope st-terminating)]
+                       [res (clear-about st-terminating (list->set (state-scope st-terminating)) var)]
+                       [q (mature res)]
+                       [k (debug-dump "\n after clear about: ~a \n  with scope ~a removing ~a" q w/scope var)]
+                       )
                       res 
                       ) ]
           ;;; [(Bottom) (wrap-state-stream st)] 
@@ -2087,6 +2093,7 @@
   ;;;  we remove none-substed appearances of unmentioned var
   (define unmentioned-removed-st (unmentioned-totally-removed mentioned-vars domain-enforced-st))
   ;;; Step 3 done
+  ;;; BUG: 
   (define atomics-of-states (conj-state->list-of-goals unmentioned-removed-st))
   (define atomics-of-var-related (filter (lambda (x) (there-is-var-in (set varx) x)) atomics-of-states))
   (define atomics-of-var-unrelated (filter (lambda (x) (not (there-is-var-in (set varx) x))) atomics-of-states) )
@@ -2139,7 +2146,7 @@
   ;;;  we need to do extra unmentioned-substed because here var is considered unmentioned
   (define var-removed-st (unmentioned-substed-form mentioned-vars st))
   ;;; (define var-removed-st st)
-  ;;; (debug-dump "\n shrink-var-removed-st: ~a" var-removed-st)
+  (debug-dump "\n shrink-var-removed-st: ~a" var-removed-st)
   (define domain-enforced-st var-removed-st)
   ;;;  we remove none-substed appearances of unmentioned var
   ;;; TODO : abstract this part away -- 
@@ -2160,7 +2167,7 @@
   (state? set? var? . -> . any?)
   ;;; TODO: I will just currently make this assumption to empty...
   (define dnf-sym-stream (TO-DNF (TO-NON-Asymmetric '() (wrap-state-stream state))))
-
+  
   (define mentioned-var (set-remove scope v))
   (define (map-clear-about st)
     (let* (
@@ -2170,9 +2177,19 @@
         ;;; [unmention-substed-st (unmentioned-substed-form mentioned-var domain-enforced-st)]
         [unmention-substed-st  domain-enforced-st] 
         [shrinked-st (shrink-away domain-enforced-st current-vars v)]
+        [k (begin   (debug-dump "\n clearing about: current-vars ~a" current-vars)
+                    (debug-dump "\n clearing about: field-projected-st : ~a" field-projected-st)
+                    (debug-dump "\n clearing about: domain-enforced-st: ~a" domain-enforced-st)
+                    (debug-dump "\n clearing about: unmention-substed-st: ~a" unmention-substed-st)
+                    (debug-dump "\n shrinked-st on ~a: ~a" v shrinked-st) 
+                    ;;; (debug-dump "\n complemented goal: ")(debug-dump st-scoped-w/ov)
+                    ;;; (debug-dump "\n next state ") (debug-dump next-st) 
+                    ;;; (debug-dump "\n search with domain on var ")
+                    ;;; (debug-dump v) (debug-dump " in ") (debug-dump cgoal) 
+                    (debug-dump "\n"))
+                    ]
         )
-        (wrap-state-stream shrinked-st)
-        ))
+      (wrap-state-stream shrinked-st)))
   (mapped-stream map-clear-about dnf-sym-stream)
 )
 

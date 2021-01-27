@@ -194,6 +194,10 @@
   run-1-succeed
 )
 
+(Input-pair-incorrect
+  (run 1 (xs ys) (for-all (k) (== xs 4)))
+  . test-reg!=> . 'succeed
+)
 
 ;;; complicated check
 
@@ -609,6 +613,12 @@
               (merge-boolo y1s y2s ys)))))
 
 
+(define-relation (membero elem lst)
+  (fresh (first rest)
+    (== lst (cons first rest))
+      (conde
+        ((== first elem))
+        ((membero elem rest)))))
 
 (Teenage-sort-1
   (run 1 () (for-bound (x) [boolo x] (sort-boolo (list x #f) (list #f x))))
@@ -639,6 +649,30 @@
 (Teenage-sort-6
   (run 1 (a) (for-bound (x) [boolo x] (sort-boolo (list #f #f x) (list a #f x))))
 . test-reg!=> . 'succeed
+)
+
+
+(define (sort-boolo-base-case xs ys o)
+  (conde ((== xs o) (== ys o))
+         ((fresh (x)
+           (== xs (list x))
+           (== ys (list x))))
+         ((fresh (x1s x2s y1s y2s)
+              (splito xs x1s x2s)
+              (sort-boolo x1s y1s)
+              (sort-boolo x2s y2s)
+              (merge-boolo y1s y2s ys)))))
+(sort-bool-synthesize-base
+  (run 1 (o) (for-all (x) (sort-boolo-base-case (list x #f #f #f) (list #f #f #f x) o)))
+. test-reg!=> . 'succeed 
+)
+
+(sort-boolo-implies-membero-1
+  (run 1  (y lst) 
+      (cimpl (sort-boolo lst (cons #f y))
+             (membero #f lst))
+    )
+. test-reg!=> . 'succeed 
 )
 
 
@@ -795,6 +829,7 @@
 )
 
 ;;; This goal can only be satisfied from outside
+;;; Opaque-Goal = False
 (define (Opaque-Goal)
   (let* ([k (gensym)])
     (letrec ([g (λ () (relate (λ () (fresh () (g))) `(,k))) ])
@@ -836,6 +871,9 @@
   . test-reg!=> . 'succeed  
 )
 
+;;; A `unfold to` A
+;;; A `unfold to` C \/ A
+
 (Syn-solve-taut-comp
   (random-goal (A B C D E X Z)
     (run 1 ()  (cimpl 
@@ -858,6 +896,76 @@
                     C) ))
   . test-reg!=> . 'succeed  
 )
+
+
+(Syn-solve-universal
+  (random-goal (A)
+    (run 1 ()  (cimpl 
+                    (conj* 
+                      (for-all (x) ((False x) . → . A))
+                      (False 1))
+                    A)))
+  . test-reg!=> . 'succeed  
+)
+
+
+(Syn-solve-universal-2
+  (random-goal (A)
+    (run 1 (y)  (cimpl 
+                    (conj* 
+                      (for-all (x) ((False x) . → . A))
+                      (False y))
+                    A)))
+  . test-reg!=> . 'succeed  
+)
+
+;;; (Syn-solve-universal-2
+;;;   (random-goal (A)
+;;;     (run 1 ()  (for-all (x) 
+;;;                   (cimpl 
+;;;                     (conj* 
+;;;                       (False x)
+;;;                       (for-all (y) ((False y) . -> . A)))
+;;;                     A)))
+;;;   . test-reg!=> . 'succeed  
+;;; ))
+
+;;; (Syn-solve-existential
+;;;   (random-goal (A)
+;;;     (run 1 ()  (cimpl 
+;;;                     (conj* 
+;;;                       (for-all (x) ((False x) . → . A))
+;;;                       (fresh (k) (False k)))
+;;;                     A)))
+;;;   . test-reg!=> . 'succeed  
+;;; )
+
+(Syn-solve-existential-4
+  (random-goal (A)
+    (run 1 ()  (cimpl 
+                  (fresh (x) (disj A (=/= x x)))
+                  A)))
+  . test-reg!=> . 'succeed  
+)
+
+(Syn-solve-existential-2
+  (random-goal (A)
+    (run 1 ()  (cimpl 
+                  (for-all (x) ((False x) . → . A))
+                      (cimpl (fresh (k) (False k))
+                                A))))
+  . test-reg!=> . 'succeed  
+)
+
+(Syn-solve-existential-3
+  (random-goal (A)
+    (run 1 ()  (cimpl 
+                  (fresh (k) (False k))
+                      (cimpl (for-all (x) ((False x) . → . A))
+                                A))))
+  . test-reg!=> . 'succeed  
+)
+
 ;;; At this point it is cartesian closed bi-category
 ;;; we should also try to prove pierce-law (call/cc)
 
