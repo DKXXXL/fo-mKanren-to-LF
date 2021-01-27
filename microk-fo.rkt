@@ -1865,6 +1865,8 @@
 ;;;   return a state, where unmentioned-var are replaced as much as possible
 ;;;     "as much as" is because there are cases that unmentioned-var
 ;;;     has no relationship with other vars, so cannot be eliminated
+;;; BUG: this is unsound for some reasons...
+
 (define/contract (unmentioned-substed-form mentioned-vars st)
   (set? state? . -> . state?)
 
@@ -1900,6 +1902,7 @@
         [(cons lhs rhs)
           #:when (there-is-var-not-in mentioned-vars lhs) 
           ; when there is unmentioned var, thus equation needs removed
+          ;;;  this should handle [(a == b, b == c), remove b] -> (a == c)
           (unmention-remove-everywhere (cdr eqs) (literal-replace lhs (walk* rhs (cdr eqs)) st))]
         [(cons v rhs)
           (state-sub-update 
@@ -2140,18 +2143,20 @@
 ;;;   st is in non-asymmretic form (i.e. no (var ..) =/= (cons ...))
 ;;;    st is in field-projected-form, where mentioned var are scope + var
 ;;;   st is domain-enforced
+;;; BUG: this is unsound as unmentioned-substed-form is unsound
 (define/contract (shrink-away st scope var)
   (state? set? var? . -> . state?)
   (define mentioned-vars (set-remove scope var))
   ;;;  we need to do extra unmentioned-substed because here var is considered unmentioned
   (define var-removed-st (unmentioned-substed-form mentioned-vars st))
   ;;; (define var-removed-st st)
-  (debug-dump "\n shrink-var-removed-st: ~a" var-removed-st)
+  (debug-dump "\n shrinking var: shrink-var-removed-st: ~a" var-removed-st)
   (define domain-enforced-st var-removed-st)
   ;;;  we remove none-substed appearances of unmentioned var
   ;;; TODO : abstract this part away -- 
   ;;;   "unmentioned-totally-removed" replace those constraints into True
   (define unmentioned-removed-st (unmentioned-totally-removed mentioned-vars domain-enforced-st))
+  (debug-dump "\n shrinking var: remove unmention in type/ineq-cst: ~a" unmentioned-removed-st)
   ;;; then we eliminate tproj
   (define tproj-eliminated (eliminate-tproj-return-record unmentioned-removed-st))
   (define tproj-eliminated-content (car tproj-eliminated))
@@ -2175,19 +2180,26 @@
         [field-projected-st (field-proj-form st)]
         [domain-enforced-st (domain-enforcement-st field-projected-st)]
         ;;; [unmention-substed-st (unmentioned-substed-form mentioned-var domain-enforced-st)]
-        [unmention-substed-st  domain-enforced-st] 
-        [shrinked-st (shrink-away domain-enforced-st current-vars v)]
+        [unmention-substed-st  domain-enforced-st]
         [k (begin   (debug-dump "\n clearing about: current-vars ~a" current-vars)
                     (debug-dump "\n clearing about: field-projected-st : ~a" field-projected-st)
                     (debug-dump "\n clearing about: domain-enforced-st: ~a" domain-enforced-st)
                     (debug-dump "\n clearing about: unmention-substed-st: ~a" unmention-substed-st)
-                    (debug-dump "\n shrinked-st on ~a: ~a" v shrinked-st) 
                     ;;; (debug-dump "\n complemented goal: ")(debug-dump st-scoped-w/ov)
                     ;;; (debug-dump "\n next state ") (debug-dump next-st) 
                     ;;; (debug-dump "\n search with domain on var ")
                     ;;; (debug-dump v) (debug-dump " in ") (debug-dump cgoal) 
                     (debug-dump "\n"))
-                    ]
+                    ] 
+        [shrinked-st (shrink-away domain-enforced-st current-vars v)]
+        [k (begin  
+                    (debug-dump "\n clearing about: shrinked-st on ~a: ~a" v shrinked-st) 
+                    ;;; (debug-dump "\n complemented goal: ")(debug-dump st-scoped-w/ov)
+                    ;;; (debug-dump "\n next state ") (debug-dump next-st) 
+                    ;;; (debug-dump "\n search with domain on var ")
+                    ;;; (debug-dump v) (debug-dump " in ") (debug-dump cgoal) 
+                    (debug-dump "\n"))
+                    ] 
         )
       (wrap-state-stream shrinked-st)))
   (mapped-stream map-clear-about dnf-sym-stream)
