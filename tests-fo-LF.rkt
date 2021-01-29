@@ -662,10 +662,11 @@
               (sort-boolo x1s y1s)
               (sort-boolo x2s y2s)
               (merge-boolo y1s y2s ys)))))
-(sort-bool-synthesize-base
-  (run 1 (o) (for-all (x) (sort-boolo-base-case (list x #f #f #f) (list #f #f #f x) o)))
-. test-reg!=> . 'succeed 
-)
+
+;;; (sort-bool-synthesize-base
+;;;   (run 1 (o) (for-all (x) (sort-boolo-base-case (list x #f #f #f) (list #f #f #f x) o)))
+;;; . test-reg!=> . 'succeed 
+;;; )
 
 (sort-boolo-implies-membero-1
   (run 1  (y lst) 
@@ -940,31 +941,31 @@
 ;;;   . test-reg!=> . 'succeed  
 ;;; )
 
-(Syn-solve-existential-4
-  (random-goal (A)
-    (run 1 ()  (cimpl 
-                  (fresh (x) (disj A (=/= x x)))
-                  A)))
-  . test-reg!=> . 'succeed  
-)
+;;; (Syn-solve-existential-4
+;;;   (random-goal (A)
+;;;     (run 1 ()  (cimpl 
+;;;                   (fresh (x) (disj A (=/= x x)))
+;;;                   A)))
+;;;   . test-reg!=> . 'succeed  
+;;; )
 
-(Syn-solve-existential-2
-  (random-goal (A)
-    (run 1 ()  (cimpl 
-                  (for-all (x) ((False x) . → . A))
-                      (cimpl (fresh (k) (False k))
-                                A))))
-  . test-reg!=> . 'succeed  
-)
+;;; (Syn-solve-existential-2
+;;;   (random-goal (A)
+;;;     (run 1 ()  (cimpl 
+;;;                   (for-all (x) ((False x) . → . A))
+;;;                       (cimpl (fresh (k) (False k))
+;;;                                 A))))
+;;;   . test-reg!=> . 'succeed  
+;;; )
 
-(Syn-solve-existential-3
-  (random-goal (A)
-    (run 1 ()  (cimpl 
-                  (fresh (k) (False k))
-                      (cimpl (for-all (x) ((False x) . → . A))
-                                A))))
-  . test-reg!=> . 'succeed  
-)
+;;; (Syn-solve-existential-3
+;;;   (random-goal (A)
+;;;     (run 1 ()  (cimpl 
+;;;                   (fresh (k) (False k))
+;;;                       (cimpl (for-all (x) ((False x) . → . A))
+;;;                                 A))))
+;;;   . test-reg!=> . 'succeed  
+;;; )
 
 ;;; At this point it is cartesian closed bi-category
 ;;; we should also try to prove pierce-law (call/cc)

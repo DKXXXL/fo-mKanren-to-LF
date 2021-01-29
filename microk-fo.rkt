@@ -1870,7 +1870,8 @@
 
 (define/contract (unmentioned-substed-form mentioned-vars st)
   (set? state? . -> . state?)
-
+  
+  (define (tproj-or-var? x) (or (var? x) (tproj? x)))
   ;;; following function will swap lhs and rhs of equation
   ;;;   if lhs is not unmentioned but rhs is
   ;;; postcondition: 
@@ -1887,13 +1888,15 @@
 
     (define rhs-has-unmentioned-var
       (there-is-var-not-in mentioned-vars rhs))
+    
+    
 
-    (if (and lhs-has-mentioned-var rhs-has-unmentioned-var)
+    (if (and lhs-has-mentioned-var rhs-has-unmentioned-var (tproj-or-var? rhs))
       (cons rhs lhs) ;; doing swap
       eq))
 
   (define old-eqs (map swap-if-rhs-unmentioned (state-sub st)))
-  ;;; (debug-dump "\n unmentioned-substed-form's input st: ~a \n unmentioned-substed-form's vars : ~a \n" st mentioned-vars)
+  (debug-dump "\n unmentioned-substed-form's input st: ~a \n unmentioned-substed-form's vars : ~a \n" st mentioned-vars)
   ;;; precondition: st has empty sub
   (define (unmention-remove-everywhere eqs st)
     ;;; (define eqs (state-sub st))
@@ -1904,7 +1907,11 @@
           #:when (there-is-var-not-in mentioned-vars lhs) 
           ; when there is unmentioned var, thus equation needs removed
           ;;;  this should handle [(a == b, b == c), remove b] -> (a == c)
-          (unmention-remove-everywhere (cdr eqs) (literal-replace lhs (walk* rhs (cdr eqs)) st))]
+          (match-let* 
+            ([new-rhs (walk* rhs (cdr eqs))]
+             [(cons new-st remain-eqs) (literal-replace lhs new-rhs (cons st (cdr eqs)))]
+             [k (debug-dump "\n unmentioned-substed-form removing: ~a, into ~a" lhs new-rhs)])
+            (unmention-remove-everywhere remain-eqs new-st))]
         [(cons v rhs)
           (state-sub-update 
             (unmention-remove-everywhere (cdr eqs) st)
@@ -1913,7 +1920,15 @@
     ))
   ;;; (define new-eqs (filter (lambda (x) (set-member? mentioned-vars (car x))) old-eqs))
   
-  (unmention-remove-everywhere old-eqs (state-sub-set st '()))
+  (define result-st (unmention-remove-everywhere old-eqs (state-sub-set st '())))
+  (define (swap-to-lhs-var eq)
+    (define lhs (car eq))
+    (define rhs (cdr eq))
+
+    (if (not (tproj-or-var? lhs))
+      (cons rhs lhs) ;; doing swap
+      eq))
+  (state-sub-update result-st (lambda (eqs) (map swap-to-lhs-var eqs)))
 )
 
 ;;; given a state in unmentioned-subst-form and field-projected-form
