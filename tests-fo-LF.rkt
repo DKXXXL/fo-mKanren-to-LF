@@ -78,17 +78,22 @@
              ))))))
 
 (define-syntax test-reg!
-  (syntax-rules ()
+  (syntax-rules ( JUST-DECL )
     ((_ name e-actual e-expected)
      (define name
           (let* ([x (lambda () (test 'name e-actual e-expected))]
                  [reg! (hash-set! all-tests-table 'name x)])
             'name)))
+    ((_ JUST-DECL name e-actual e-expected)
+     (define name
+          (let* ([x (lambda () (test 'name e-actual e-expected))])
+            x)))
     ((_ e-actual e-expected)
           (let* ([name 'e-actual]
                  [x (lambda () (test name e-actual e-expected))]
                  [reg! (hash-set! all-tests-table name x)])
             reg!))
+  
  ))
 
 (define-syntax test-reg!=>
@@ -101,6 +106,11 @@
   (syntax-rules ()
     ((_ name e-actual e-expected) (printf "\n Skipping as currently failed ~a ~a => ~a " 'name 'e-actual 'e-expected) )
     ((_ e-actual e-expected) (printf "\n Skipping as currently failed ~a => ~a " 'e-actual 'e-expected) )
+    ))
+
+(define-syntax test-reg!=>ND ;; won't be runned during testing, just declared
+  (syntax-rules ()
+    ((_ name e-actual e-expected) (test-reg! JUST-DECL name e-actual e-expected))
     ))
 
 (define run-1-succeed (run 1 () (== 1 1)))
@@ -680,10 +690,10 @@
               (sort-boolo x2s y2s)
               (merge-boolo y1s y2s ys)))))
 
-;;; (sort-bool-synthesize-base
-;;;   (run 1 (o) (for-all (x) (sort-boolo-base-case (list x #f #f #f) (list #f #f #f x) o)))
-;;; . test-reg!=> . 'succeed 
-;;; )
+(sort-bool-synthesize-base
+  (run 1 (o) (for-all (x) (sort-boolo-base-case (list x #f #f #f) (list #f #f #f x) o)))
+. test-reg!=>ND . 'succeed 
+)
 
 (sort-boolo-implies-membero-1
   (run 1  (y lst) 
@@ -869,7 +879,7 @@
     (run 1 ()  (ciff 
                     (conj (A . → . C) (B . → . C)) 
                     ((disj A B) . → . C)) ))
-  . test-reg!=> . 'succeed  
+  . test-reg!=>ND . 'succeed  
 )
 
 (Syn-solve-taut-2
@@ -937,52 +947,52 @@
   . test-reg!=> . 'succeed  
 )
 
-;;; (Syn-solve-universal-2
-;;;   (random-goal (A)
-;;;     (run 1 ()  (for-all (x) 
-;;;                   (cimpl 
-;;;                     (conj* 
-;;;                       (False x)
-;;;                       (for-all (y) ((False y) . -> . A)))
-;;;                     A)))
-;;;   . test-reg!=> . 'succeed  
-;;; ))
+(Syn-solve-universal-3
+  (random-goal (A)
+    (run 1 ()  (for-all (x) 
+                  (cimpl 
+                    (conj* 
+                      (False x)
+                      (for-all (y) ((False y) . -> . A)))
+                    A))))
+  . test-reg!=>ND . 'succeed  
+)
 
-;;; (Syn-solve-existential
-;;;   (random-goal (A)
-;;;     (run 1 ()  (cimpl 
-;;;                     (conj* 
-;;;                       (for-all (x) ((False x) . → . A))
-;;;                       (fresh (k) (False k)))
-;;;                     A)))
-;;;   . test-reg!=> . 'succeed  
-;;; )
+(Syn-solve-existential
+  (random-goal (A)
+    (run 1 ()  (cimpl 
+                    (conj* 
+                      (for-all (x) ((False x) . → . A))
+                      (fresh (k) (False k)))
+                    A)))
+  . test-reg!=>ND . 'succeed  
+)
 
-;;; (Syn-solve-existential-4
-;;;   (random-goal (A)
-;;;     (run 1 ()  (cimpl 
-;;;                   (fresh (x) (disj A (=/= x x)))
-;;;                   A)))
-;;;   . test-reg!=> . 'succeed  
-;;; )
+(Syn-solve-existential-4
+  (random-goal (A)
+    (run 1 ()  (cimpl 
+                  (fresh (x) (disj A (=/= x x)))
+                  A)))
+  . test-reg!=>ND . 'succeed  
+)
 
-;;; (Syn-solve-existential-2
-;;;   (random-goal (A)
-;;;     (run 1 ()  (cimpl 
-;;;                   (for-all (x) ((False x) . → . A))
-;;;                       (cimpl (fresh (k) (False k))
-;;;                                 A))))
-;;;   . test-reg!=> . 'succeed  
-;;; )
+(Syn-solve-existential-2
+  (random-goal (A)
+    (run 1 ()  (cimpl 
+                  (for-all (x) ((False x) . → . A))
+                      (cimpl (fresh (k) (False k))
+                                A))))
+  . test-reg!=>ND . 'succeed  
+)
 
-;;; (Syn-solve-existential-3
-;;;   (random-goal (A)
-;;;     (run 1 ()  (cimpl 
-;;;                   (fresh (k) (False k))
-;;;                       (cimpl (for-all (x) ((False x) . → . A))
-;;;                                 A))))
-;;;   . test-reg!=> . 'succeed  
-;;; )
+(Syn-solve-existential-3
+  (random-goal (A)
+    (run 1 ()  (cimpl 
+                  (fresh (k) (False k))
+                      (cimpl (for-all (x) ((False x) . → . A))
+                                A))))
+  . test-reg!=>ND . 'succeed  
+)
 
 ;;; At this point it is cartesian closed bi-category
 ;;; we should also try to prove pierce-law (call/cc)
