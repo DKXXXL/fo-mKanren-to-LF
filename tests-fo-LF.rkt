@@ -953,9 +953,9 @@
                   (cimpl 
                     (conj* 
                       (False x)
-                      (for-all (y) ((False y) . -> . A)))
+                      (for-all (y) ((False y) . → . A)))
                     A))))
-  . test-reg!=>ND . 'succeed  
+  . test-reg!=> . 'succeed  
 )
 
 (Syn-solve-existential
@@ -1031,7 +1031,7 @@
 (define-syntax run-the-test
   (syntax-rules ()
     ((_ name)
-     ((hash-ref all-tests-table 'name)) )
+     (hash-ref all-tests-table 'name name) )
  ))
 
 
