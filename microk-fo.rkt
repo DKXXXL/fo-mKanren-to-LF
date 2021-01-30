@@ -889,6 +889,7 @@
   ;;;         we will keep calling sem-solving on cimpl which is the 
   (define/contract (traversal-on-asumpt term-name top-asumpt remain-asumpt)
     (any? Goal? assumption-base? . -> . Stream?)
+    (define top-name-asumpt (cons term-name top-asumpt))
     (match top-asumpt
       [(conj a b) 
         (let* (
@@ -913,7 +914,7 @@
                        [lhs (LFpair-pi-1 split) : (cimpl a g)]
                        [rhs (LFpair-pi-2 split) : (cimpl b g)])
                     (LFcase-analysis top-asumpt g term-name lhs rhs)))]
-              [reduced-asumpt (filter (lambda (x) (not (equal? x top-asumpt))) org-asumpt)]
+              [reduced-asumpt (filter (lambda (x) (not (equal? top-name-asumpt x))) org-asumpt)]
               [w/-disj  (pause reduced-asumpt st-pf-filled split-goal)]
               [w/o-disj (syn-solve remain-asumpt org-asumpt st g)]    
               )
@@ -927,7 +928,7 @@
                         ([argument _2 : a]
                          [applied (LFapply term-name argument) : b])
                       _1))]
-                [reduced-asumpt (filter (lambda (x) (not (equal? x top-asumpt))) org-asumpt)]
+                [reduced-asumpt (filter (lambda (x) (not (equal? top-name-asumpt x))) org-asumpt)]
                 [new-asumpt (cons-asumpt applied b reduced-asumpt)]
                 [w/-cimpl
                   (mapped-stream
@@ -957,7 +958,9 @@
             ;;; TODO: apparently there are some duplicate computation, 
             ;;;   with these unremoved assumption before top asumpt
             ;;;     (because the new subgoal-ty barely changed)
-                [reduced-asumpt (filter (λ (a) (not (equal? top-asumpt a))) org-asumpt)])
+                [reduced-asumpt (filter (λ (a) (not (equal? top-name-asumpt a))) org-asumpt)]
+                [k (debug-dump "\n syn-solving: reduced asumpt: ~a" reduced-asumpt)]
+                )
               (mplus 
                 (syn-solve remain-asumpt org-asumpt st g)
                 (pause reduced-asumpt st-pf-filled subgoal-ty))))]

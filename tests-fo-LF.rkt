@@ -879,7 +879,7 @@
     (run 1 ()  (ciff 
                     (conj (A . → . C) (B . → . C)) 
                     ((disj A B) . → . C)) ))
-  . test-reg!=>ND . 'succeed  
+  . test-reg!=> . 'succeed  
 )
 
 (Syn-solve-taut-2
@@ -968,13 +968,22 @@
   . test-reg!=>ND . 'succeed  
 )
 
-(Syn-solve-existential-4
+(Syn-solve-existential-1
   (random-goal (A)
     (run 1 ()  (cimpl 
-                  (fresh (x) (disj A (=/= x x)))
-                  A)))
-  . test-reg!=>ND . 'succeed  
+                    (fresh (x) A)
+                    A)))
+  . test-reg!=> . 'succeed  
 )
+
+(Syn-solve-existential-1-2
+  (random-goal (A)
+    (run 1 ()  (cimpl 
+                    (fresh (x) A)
+                    (fresh (y) A))))
+  . test-reg!=> . 'succeed  
+)
+
 
 (Syn-solve-existential-2
   (random-goal (A)
@@ -994,8 +1003,17 @@
   . test-reg!=>ND . 'succeed  
 )
 
+
+(Syn-solve-existential-4
+  (random-goal (A)
+    (run 1 ()  (cimpl 
+                  (fresh (x) (disj A (=/= x x)))
+                  A)))
+  . test-reg!=> . 'succeed  
+)
+
 ;;; At this point it is cartesian closed bi-category
-;;; we should also try to prove pierce-law (call/cc)
+;;; we should also try to prove pierce-law (((A -> B) -> B) -> B) which should fail
 
 ;;; Next for quantifiers
 
@@ -1031,7 +1049,10 @@
 (define-syntax run-the-test
   (syntax-rules ()
     ((_ name)
-     (hash-ref all-tests-table 'name name) )
+     (let ([k (hash-ref all-tests-table 'name #f)]
+           [q name])
+      ((or k q))
+     ) )
  ))
 
 
