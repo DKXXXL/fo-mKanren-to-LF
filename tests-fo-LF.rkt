@@ -401,14 +401,31 @@
 
 ;;; the above currently unhalt if set to run 1
 
-((run 1 (a) 
+(WeirdOne-2
+  (run 1 (a) 
   (for-all (x y) (disj* 
                         (=/= a x) 
                         (conj* (== a x) (== x y)))))
-;;; ()
+;;; it is equivalent to
+;;; for-all (x y) (conj* (disj* (=/= a x) (== a x)) 
+                        ;;;  (disj* (=/= a x) (== x y)))
+;;; which is again
+;;;     for-all (x y) (disj* (=/= a x) (== x y))
 . test-reg!=> . 'fail
 )
 
+
+
+(WeirdOne-3
+  (run 1 (a) 
+  (for-all (x y) (disj* (=/= a x) (== x y))))
+;;; it is equivalent to
+;;; for-all (x y) (conj* (disj* (=/= a x) (== a x)) 
+                        ;;;  (disj* (=/= a x) (== x y)))
+;;; which is again
+;;;     for-all (x y) (disj* (=/= a x) (== x y))
+. test-reg!=> . 'fail
+)
 
 
 
