@@ -679,20 +679,28 @@
 )
 
 
-(define (sort-boolo-base-case xs ys o)
-  (conde ((== xs o) (== ys o))
+(define-relation (sort-boolo-base-case xs ys o)
+  (conde 
+         ((== xs o) (== ys o))
          ((fresh (x)
            (== xs (list x))
            (== ys (list x))))
          ((fresh (x1s x2s y1s y2s)
               (splito xs x1s x2s)
-              (sort-boolo x1s y1s)
-              (sort-boolo x2s y2s)
+              (sort-boolo-base-case x1s y1s o)
+              (sort-boolo-base-case x2s y2s o)
               (merge-boolo y1s y2s ys)))))
 
+
+(sort-bool-synthesize-base-0
+  (run 1 (o) (sort-boolo-base-case (list #t #f #f #f) (list #f #f #f #t) '()))
+. test-reg!=> . 'succeed 
+)
+
+;;; the following need more checking
 (sort-bool-synthesize-base
   (run 1 (o) (for-all (x) (sort-boolo-base-case (list x #f #f #f) (list #f #f #f x) o)))
-. test-reg!=>ND . 'succeed 
+. test-reg!=> . 'succeed 
 )
 
 (sort-boolo-implies-membero-1
@@ -709,6 +717,13 @@
              (membero #f lst))
     ))
 . test-reg!=>ND . 'succeed 
+)
+
+(sort-boolo-simple-1
+(run 1 (a) (conj 
+      (forall (x) (sort-boolo (list #f #f x) (list a #f x)))
+      (== a #f)) )
+. test-reg!=> . 'succeed 
 )
 
 
