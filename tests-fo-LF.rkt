@@ -721,7 +721,7 @@
 
 (sort-boolo-simple-1
 (run 1 (a) (conj 
-      (forall (x) (sort-boolo (list #f #f x) (list a #f x)))
+      (for-all (x) (sort-boolo (list #f #f x) (list a #f x)))
       (== a #f)) )
 . test-reg!=> . 'succeed 
 )
