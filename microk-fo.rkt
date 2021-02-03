@@ -1246,7 +1246,7 @@
         (mplus*
           (pause asumpt st-~g1-dec ~g1-dec-ty)
           ;;; A -> bot /\ A
-          ;;; (pause asumpt st-~g1ndec (conj g1-dec (cimpl-syn g1-ndec (Bottom)))) 
+          (pause asumpt st-~g1ndec (conj g1-dec (cimpl-syn g1-ndec (Bottom)))) 
           ;;; give up syntactical falsifying 
           (pause asumpt st-g1ndec-g2 (conj g1-dec (cimpl-syn g1-ndec g2)))))
     ))
