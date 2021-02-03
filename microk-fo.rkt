@@ -964,6 +964,7 @@
               (mplus 
                 (syn-solve remain-asumpt org-asumpt st g)
                 (pause reduced-asumpt st-pf-filled subgoal-ty))))]
+      ;;; BUG: it seems dead loop happens below, why? or maybe not?
       [(forall v domain t)
             (fresh-param (applied-term dp2)
             (let* (
@@ -1042,6 +1043,58 @@
 )
 
 
+;;; ;;; each forall will only be able to use once (you can see that in syntactical solving)
+;;; ;;;  so we need to duplicate each for-all so that it can be used multiple times
+;;; ;;; surprisingly it becomes resource-sensitive as we will record in the 
+;;; ;;;     proof term that how many times a forall assumption is instantiated
+;;; ;;; Note: this version is proof-term generation version
+;;; (define/contract (duplicate-one-level-forall asumpt st)
+;;;   (assumption-base? ?state? . -> . pair?)
+;;;   (define all-foralls
+;;;     (filter 
+;;;       (λ (term-name-goal) (forall? (cdr term-name-goal)))
+;;;       asumpt))
+
+;;;   (define-values (ret-asumpt ret-st)
+;;;     (for/fold
+;;;         ([acc-asumpt asumpt]
+;;;          [acc-st st])
+;;;         ([each-term-name-goal all-foralls])
+;;;       (match-let 
+;;;           ([(cons term-name goal) each-term-name-goal])
+;;;         (fresh-param (new-term-name)
+;;;           (values 
+;;;             (cons new-term-name goal acc-asumpt)
+;;;             (acc-st . <-pfg . (_)
+;;;               (lf-let* ([new-term-name term-name : goal])
+;;;                 _)
+;;;             ))
+;;;         )
+;;;       )
+;;;     )
+;;;   )
+
+;;;   (cons ret-asumpt ret-st)
+;;; )
+
+
+;;; ;;; this version is proof-term ignored version
+;;; ;;;   we will not justifies why goal === (duplicate-one-level-forall goal)
+;;; (define/contract (duplicate-one-level-forall g)
+;;;   (Goal? . -> . Goal?)
+
+;;;   (define (each-case prev-f rec g)
+;;;     (match g
+;;;       [(forall _ _ _) (conj g g)] ; top level duplication
+;;;       [o/w (prev-f g)]
+;;;     )
+;;;   )
+;;;   (define result-f 
+;;;     (overloading-functor-list (list each-case goal-base-endofunctor pair-base-endofunctor identity-endo-functor))
+;;;   )
+;;;   (result-f g)
+;;; )
+
 ;;; asumpt x state x Goal -> Stream
 ;;;  it will first collapse all the assumptions
 ;;;   and then use unfold-one-level-relate on these assumptions
@@ -1053,11 +1106,17 @@
   (define/contract (push-axiom st ty)
     (?state? Goal? . -> . pair?)
     (push-lflet st (LFaxiom ty) : ty))
+  
   (define conj-assumpt-ty (foldl conj (Top) (all-assumption-goals asumpt)))
   (define conj-assumpt-term (foldl LFpair (LFaxiom (Top)) (all-assumption-terms asumpt)))
   
   (define unfold-conj-assumpt-ty (unfold-one-level-relate conj-assumpt-ty))
   (define s-unfold-conj-asumpt-ty (syntactical-simplify unfold-conj-assumpt-ty))
+  ;;; Note: is it true that each forall will be only used once?
+  ;;; if it is then we need duplication of forall 
+  ;;; because there is duplication, so we do duplication after syntactical simplification
+  ;;; (define forall-duplicated (duplicate-one-level-forall s-unfold-conj-asumpt-ty))
+
   (define unfolded-goal (cimpl s-unfold-conj-asumpt-ty goal)) 
   ;;; use cimpl here to make the 
   (match-let*
