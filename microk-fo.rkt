@@ -53,6 +53,8 @@
 
   conj*
   disj*
+
+  debug-output-info
   )
 
 (require "common.rkt")
@@ -824,6 +826,7 @@
 ;;; note that when st == #f, the returned stream will always be #f
 ;;; Specificaion: 
 ;;;   the partial proof term of st will be applied with the proof-term of g
+;;;   and if asumpt == '(), then we will only invoke semantic computation
 (define/contract (start asumpt st g)
   (assumption-base? ?state? Goal? . -> . Stream?)
   ;;; Invariant check:
@@ -1316,7 +1319,7 @@
       ;;;  the first step is actually trying prove bottom from domain or otherwise
       ;;; TODO: add syntactical solving (i.e. put domain_ into the assumption but never solve it)
       ;;;         as now we know domain is always decidable so we just need to solve it (to add into state)
-      (let* [(domain_ (simplify-wrt asumpt st domain var))  
+      (let* [(domain_ (simplify-domain-wrt asumpt st domain var))  
              (k (begin (debug-dump "\n ~a : domain_ : ~a " var domain_)))] 
 
         (match domain_
@@ -1554,9 +1557,10 @@
 
 ;;; simplify goal w.r.t. a domain variable, constant parameters acceptable
 ;;;   if satisfiable, then act as identity
+;;;   note that this is only used for forall-bound (for-all domain)
 ;;;   otherwise return False
-;;; simplify-wrt : state x goal x var -> goal
-(define/contract (simplify-wrt asumpt st goal var)
+;;; simplify-domain-wrt : state x goal x var -> goal
+(define/contract (simplify-domain-wrt asumpt st goal var)
   (assumption-base? ?state? decidable-goal? any? . -> . Goal?)
   ;;; just run miniKanren!
   (define (first-non-empty-mature stream)
@@ -1564,7 +1568,10 @@
       [#f #f]
       [(cons #f next) (first-non-empty-mature next)]
       [v v]))
-  (if (first-non-empty-mature (pause asumpt st goal)) (syntactical-simplify goal) (Bottom)))
+  ;;; WARNING: following we only allowed semantic solving:
+  (if (first-non-empty-mature (pause empty-assumption-base st goal)) (syntactical-simplify goal) (Bottom))
+  
+  )
 
 ;;; some trivial rewrite to make things easier
 (define/contract (syntactical-simplify goal)

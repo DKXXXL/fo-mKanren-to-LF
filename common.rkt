@@ -37,6 +37,7 @@
   ?state?
   debug-dump-w/level
   debug-dump
+  debug-output-info
   raise-and-warn
   assert-or-warn
   assert

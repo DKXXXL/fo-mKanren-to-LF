@@ -965,7 +965,25 @@
                     (for-all (x) ((False x) . → . A))  
                     (for-all (x) ((False x) . → . A))
                     )))
-  . test-reg!=>ND . 'succeed  
+  . test-reg!=> . 'succeed  
+)
+
+(Syn-solve-universal-5
+  (random-goal (A)
+    (run 1 ()  (cimpl
+                    (for-all (x) A)  
+                    (for-all (x) A)
+                    )))
+  . test-reg!=> . 'succeed  
+)
+
+(Syn-solve-universal-6
+  (random-goal (A)
+    (run 1 ()  (cimpl
+                    A  
+                    (for-all (x) A)
+                    )))
+  . test-reg!=> . 'succeed  
 )
 
 (Syn-solve-existential
@@ -975,7 +993,7 @@
                       (for-all (x) ((False x) . → . A))
                       (fresh (k) (False k)))
                     A)))
-  . test-reg!=>ND . 'succeed  
+  . test-reg!=> . 'succeed  
 )
 
 
@@ -1003,7 +1021,7 @@
                   (for-all (x) ((False x) . → . A))
                       (cimpl (fresh (k) (False k))
                                 A))))
-  . test-reg!=>ND . 'succeed  
+  . test-reg!=> . 'succeed  
 )
 
 (Syn-solve-existential-3
@@ -1012,7 +1030,7 @@
                   (fresh (k) (False k))
                       (cimpl (for-all (x) ((False x) . → . A))
                                 A))))
-  . test-reg!=>ND . 'succeed  
+  . test-reg!=> . 'succeed  
 )
 
 
