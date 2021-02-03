@@ -246,7 +246,7 @@
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "(~a ⟶ ~a)" (cimpl-g1 val) (cimpl-g2 val)))]
+     (fprintf output-port "(~a => ~a)" (cimpl-g1 val) (cimpl-g2 val)))]
   #:guard (lambda (g1 g2 type-name)
                     (cond
                       [(andmap Goal? (list g1 g2)) 
@@ -930,6 +930,7 @@
                       _1))]
                 [reduced-asumpt (filter (lambda (x) (not (equal? top-name-asumpt x))) org-asumpt)]
                 [new-asumpt (cons-asumpt applied b reduced-asumpt)]
+                [k (debug-dump "\n syn-solving: cimpl: new asumpt: ~a" new-asumpt)]
                 [w/-cimpl
                   (mapped-stream
                     (λ (st) (pause org-asumpt st a))
@@ -1244,7 +1245,7 @@
         (mplus*
           (pause asumpt st-~g1-dec ~g1-dec-ty)
           ;;; A -> bot /\ A
-          (pause asumpt st-~g1ndec (conj g1-dec (cimpl-syn g1-ndec (Bottom)))) 
+          ;;; (pause asumpt st-~g1ndec (conj g1-dec (cimpl-syn g1-ndec (Bottom)))) 
           ;;; give up syntactical falsifying 
           (pause asumpt st-g1ndec-g2 (conj g1-dec (cimpl-syn g1-ndec g2)))))
     ))

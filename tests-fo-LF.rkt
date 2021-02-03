@@ -958,6 +958,16 @@
   . test-reg!=> . 'succeed  
 )
 
+;;; Unhalting!
+(Syn-solve-universal-4
+  (random-goal (A)
+    (run 1 ()  (cimpl
+                    (for-all (x) ((False x) . → . A))  
+                    (for-all (x) ((False x) . → . A))
+                    )))
+  . test-reg!=>ND . 'succeed  
+)
+
 (Syn-solve-existential
   (random-goal (A)
     (run 1 ()  (cimpl 
@@ -967,6 +977,8 @@
                     A)))
   . test-reg!=>ND . 'succeed  
 )
+
+
 
 (Syn-solve-existential-1
   (random-goal (A)
