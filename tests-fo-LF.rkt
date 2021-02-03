@@ -703,6 +703,15 @@
 . test-reg!=> . 'succeed 
 )
 
+(sort-boolo-implies-membero-2
+  (run 1 () (for-all (y lst) 
+      (cimpl (sort-boolo lst (cons #f y))
+             (membero #f lst))
+    ))
+. test-reg!=>ND . 'succeed 
+)
+
+
 
 ;;; 
 ;;; Following test-cases are for cimpl

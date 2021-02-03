@@ -53,8 +53,6 @@
 
   conj*
   disj*
-
-  debug-output-info
   )
 
 (require "common.rkt")
