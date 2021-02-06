@@ -630,7 +630,7 @@
   ))
   (match solution
     [(? ?state?) (wrap-state-stream solution)]
-    [(? Goal?) (pause '() st solution)] 
+    [(? Goal?) (pause '() (st . <-pfg . (ignore _) _) solution)] 
     ;; TODO: Really without assumption? 
     [(? Stream?) solution]
   )
@@ -1346,8 +1346,8 @@
                        [st-terminating (prove-goal-unsat asumpt pf-term-to-fill-st domain)]
                        [w/scope (state-scope st-terminating)]
                        [res (clear-about st-terminating (list->set (state-scope st-terminating)) var)]
-                       [q (mature res)]
-                       [k (debug-dump "\n after clear about: ~a \n  with scope ~a removing ~a" q w/scope var)]
+                      ;;;  [q (mature res)]
+                      ;;;  [k (debug-dump "\n after clear about: ~a \n  with scope ~a removing ~a" q w/scope var)]
                        )
                       res 
                       ) ]
@@ -1568,7 +1568,7 @@
       [(cons #f next) (first-non-empty-mature next)]
       [v v]))
   ;;; WARNING: following we only allowed semantic solving:
-  (if (first-non-empty-mature (pause empty-assumption-base st goal)) (syntactical-simplify goal) (Bottom))
+  (if (first-non-empty-mature (pause empty-assumption-base (st . <-pfg . (ignore _) _) goal)) (syntactical-simplify goal) (Bottom))
   
   )
 
@@ -1750,6 +1750,7 @@
 )
 ;;; given the st, we will break down a bunch of v's domain by the domain axiom
 ;;;  return an equivalent stream of states s.t. v is pair in one state and not pair in the others
+;;; TODO: currently ignore proof-term
 (define/contract (pair-or-not-pair-by-axiom asumpt vs st)
   (assumption-base? any? ?state? . -> . Stream?)
   (define (decides-pair-goal v) 
@@ -1764,7 +1765,7 @@
   (define conj-axioms
     (foldl conj (Top) axioms-on-each))
   
-  (pause asumpt st (conj conj-axioms (== 1 1)))
+  (pause asumpt (st . <-pfg . (ignore _) _) (conj conj-axioms (== 1 1)))
 )
 
 ;;; return an equivalent stream of state, given a state
