@@ -1072,9 +1072,12 @@
 (define-relation (has-false lst)
   (fresh (f rst)
     (== lst (cons f rst))
-    (cond ((== f #f))
-          ((=/= f #f)
+    (conde ((== f #f))
+           ((=/= f #f)
            (has-false rst)))))
+
+
+
 ;;; ((run 1 ()
 ;;;     (for-all (b)
 ;;;         (cimpl (== a (list b b b))
@@ -1083,8 +1086,12 @@
 ;;;   . test-reg!=> . 'succeed  
 ;;;   )
                     
-                    
-                    
+
+(Test-has-false-trivial
+  (run 1 () (for-all (b) (has-false (list b #f)))) 
+  . test-reg!=> . 'succeed  
+)
+
 (Test-has-false-0
   (run 1 (x) (for-all (b) (has-false (list b b x)))) 
   . test-reg!=> . 'succeed  
