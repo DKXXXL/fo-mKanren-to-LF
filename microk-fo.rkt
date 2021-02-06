@@ -909,7 +909,7 @@
           (let* (
               [split-goal (conj (cimpl a g) (cimpl b g))]
               [st-pf-filled 
-                (st . <-pfg . (_1 _2) 
+                (st . <-pfg . (_) 
                   (lf-let* 
                       ([split _ : split-goal]
                        [lhs (LFpair-pi-1 split) : (cimpl a g)]
@@ -1154,7 +1154,7 @@
 (define/contract (sem-solving asumpt st g)
   (assumption-base? ?state? Goal? . -> . Stream?)
   ;;; the following used when primitive goal is to fill in the
-  (define (prim-goal-filled-st)
+  (define (prim-goal-filled-st st g)
     (st . <-pfg . (LFprim-rel g)))
   (and st ;;; always circuit the st
     (match g
@@ -1193,10 +1193,10 @@
       ;;;     = ~g1-dec \/ 
       ;;; [g1-dec /\ (g1-ndec -> bot)] \/ 
       ;;; [g1-dec /\ (g1-ndec -> g2)]
-     (fresh-param (name-g1 adnd adnd-conj ~g1-dec-term 
-                   ~g1-dec->g1-dec->bot-term 
+     (fresh-param (name-g1 adnd adnd-conj ~g1-dec-term ~g1-ndec-term
+                   ~g1-dec->g1-dec->bot-term bot2
                    g1-dec-conj-~g1-ndec-term g1-dec-conj-g1-ndec-g2-term
-                   g1-dec-term g1-ndec-term g1-ndec-g2-term
+                   g1-dec-term g2-dec-term g1-ndec-term g1-ndec-g2-term
                    bot->g2-term bot1)
       ;;; TODO: rewrite the following into ANF-style (the push-let form)
       (match-let* 
@@ -1212,7 +1212,7 @@
                   (LFlambda name-g1 g1 
                     (lf-let* 
                         ([adnd (LFaxiom Axiom-DEC+NDEC-ty) : Axiom-DEC+NDEC-ty]
-                         [adnd-conj (LFapply adnd name-g1)]
+                         [adnd-conj (LFapply adnd name-g1) : (conj g1-dec g1-ndec)]
                          [g1-dec-term (LFpair-pi-1 adnd) : g1-dec]
                          [g2-dec-term (LFpair-pi-2 adnd) : g1-ndec]
                          [bot->g2-term (LFaxiom Axiom-Bottom-g2-ty) : Axiom-Bottom-g2-ty])
@@ -1232,7 +1232,8 @@
                             : (conj g1-dec ~g1ndec)]
                        [~g1-ndec-term (LFpair-pi-2 g1-dec-conj-~g1-ndec-term) 
                             : ~g1ndec]
-                       [bot2 (LFapply ~g1-ndec-term g1-ndec-term)])
+                       [bot2 (LFapply ~g1-ndec-term g1-ndec-term)
+                            : (Bottom)])
                     (LFapply bot->g2-term bot2)))]
              [st-g1ndec-g2
                 (st-to-fill . <-pfg . (_)
@@ -1252,26 +1253,26 @@
     ))
     ((relate thunk descript)
       (pause asumpt [st . <-pfg . (_) (LFpack _ descript)] (thunk)))
-    ((== t1 t2) (unify t1 t2 (prim-goal-filled-st) ))
-    ((=/= t1 t2) (neg-unify t1 t2 (prim-goal-filled-st) ))
-    ((symbolo t1)  (wrap-state-stream (check-as-inf-type symbol? t1 (prim-goal-filled-st))))
+    ((== t1 t2) (unify t1 t2 (prim-goal-filled-st st g) ))
+    ((=/= t1 t2) (neg-unify t1 t2 (prim-goal-filled-st st g) ))
+    ((symbolo t1)  (wrap-state-stream (check-as-inf-type symbol? t1 (prim-goal-filled-st st g))))
     ((not-symbolo t1) 
       (mplus 
-        (term-finite-type asumpt t1 (prim-goal-filled-st))
-        (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label symbol?) t1 (prim-goal-filled-st))))) 
-    ((numbero t1) (wrap-state-stream (check-as-inf-type number? t1 (prim-goal-filled-st))))
+        (term-finite-type asumpt t1 (prim-goal-filled-st (st . <-pfg . (_ ignore) _) g))
+        (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label symbol?) t1 (prim-goal-filled-st st g))))) 
+    ((numbero t1) (wrap-state-stream (check-as-inf-type number? t1 (prim-goal-filled-st st g))))
     ((not-numbero t1)  
       (mplus 
-        (term-finite-type asumpt t1 (prim-goal-filled-st))
-        (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label number?) t1 (prim-goal-filled-st))))) 
-    ((stringo t1) (wrap-state-stream (check-as-inf-type string? t1 (prim-goal-filled-st))))
+        (term-finite-type asumpt t1 (prim-goal-filled-st (st . <-pfg . (_ ignore) _) g))
+        (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label number?) t1 (prim-goal-filled-st st g))))) 
+    ((stringo t1) (wrap-state-stream (check-as-inf-type string? t1 (prim-goal-filled-st st g))))
     ((not-stringo t1)  
       (mplus 
-        (term-finite-type asumpt t1 (prim-goal-filled-st))
-        (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label string?) t1 (prim-goal-filled-st)))))
+        (term-finite-type asumpt t1 (prim-goal-filled-st (st . <-pfg . (_ ignore) _) g))
+        (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label string?) t1 (prim-goal-filled-st st g)))))
 
     ((type-constraint t types)
-      (wrap-state-stream (check-as-inf-type-disj types t (prim-goal-filled-st))))
+      (wrap-state-stream (check-as-inf-type-disj types t (prim-goal-filled-st st g))))
     ((ex v gn) 
       ;;; TODO: make scope a ordered set (or just a list)
       (let* (
@@ -1283,7 +1284,7 @@
               (wrap-state-stream (state-scope-update st (lambda (scope) (set-remove scope v)) )))]
           [scoped-st (state-scope-update st (lambda (scope) (set-add scope v)))]
           ;;; then we compose new proof-term hole
-          [body-to-fill-scoped-st (scoped-st . <-pfg . (_1 _2) (LFsigma _2 _1 g))]
+          [body-to-fill-scoped-st (scoped-st . <-pfg . (_1) (LFsigma v _1 g))]
           [solving-gn (pause asumpt body-to-fill-scoped-st gn)]
 
           ;;; we pop added scope information
@@ -1338,8 +1339,8 @@
                               (lf-let* 
                                   ([to-bottom _ : (cimpl domain (Bottom))]
                                    [from-bottom (LFaxiom from-bottom-ty) : from-bottom-ty])
-                                (LFlambda (v)
-                                  (LFlambda (domain-term)
+                                (LFlambda v (LispU)
+                                  (LFlambda domain-term domain
                                     (LFapply from-bottom (LFapply to-bottom domain-term))
                                   ))) ))]
                        [st-terminating (prove-goal-unsat asumpt pf-term-to-fill-st domain)]

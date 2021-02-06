@@ -287,26 +287,28 @@
 (define-struct-updaters state)
 
 ;;; lift <-pf/h-inc into state
-;;; (define-syntax <-pfg
-;;;   (syntax-rules ()
-;;;     ((_ st term) 
-;;;       (state-pfterm-update st 
-;;;         (lambda (pft) (pft . <-pf/h-inc . term))) )     
-
-;;;     ((_ st (hole holes ...) body) 
-;;;       (state-pfterm-update st 
-;;;         (lambda (pft) (pft . <-pf/h-inc . (hole holes ...) body))) )
-;;;   ))
-
-;;; TODO: uncomment above
 (define-syntax <-pfg
   (syntax-rules ()
     ((_ st term) 
-      (let ([st_ st]) st_) )     
+      (and st
+           (state-pfterm-update st 
+              (lambda (pft) (pft . <-pf/h-inc . term)))) )     
 
     ((_ st (hole holes ...) body) 
-      (let ([st_ st]) st_) )
+      (and st
+           (state-pfterm-update st 
+              (lambda (pft) (pft . <-pf/h-inc . (hole holes ...) body)))) )
   ))
+
+;;; ;;; TODO: uncomment above
+;;; (define-syntax <-pfg
+;;;   (syntax-rules ()
+;;;     ((_ st term) 
+;;;       (let ([st_ st]) st_) )     
+
+;;;     ((_ st (hole holes ...) body) 
+;;;       (let ([st_ st]) st_) )
+;;;   ))
 
 ;;; ANF-style push-let
 (define-syntax push-lflet
