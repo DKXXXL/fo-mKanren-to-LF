@@ -903,7 +903,7 @@
     (run 1 ()  (ciff 
                     (conj (A . → . C) (B . → . C)) 
                     ((disj A B) . → . C)) ))
-  . test-reg!=> . 'succeed  
+  . test-reg!=>ND . 'succeed  
 )
 
 (Syn-solve-taut-2
@@ -1066,10 +1066,69 @@
   . test-reg!=> . 'succeed  
 )
 
-;;; At this point it is cartesian closed bi-category
+;;; At this point it is at least cartesian closed bi-category
 ;;; we should also try to prove pierce-law (((A -> B) -> B) -> B) which should fail
 
-;;; Next for quantifiers
+(define-relation (has-false lst)
+  (fresh (f rst)
+    (== lst (cons f rst))
+    (cond ((== f #f))
+          ((=/= f #f)
+           (has-false rst)))))
+;;; ((run 1 ()
+;;;     (for-all (b)
+;;;         (cimpl (== a (list b b b))
+;;;               (disj (=/= b #f)
+;;;                     (has-false a))))) 
+;;;   . test-reg!=> . 'succeed  
+;;;   )
+                    
+                    
+                    
+(Test-has-false-0
+  (run 1 (x) (for-all (b) (has-false (list b b x)))) 
+  . test-reg!=> . 'succeed  
+)
+; test performance degredation with # of "b"s
+
+
+(Test-has-false-1
+  (run 1 (x) (cimpl (== x #f)
+                 (has-false (list x x))))
+. test-reg!=> . 'succeed                   
+) 
+; should get _.0
+
+
+(Test-has-false-2
+  (run 1 (x y) (cimpl (== x y)
+                 (has-false (list x x))))
+
+. test-reg!=> . 'succeed                   
+) 
+; should get (_.0 #f)
+
+
+(Test-has-false-3
+  (run 1 (xs xs-sorted)
+     (cimpl (has-false xs)
+           (fresh (b)
+              (== xs-sorted (cons #f b))
+              (sort-boolo xs xs-sorted)))) 
+  . test-reg!=> . 'succeed  )
+; shold succeed
+
+
+(Test-has-false-4
+  (run 1 ()
+    (for-all (xs)
+         (cimpl (has-false xs)
+               (fresh (b xs-sorted)
+                  (== xs-sorted (cons #f b))
+                  (sort-boolo xs xs-sorted))))) 
+  . test-reg!=>ND . 'succeed  )
+; should also succeed
+
 
 ;;; 
 ;;; 
