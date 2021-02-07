@@ -1078,14 +1078,26 @@
 
 
 
-;;; ((run 1 ()
-;;;     (for-all (b)
-;;;         (cimpl (== a (list b b b))
-;;;               (disj (=/= b #f)
-;;;                     (has-false a))))) 
-;;;   . test-reg!=> . 'succeed  
-;;;   )
-                    
+(Test-has-false-trivial-1
+  (run 1 (a)
+    (for-all (b)
+        (cimpl (== a (list b b b))
+              (disj (=/= b #f)
+                    (has-false a))))) 
+  . test-reg!=> . 'succeed  
+  )
+
+(Test-has-false-trivial-2
+  (run 1 ()
+    (for-all (b)
+       (disj (=/= b #f)
+             (has-false (list b b b)))
+                    )) 
+  . test-reg!=> . 'succeed  
+  )
+
+
+                  
 
 (Test-has-false-trivial
   (run 1 () (for-all (b) (has-false (list b #f)))) 
