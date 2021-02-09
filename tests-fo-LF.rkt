@@ -711,6 +711,7 @@
 . test-reg!=> . 'succeed 
 )
 
+;;; currently the following is not halting
 (sort-boolo-implies-membero-2
   (run 1 () (for-all (y lst) 
       (cimpl (sort-boolo lst (cons #f y))
@@ -718,6 +719,25 @@
     ))
 . test-reg!=>ND . 'succeed 
 )
+
+
+(sort-boolo-implies-membero-3
+  (run 1 () (for-all (lst y) 
+      (cimpl (sort-boolo lst (cons #f y))
+             (membero #f lst))
+    ))
+. test-reg!=> . 'succeed 
+)
+
+
+(sort-boolo-implies-membero-4
+ (run 1 () (for-all (lst) 
+      (cimpl (membero #f lst)
+             (fresh (y) (sort-boolo lst (cons #f y)))
+    )))
+. test-reg!=> . 'succeed 
+)
+
 
 (sort-boolo-simple-1
 (run 1 (a) (conj 
