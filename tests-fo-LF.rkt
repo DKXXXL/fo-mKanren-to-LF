@@ -711,7 +711,8 @@
 . test-reg!=> . 'succeed 
 )
 
-;;; currently the following is not halting
+;;; BUGFIX: currently the following is not halting
+;;;   very weird... must be a bug
 (sort-boolo-implies-membero-2
   (run 1 () (for-all (y lst) 
       (cimpl (sort-boolo lst (cons #f y))
@@ -730,12 +731,14 @@
 )
 
 
+;;; BUGFIX:
+;;;   There is bug here.. the time spent on it is unstable
 (sort-boolo-implies-membero-4
  (run 1 () (for-all (lst) 
       (cimpl (membero #f lst)
              (fresh (y) (sort-boolo lst (cons #f y)))
     )))
-. test-reg!=> . 'succeed 
+. test-reg!=>ND . 'succeed 
 )
 
 
