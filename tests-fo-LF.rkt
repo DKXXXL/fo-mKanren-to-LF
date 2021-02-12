@@ -640,12 +640,20 @@
               (merge-boolo y1s y2s ys)))))
 
 
-(define-relation (membero elem lst)
+(define-relation (membero-w/o-ineq elem lst)
   (fresh (first rest)
     (== lst (cons first rest))
       (conde
         ((== first elem))
         ((membero elem rest)))))
+
+(define-relation (membero elem lst)
+  (fresh (first rest)
+    (== lst (cons first rest))
+      (conde
+        ((== first elem))
+        ((=/= first elem) 
+         (membero elem rest)))))
 
 (Teenage-sort-1
   (run 1 () (for-bound (x) [boolo x] (sort-boolo (list x #f) (list #f x))))
@@ -719,6 +727,82 @@
              (membero #f lst))
     ))
 . test-reg!=>ND . 'succeed 
+)
+
+(sort-boolo-implies-membero-2-1
+  (run 1 () (for-all (a b c x y) 
+      (cimpl (sort-boolo (list a b c) (list #f x y))
+             (membero #f (list a b c)))
+    ))
+. test-reg!=>ND . 'succeed 
+)
+
+
+(sort-boolo-implies-membero-2-1-1
+  (run 1 () (for-all (x a b) 
+      (cimpl (sort-boolo (list a b) (list #f x))
+             (membero #f (list a b)))
+    ))
+. test-reg!=>ND . 'succeed 
+)
+
+
+;;; BUGFIX: The following should halt
+(sort-boolo-implies-membero-2-1-1-1
+  (run 1 () (for-all (a) 
+      (cimpl (sort-boolo (list a) (list #f))
+             (membero #f (list a)))
+    ))
+. test-reg!=>ND . 'succeed 
+)
+
+;;; BUGFIX: The following should halt
+(sort-boolo-implies-membero-2-1-1-1-1
+  (run 1 () (for-all (a) 
+      (cimpl (sort-boolo (list a) (list #f))
+             (== a #f))
+    ))
+. test-reg!=>ND . 'succeed 
+)
+
+(sort-boolo-implies-membero-2-1-2
+  (run 1 () (for-all (a) 
+      (cimpl (membero #f (list a)) 
+             (sort-boolo (list a) (list #f)))
+    ))
+. test-reg!=>ND . 'succeed 
+)
+
+;;; BUGFIX: The following should halt!!!
+(sort-boolo-implies-membero-2-1-3
+  (run 1 () (for-all (a) 
+      (cimpl (membero #f (list a)) 
+             (== a #f))
+    ))
+. test-reg!=>ND . 'succeed 
+)
+
+(sort-boolo-implies-membero-2-2
+  (run 1 () (for-all (y lst)
+    (fresh (a b c) 
+      (cimpl (conj*
+                (== lst (list a b c)) 
+                (sort-boolo lst (cons #f y)))
+             (membero #f lst)))
+    ))
+. test-reg!=> . 'succeed 
+)
+
+
+(sort-boolo-implies-membero-2-3
+  (run 1 () (for-all (y lst)
+      (cimpl (conj* 
+                (fresh (a b c)
+                  (== lst (list a b c)))
+                (sort-boolo lst (cons #f y)))
+             (membero #f lst))
+    ))
+. test-reg!=> . 'succeed 
 )
 
 
