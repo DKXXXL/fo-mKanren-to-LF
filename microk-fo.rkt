@@ -721,13 +721,9 @@
     ;;; g = (disj (a-dec /\ a-ndec) (b-dec /\ b-non-dec))
     ;;; (a-dec \/ b-dec) /\ [(a-non-dec \/ b-dec) /\ (a-non-dec \/ b-non-dec) ...]
     [(disj a b)
-      (match-let* 
-          ([(cons a-dec a-ndec) (rec a)]
-           [(cons b-dec b-ndec) (rec b)])
-        (cons (disj a-dec b-dec) 
-              (conj* (disj a-dec b-ndec)
-                     (disj a-ndec b-dec)
-                     (disj a-ndec b-ndec) )))]
+      (if (andmap decidable-goal? (list a b))
+          (cons (disj a b) (Top))
+          (cons (Top) (disj a b)))]
     ;;; g = (a-dec /\ a-non-dec) -> (b-dec /\ b-non-dec)
     ;;; g = (a-dec /\ a-non-dec) -> b-dec) /\ (a-dec /\ a-non-dec) -> b-non-dec)
     ;;; = [(a-dec -> b-dec) \/ (a-non-dec -> b-dec)] /\
