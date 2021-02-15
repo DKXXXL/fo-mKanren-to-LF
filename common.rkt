@@ -22,7 +22,6 @@
   unify/sub
   walk*
   term?
-  unitize-metavar
   reify
   reify/initial-var
   neg-unify
@@ -169,11 +168,6 @@
 
 ;;; normalize a tproj term so that tproj-v is always a var 
 (define (tproj_ term cxr)
-  
-  ;;; (define (m x) (match x ['car tcar] ['cdr tcdr]))
-  ;;; (define (compose f g) (lambda (x) (f (g x))))
-  ;;; (define mcxr (map m cxr))
-  ;;; (define )
   (if (var? term) 
     (if (null? cxr)
       term
@@ -185,18 +179,9 @@
     ))
 )
 
-;;; (define var/fresh
-;;;   (let ((index 0))
-;;;     (lambda (name) (set! index (+ 1 index))
-;;;       (var name index))
-;;;       ))
 
 ;; States
 (define empty-sub '())
-;;; (define (walk t sub)
-;;;   (let ((xt (and (var? t) (assf (lambda (x) (var=? t x)) sub))))
-;;;     (if xt (walk (cdr xt) sub) t))
-;;;   )
 
 ;;; Now it should support tproj term subject to substitution
 (define (walk t sub)
@@ -229,50 +214,15 @@
 
 (define (extend-sub x t sub)
   (and (not (occurs? x t sub)) `((,x . ,t) . ,sub)))
-;;; the above version is causing substitution "non-compositional"
-;;;   the reason this thing comes up is motivated by two reasons:
-;;; 1. each sigma is not idempotent currently 
-;;;  (this sentence might not make sense, )
-;;; 2. there is no easy way to represent sigma_1 \compose sigma_2, 
-;;;       where sigma_1,2 are both of type List, and their composition is still List
-;;;    (the real reason is 1.) 
-;;; 3. there is no easy way to represent (shadow x sigma_1), 
-;;;     i.e. subst everything as sigma except variable x
-;;;    (the real reason is still 1.)
-;;;     for example [(v1 v3) (v2 v1) (v3 1)] , 
-;;;       whose idempotent version is [(v1 1) (v2 1) (v3 1)]
-;;;     and if we want to shadow v1 (fix v1 unchanged)
-;;;       we cannot just remove (v1 v3) from the list, otherwise we will get a thing
-;;;       that is [(v2 v1) (v3 1)], that cannot map v1 to 1
-;;;     similarly, [(v1 v1) (v1 v3) (v2 v1) (v3 v1)] won't work 
 
 
-;;; ;;; same as extend-sub, except the input has to be idempotent, 
-;;; ;;;   and its output is also idempotent 
-;;; (define (extend-idempotent-sub x t sub)
-;;;   ;;; TODO: to implement in the future, currently just use the non-idempotent version
-;;;   (extend-sub x t sub)
-;;; )
-
-;;; ;;; var x [(var . term)] -> [(var . term)]
-;;; ;;;  precondition: subst is already idempotent, 
-;;; ;;;   i.e. the range of subst doesn't intersect its domain 
-;;; ;;;  specification: it will substitute just as subst, except for x, it won't change
-;;; (define (shadow-idempotent-sub x subst)
-;;;   (filter (lambda (pair) (not (equal? (car pair) x))) subst)
-;;; )
 
 (define (true? v) (equal? v #t))
 (define (false? v) (equal? v #f))
-;;; (null? '() )
+
 
 (define type-label-top (set true? false? null? pair? number? string? symbol?))
 (define all-inf-type-label (set pair? number? string? symbol?))
-
-
-;;; TODO: if all of the elements in type set are for the finite, 
-;;;   then inequality might cause trouble  
-;;;   for example, (exists x y z.) they are all different, they are all booleans
 
 ;;; sub -- list of substution 
 ;;; diseq -- list of list of subsitution 
@@ -300,15 +250,6 @@
               (lambda (pft) (pft . <-pf/h-inc . (hole holes ...) body)))) )
   ))
 
-;;; ;;; TODO: uncomment above
-;;; (define-syntax <-pfg
-;;;   (syntax-rules ()
-;;;     ((_ st term) 
-;;;       (let ([st_ st]) st_) )     
-
-;;;     ((_ st (hole holes ...) body) 
-;;;       (let ([st_ st]) st_) )
-;;;   ))
 
 ;;; ANF-style push-let
 (define-syntax push-lflet
@@ -322,11 +263,6 @@
 ;;; we consider #f is the failed state, also one of the state
 (define (?state? obj) (or (equal? obj #f) (state? obj)))
 
-;;;  purely functional structure update, 
-
-
-;;;  TODO:let's later make trace-left/right row polymorphic
-;;;   so that we can decouple trace field and direction field out of state
 
 
 ;; Unification
@@ -341,9 +277,6 @@
       (else                                (and (eqv? u v) sub)))))
 
 
-;;; (define (unify u v st)
-;;;   (let ((sub (unify/sub u v (state-sub st))))
-;;;     (and sub (cons (state sub (state-trace st)) #f))))
 
 (define (wrap-state-stream st) (and st (cons st #f)))
 
@@ -496,17 +429,6 @@
   (reify/initial-var st)
 )
 
-
-;; Replace Meta-var inside term with Unit
-(define (unitize-metavar tm)
-  (let ([um unitize-metavar])
-    (match tm
-      [(var _ _) '()]
-      [(cons a b) (cons (um a) (um b))]
-      [x x]
-    )
-  )
-)
 
 
 ;;; subroutine : extract the added substiution
@@ -664,37 +586,3 @@
     (check-as-inf-type-disj (set type?) t st)
     st)
 )
-
-;;; (define (map-matured-stream f stream)
-;;;   (match stream
-;;;     [#f #f]
-;;;     [(cons h t) (cons (f h) (map-matured-stream f t))]
-;;;   )
-;;; )
-
-;;; (define (fold-matured-stream binary initial-state stream)
-;;;   (match stream
-;;;     [#f initial-state]
-;;;     [(cons h t) (fold-matured-stream binary (binary h initial-state) t)]
-;;;   )
-;;; )
-
-;;; (define (append-matured-stream a b)
-;;;   (match a 
-;;;     [#f b]
-;;;     [(cons h t) (cons h (append-matured-stream t b))]
-;;;   )
-;;; )
-
-;;; ;;; lift check-as-inf-type onto stream
-;;; ;;; check-as-inf-type-on-each :: type-label  x term x matured-stream[st] -> matured-stream[st]
-;;; ;;;  when type-label = #f, we think of it as don't do any check, thus return original stream
-;;; (define (check-as-inf-type-on-each type? t sts)
-;;;   (if (equal? type? #f)
-;;;     sts
-;;;     (fold-matured-stream 
-;;;         append-matured-stream
-;;;         #f 
-;;;         (map-matured-stream (lambda (st) (check-as-inf-type type? t st)) sts))
-;;;   )
-;;; )
