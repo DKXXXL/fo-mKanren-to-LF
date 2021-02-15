@@ -167,6 +167,10 @@
 (define (term? x) (or (var? x) (tproj? x)))
 
 ;;; normalize a tproj term so that tproj-v is always a var 
+;;;  tproj (list a b c) (cdr cdr) = c
+;;;  tproj (cons a b) cdr cdr = (tproj b cdr) // var
+;;;  tcar (tproj b cdr) = b.cdr.car
+;;;  tcar (cons a b) = a
 (define (tproj_ term cxr)
   (if (var? term) 
     (if (null? cxr)
@@ -184,6 +188,9 @@
 (define empty-sub '())
 
 ;;; Now it should support tproj term subject to substitution
+;;; x.car -> ...
+;;; x.car.cdr -> ... 
+;;;  x.car.cdr.car
 (define (walk t sub)
   (match t
     [(var _ _) 
@@ -224,11 +231,9 @@
 (define type-label-top (set true? false? null? pair? number? string? symbol?))
 (define all-inf-type-label (set pair? number? string? symbol?))
 
-;;; sub -- list of substution 
-;;; diseq -- list of list of subsitution 
+;;; sub -- list of assignments
+;;; diseq -- list of list of disassignments
 ;;;     -- interpreted as conjunction of disjunction of inequality 
-;;; assymbol/asstring/asnumber are all a list of variables
-;;;   to indicate disjoint sets
 ;;;   typercd : a dictionary index -> set of type-encoding 
 ;;;     "as disjunction of possible types"
 ;;;   
@@ -370,7 +375,7 @@
       [_ tm]
     ))
 
-
+;; TODO (greg): currently repeats a lot of work (probably quadratic in pathological cases)
 ;;; walk* -- walk-struct-once until fixpoint
 ;;;  unhalt only if there is cycle in sub
 (define/contract (walk* tm sub)
@@ -437,9 +442,9 @@
 (define (extract-new new original)
   (and new
     (if (eq? new original)
-    '()
-    (match new 
-      [(cons fst tail) (cons fst (extract-new tail original))])))
+      '()
+      (match new 
+        [(cons fst tail) (cons fst (extract-new tail original))])))
 )
 
 

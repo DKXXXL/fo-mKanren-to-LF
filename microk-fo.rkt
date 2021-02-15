@@ -243,8 +243,6 @@
 
 ;;; constructive implication, 
 ;;; its proof term is exactly the lambda
-;;;   basically will skip the 
-;;;   handling of antec but directly proceed to conseq
 ;;;  what's special about this is that
 ;;;   the system will try to extract the decidable component of antec
 ;;;     to either falsify or integrated into state
@@ -285,6 +283,7 @@
 (define (any? _) #t)
 
 
+;; TODO (greg): consider using sets
 ;;; The following are a incomplete interfaces for assumption-base
 ;;;   in case in the future we want to modify the implementation
 ;;;   of assumption base 
@@ -310,13 +309,13 @@
 ;;; return a list of goals from assumption
 (define/contract (all-assumption-goals asumpt)
   (assumption-base? . -> . list?)
-  (map (lambda (x) (cdr x)) asumpt)
+  (map cdr asumpt)
 )
 
 ;;; return a list of terms from assumption
 (define/contract (all-assumption-terms asumpt)
   (assumption-base? . -> . list?)
-  (map (lambda (x) (car x)) asumpt)
+  (map car asumpt)
 )
 
 ;;; The above are interfaces for assumption-base
@@ -337,15 +336,12 @@
 (define (goal-base-endofunctor prev-f rec g)
   ;;; (define rec extended-f)
   (match g
-    [(disj a b) (disj (rec a) (rec b))]
-    [(conj a b) (conj (rec a) (rec b))]
-    [(cimpl a b) (cimpl (rec a) (rec b))]
-    [(ex v g) (ex v (rec g))]
+    [(disj   a b)   (disj  (rec a) (rec b))]
+    [(conj   a b)   (conj  (rec a) (rec b))]
+    [(cimpl  a b)   (cimpl (rec a) (rec b))]
+    [(ex     v g)   (ex     v         (rec g))]
     [(forall v b g) (forall v (rec b) (rec g))]
-    [_ (prev-f g)] ;; otherwise do nothing
-  )
-)
-
+    [_              (prev-f g)]))  ;; otherwise do nothing
 
 ;;; Denote Goal-EndoFunctor type as
 ;;;      (goal -> goal) -> (goal -> goal) -> goal -> goal
@@ -354,18 +350,18 @@
 (define (goal-term-base-endofunctor prev-f rec g)
   ;;; (define rec extended-f)
   (match g
-    [(== x y) (== (rec x) (rec y))]
-    [(=/= x y) (=/= (rec x) (rec y))]
-    [(symbolo x) (symbolo (rec x))]
+    [(== x y)        (== (rec x) (rec y))]
+    [(=/= x y)       (=/= (rec x) (rec y))]
+    [(symbolo x)     (symbolo (rec x))]
     [(not-symbolo x) (not-symbolo (rec x))]
-    [(numbero x) (numbero (rec x))]
+    [(numbero x)     (numbero (rec x))]
     [(not-numbero x) (not-numbero (rec x))]
-    [(stringo x) (stringo (rec x))]
+    [(stringo x)     (stringo (rec x))]
     [(not-stringo x) (not-stringo (rec x))]
     [(type-constraint x types) (type-constraint (rec x) types)]
-    [(disj a b) (disj (rec a) (rec b))]
-    [(conj a b) (conj (rec a) (rec b))]
-    [(ex v g) (ex v (rec g))]
+    [(disj a b)     (disj (rec a) (rec b))]
+    [(conj a b)     (conj (rec a) (rec b))]
+    [(ex v g)       (ex v (rec g))]
     [(forall v b g) (forall v (rec v) (rec g))]
     [_ (prev-f g)] ;; otherwise do nothing
   )
@@ -375,8 +371,8 @@
 ;;; homomorphism on state
 (define (state-base-endo-functor prev-f rec g)
   (match g
-    [(state a scope pfterm d e)
-      (state (rec a) scope pfterm (rec d) (rec e))]
+    [(state a scope pfterm d t)
+      (state (rec a) scope pfterm (rec d) (rec t))]
     [_ (prev-f g)]
   )
 )
@@ -419,6 +415,27 @@
 ;;;   )
 ;;;   (overloading-functor-list (list match-single goal-base-endofunctor))
 ;;; )
+;;; (define remove-neg-by-decidability-and-remove-cimple
+;;;   (define (match-single prev-f ext-f g)
+;;;     (match g
+;;;       [(not-symbolo x) (disj (pairo x) (boolo x) (numbero x) (stringo x))]
+;;;       [(not-numbero x) (disj (pairo x) (boolo x) (symbolo x) (stringo x))]
+;;;       [(not-stringo x) (disj (pairo x) (boolo x) (numbero x) (symbolo x))]
+;;;       [_ (prev-f g)]
+;;;     )
+;;;   )
+;;;   (define (remove-cimpl prev-f ext-f g)
+;;;     (match g
+;;;       [(cimpl x) (disj (pairo x) (boolo x) (numbero x) (stringo x))]
+;;;       [(stop ..) (ex)]
+;;;       [_ (prev-f g)]
+;;;     )
+;;;   )
+;;;   (overloading-functor-list (list remove-cimpl match-single goal-base-endofunctor))
+;;; )
+
+;;; cimpl -> ... /\ remove-neg-by-decidability
+
 
 
 ;;; homomorphism on pair, will respect pair construct
@@ -556,6 +573,8 @@
 ;;;   at the current stage, mark is used for pointing to
 ;;;     the disj component
 ;;; finally a stream of state where only conjunction is inside each state
+;;;  a /\ (b \/ c) /\ (d \/ e) 
+;;;  1 -> a /\ c /\ e; 2 -> a /\ b /\ e ... 
 (struct to-dnf stream-struct (state mark) #:prefab)
 
 
@@ -594,59 +613,59 @@
     ; this could be a state, a goal, and etc.
     ;;; we will at the end transform it into a stream of state
     (match (cons ag bg)
-    [(cons (relate _ b) (relate _ d))
-      (and (equal? (car b) (car d)) (== b d))]
-    [(cons (== a b) (== c d))
-      (conj* (== a c) (== b d))]
-    [(cons (=/= a b) (=/= c d))
-      (conj* (== a c) (== b d))]
-    ;;; composed goals
-    [(cons (ex a b) (ex c d))
-      (let* ([k (gensym)]
-             [LHS (b . subst . [k // a ])]
-             [RHS (d . subst . [k // c ])])
-        (unify/goal LHS RHS st) ; a stream to return
-      )]
-    [(cons (forall a b c) (forall d e f))
-      (let* ([k (gensym)]
-             [LHS (c . subst . [k // a])]
-             [LHS-D (b . subst . [k // a])]
-             [RHS (f . subst . [k // d])]
-             [RHS-D (e . subst . [k // d])])
+      [(cons (relate _ b) (relate _ d))
+        (and (equal? (car b) (car d)) (== b d))]
+      [(cons (== a b) (== c d))
+        (disj (conj* (== a c) (== b d)) (conj* (== a d) (== b c)))] 
+      [(cons (=/= a b) (=/= c d))
+        (disj (conj* (== a c) (== b d)) (conj* (== a d) (== b c)))]
+      ;;; composed goals
+      [(cons (ex a b) (ex c d))
+        (let* ([k (gensym)]
+              [LHS (b . subst . [k // a ])] ;;; (a [k/x])
+              [RHS (d . subst . [k // c ])])
+          (unify/goal LHS RHS st) ; a stream to return
+        )]
+      [(cons (forall a b c) (forall d e f))
+        (let* ([k (gensym)]
+              [LHS (c . subst . [k // a])]
+              [LHS-D (b . subst . [k // a])]
+              [RHS (f . subst . [k // d])]
+              [RHS-D (e . subst . [k // d])])
+          (mapped-stream 
+            (lambda (st) (unify/goal LHS RHS st))
+            (unify/goal LHS-D RHS-D st)) ; a stream to return
+        )]
+      [(cons (conj a b) (conj c d))
         (mapped-stream 
-          (lambda (st) (unify/goal LHS RHS st))
-          (unify/goal LHS-D RHS-D st)) ; a stream to return
-      )]
-    [(cons (conj a b) (conj c d))
-      (mapped-stream 
-        (lambda (st) (unify/goal b d st))
-        (unify/goal a c st)) ; a stream to return
-      ]
-    [(cons (disj a b) (disj c d))
-      (mapped-stream 
-        (lambda (st) (unify/goal b d st))
-        (unify/goal a c st)) ; a stream to return
-      ]
-    [(cons (cimpl a b) (cimpl c d))
-      (mapped-stream 
-        (lambda (st) (unify/goal b d st))
-        (unify/goal a c st)) ; a stream to return
-      ]
-    [(cons (symbolo a) (symbolo b))
-      (== a b)]
-    [(cons (not-symbolo a) (not-symbolo b))
-      (== a b)]
-    [(cons (numbero a) (numbero b))
-      (== a b)]
-    [(cons (not-numbero a) (not-numbero b))
-      (== a b)]
-    [(cons (stringo a) (stringo b))
-      (== a b)]
-    [(cons (not-stringo a) (not-stringo b))
-      (== a b)]
-    [(cons (type-constraint a T1) (type-constraint b T2))
-      (and (equal? T1 T2) (== a b))]
-    [_ #f]
+          (lambda (st) (unify/goal b d st))
+          (unify/goal a c st)) ; a stream to return
+        ]
+      [(cons (disj a b) (disj c d))
+        (mapped-stream 
+          (lambda (st) (unify/goal b d st))
+          (unify/goal a c st)) ; a stream to return
+        ]
+      [(cons (cimpl a b) (cimpl c d))
+        (mapped-stream 
+          (lambda (st) (unify/goal b d st))
+          (unify/goal a c st)) ; a stream to return
+        ]
+      [(cons (symbolo a) (symbolo b))
+        (== a b)]
+      [(cons (not-symbolo a) (not-symbolo b))
+        (== a b)]
+      [(cons (numbero a) (numbero b))
+        (== a b)]
+      [(cons (not-numbero a) (not-numbero b))
+        (== a b)]
+      [(cons (stringo a) (stringo b))
+        (== a b)]
+      [(cons (not-stringo a) (not-stringo b))
+        (== a b)]
+      [(cons (type-constraint a T1) (type-constraint b T2))
+        (and (equal? T1 T2) (== a b))]
+      [_ #f]
   ))
   (match solution
     [(? ?state?) (wrap-state-stream solution)]
@@ -726,6 +745,7 @@
   (define (each-case prev-f rec g)
     (match g
       [(relate _ _) (begin (set! res #f) g)]
+      ;; TODO (greg): if `a` is decidable, the entire implication may still be decidable
       [(cimpl a b) (begin (set! res #f) g)] ; don't even allow implication to be inside g
       [(forall _ b g) (rec (cimpl b g))] ; equivalent semantic
       [_ (prev-f g)]
@@ -750,16 +770,12 @@
           ([(cons a-dec a-ndec) (rec a)]
            [(cons b-dec b-ndec) (rec b)])
         (cons (conj a-dec b-dec) (conj a-ndec b-ndec)))]
-    ;;; g = (disj (a-dec /\ a-ndec) (b-dec /\ b-non-dec))
-    ;;; (a-dec \/ b-dec) /\ [(a-non-dec \/ b-dec) /\ (a-non-dec \/ b-non-dec) ...]
+
     [(disj a b)
       (if (andmap decidable-goal? (list a b))
           (cons (disj a b) (Top))
           (cons (Top) (disj a b)))]
-    ;;; g = (a-dec /\ a-non-dec) -> (b-dec /\ b-non-dec)
-    ;;; g = (a-dec /\ a-non-dec) -> b-dec) /\ (a-dec /\ a-non-dec) -> b-non-dec)
-    ;;; = [(a-dec -> b-dec) \/ (a-non-dec -> b-dec)] /\
-    ;;;   [(a-dec -> b-non-dec) \/ (a-non-dec -> b-non-dec)]
+
     [(cimpl a b) 
         (if (decidable-goal? a)
           (match-let* ([(cons b-dec b-ndec) (rec b)]) 
@@ -767,7 +783,7 @@
           (cons (Top) g))]
     
     [(forall v D g)
-        ;;; remember that D is always decidable (by deifnition)
+        ;;; remember that D is always decidable (by definition)
         (match-let* 
           ([(cons g-dec g-ndec) (rec g)])
         (cons (forall v D g-dec) (forall v D g-ndec)))]
@@ -789,7 +805,7 @@
   (if (decidable-goal? g)
       `(,g . ,(Top))
       (match-let* ([(cons a b) (dec+non-dec g)])
-      `(,(syntactical-simplify a) . ,(syntactical-simplify b)))
+        `(,(syntactical-simplify a) . ,(syntactical-simplify b)))
   )   
 )
 
@@ -831,6 +847,7 @@
 ;;;   where each state has no assymetrical inequality inside 
 ;;;     i.e. we won't have ((cons a b) =/= y)
 ;;;         instead we will have (a =/= y.1) \/ (b =/= y.2) together with y = (y.1, y.2)
+;;;           note: y.1, y.2 are both fresh variables (instead of tproj) 
 ;;;       of course together with the stream y is not even a pair
 (define/contract (TO-NON-Asymmetric asumpt stream)
   (assumption-base? Stream? . -> . Stream?)
@@ -897,7 +914,7 @@
 ;;;  1. when asumpt is empty, we will unfold one level of relation org-asumpt
 ;;;       and then do "pause/start" (cimpl org-asumpt' g)
 ;;;       so that a new decidable component of org-asumpt' can be extracted/analyzed/falsified
-;;;  2. when any asumpt is actually used, we will shift the current proving target 'g'
+;;;  2. if any asumpt is actually used, we will shift the current proving target 'g'
 ;;;       and thus invoke a new "pause/start" (so that new possible sem-solving can be proceeded)
 (define/contract (syn-solving asumpt org-asumpt st g)
   (assumption-base? assumption-base? ?state? Goal? . -> . Stream?)
@@ -910,6 +927,10 @@
   ;;;       doesn't integrate the sub-asumpt into the state... some information is loss
   ;;;       so currently paying the price of duplicate computation, 
   ;;;         we will keep calling sem-solving on cimpl which is the 
+  ;;;    for example we have assumption list (a b (c \/ k) d e) to goal g
+  ;;;      when we are dealing with the case c \/ k, we will at the end invoke  (c a b (d1 /\ d2 /\ ... (dj \/ dk) ..) e) on g
+  ;;;           (k a b d e) on g, will duplicate the computation for the case (a b) on g
+  ;;; TODO (greg): maybe we can delay this deconstruction to avoid duplicating computation
   (define/contract (traversal-on-asumpt term-name top-asumpt remain-asumpt)
     (any? Goal? assumption-base? . -> . Stream?)
     (define top-name-asumpt (cons term-name top-asumpt))
@@ -1015,6 +1036,24 @@
       [o/w (syn-solve remain-asumpt org-asumpt st g)]
     )
   )
+
+;;; original assumption: (P x)
+
+;;; stream-of-syntactically-solvable-relation-calls:
+;;;   (P x), (A x), (B x), ... (stream-append/interleaved (unfold-accumulate-syntactic (A x)) (unfold-accumulate-syntactic (B x))))
+
+;;; (A x) /\ (B x)
+
+
+;;; original goal: g
+
+;;; (solve st sossrc g)
+;;; g is atomic: further constraint st using atomic constraint OR keep original st if atomic constraint exists in sossrc
+;;; g is relation-call: can return original state if relation-call exists in sossrc OR unfold and solve relation-call
+;;; g is conj
+;;; g is disj
+
+
   (if (empty-assumption-base? asumpt)
     (and (ormap has-relate (all-assumption-goals org-asumpt)) 
          (unfold-assumption-solve org-asumpt st g)) 
@@ -1232,6 +1271,7 @@
     ((== t1 t2) (unify t1 t2 (prim-goal-filled-st st g) ))
     ((=/= t1 t2) (neg-unify t1 t2 (prim-goal-filled-st st g) ))
     ((symbolo t1)  (wrap-state-stream (check-as-inf-type symbol? t1 (prim-goal-filled-st st g))))
+    ;; TODO (greg): factor out predicates
     ((not-symbolo t1) 
       (mplus 
         (term-finite-type asumpt t1 (prim-goal-filled-st (st . <-pfg . (_ ignore) _) g))
@@ -1331,7 +1371,7 @@
                             (set-add (state-scope st) var)
                             ;;; NOTE: the following "(ex var ..)" ex var is non-trivial and not removable.
                             ;;;     which is explicitly handling the scoped var
-                            (TO-DNF (TO-NON-Asymmetric asumpt (pause asumpt ignore-one-hole-st (ex var (conj domain_ goal)))) )  
+                            (TO-DNF (TO-NON-Asymmetric asumpt (pause asumpt ignore-one-hole-st (ex var (conj domain_ goal)))) )
                             var 
                             (forall var domain_ goal)))]
         )
