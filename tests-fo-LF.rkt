@@ -748,7 +748,7 @@
 
 
 ;;; BUGFIX: The following should halt
-(sort-boolo-implies-membero-2-1-1-1
+(sort-boolo-implies-membero-2-1-2
   (run 1 () (for-all (a) 
       (cimpl (sort-boolo (list a) (list #f))
              (membero #f (list a)))
@@ -757,7 +757,7 @@
 )
 
 ;;; BUGFIX: The following should halt
-(sort-boolo-implies-membero-2-1-1-1-1
+(sort-boolo-implies-membero-2-1-3
   (run 1 () (for-all (a) 
       (cimpl (sort-boolo (list a) (list #f))
              (== a #f))
@@ -765,7 +765,7 @@
 . test-reg!=>ND . 'succeed 
 )
 
-(sort-boolo-implies-membero-2-1-2
+(sort-boolo-implies-membero-2-1-4
   (run 1 () (for-all (a) 
       (cimpl (membero #f (list a)) 
              (sort-boolo (list a) (list #f)))
@@ -774,7 +774,7 @@
 )
 
 ;;; BUGFIX: The following should halt!!!
-(sort-boolo-implies-membero-2-1-3
+(sort-boolo-implies-membero-2-1-5
   (run 1 () (for-all (a) 
       (cimpl (membero #f (list a)) 
              (== a #f))
