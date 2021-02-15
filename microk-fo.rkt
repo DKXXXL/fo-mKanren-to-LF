@@ -1931,7 +1931,7 @@
 
 ;;; DomainEnforcement -- 
 ;;;   basically currently make sure if term (tproj x car) appear
-;;;     then x is of type pair
+;;;     then x is of type pair ((has-type x pair) will appear)
 (define (domain-enforcement-st st) ;; (tproj x car.cdr.car) (typeconstant x car) pair
   (define all-tprojs (collect-tprojs st))
   ;;; (debug-dump "\n    inside domain-enforcement-st all-tprojs: ~a" all-tprojs)
@@ -1984,6 +1984,9 @@
   (foldl (lambda (tp g) (force-as-pair (tproj-v tp) g)) goal (set->list all-tprojs))
 )
 
+;;; return the prop/goal a state stands for
+;;;   i.e. a state stands for a bunch of equalities and disequalities..
+;;;     this will transform each state into that
 (define/contract (state->goal st)
   (?state? . -> . Goal?)
   (for/fold
@@ -2135,7 +2138,6 @@
   (define mentioned-vars (set-remove scope var))
   ;;;  we need to do extra unmentioned-substed because here var is considered unmentioned
   (define var-removed-st (unmentioned-substed-form mentioned-vars st))
-  ;;; (define var-removed-st st)
   ;;; (debug-dump "\n shrinking var: shrink-var-removed-st: ~a" var-removed-st)
   (define domain-enforced-st var-removed-st)
   ;;;  we remove none-substed appearances of unmentioned var
@@ -2165,7 +2167,6 @@
         [current-vars scope]
         [field-projected-st (field-proj-form st)]
         [domain-enforced-st (domain-enforcement-st field-projected-st)]
-        ;;; [unmention-substed-st (unmentioned-substed-form mentioned-var domain-enforced-st)]
         [unmention-substed-st  domain-enforced-st]
         ;;; [k (begin   
         ;;;             (debug-dump "\n clearing about: current-vars ~a" current-vars)
