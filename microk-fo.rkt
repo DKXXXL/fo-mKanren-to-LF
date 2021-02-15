@@ -1495,21 +1495,15 @@
 )
 
 
-;;; following is a none opaque decision procedure for exhaustive domain checking
-;;;   one day it needs to be translate to corresponding LF-term 
-;;;   for credentials
-
-
-;;; (define (pairo x) (disj (== x '()) (fresh (y z) (== x (cons y z)))))
-;;; (define (boolo x) (disj (== x #t) (== x #f)))
 
 
 
 ;;; simplify goal w.r.t. a domain variable, constant parameters acceptable
 ;;;   if satisfiable, then act as identity
-;;;   note that this is only used for forall-bound (for-all domain)
+;;;     note that this is only used by forall-bound (for-all domain) goal
 ;;;   otherwise return False
 ;;; simplify-domain-wrt : state x goal x var -> goal
+;;; basically use vanilla miniKanren to check unsatisfiability
 (define/contract (simplify-domain-wrt asumpt st goal var)
   (assumption-base? ?state? decidable-goal? any? . -> . Goal?)
   ;;; just run miniKanren!
@@ -1518,12 +1512,14 @@
       [#f #f]
       [(cons #f next) (first-non-empty-mature next)]
       [v v]))
-  ;;; WARNING: following we only allowed semantic solving:
+  ;;; Note: following we only allowed semantic solving,
+  ;;;     as we don't allow cimpl/quantifier/customized relation in domain bound
   (if (first-non-empty-mature (pause empty-assumption-base (st . <-pfg . (ignore _) _) goal)) (syntactical-simplify goal) (Bottom))
   
   )
 
-;;; some trivial rewrite to make things easier
+;;; some trivial rewrite to make goal easier/reable
+;;;     equivalence is ensured
 (define/contract (syntactical-simplify goal)
   (Goal? . -> . Goal?)
   (define (basic-tactic prev-f rec goal)
@@ -1544,19 +1540,6 @@
   ((overloading-functor-list (list basic-tactic goal-base-endofunctor  identity-endo-functor)) goal)
 )
 
-;;; ;;; appearances of nested list
-;;; (define/contract (member-nested v l)
-;;;   (any? list? . -> . list?)
-;;;   (match l ['() #f] 
-;;;     [(cons h t) 
-;;;       (or (match h [(? pair?) (member-nested v h)] [_ (equal? h v)]) (member-nested v t))]))
-
-
-;;; (list true? false? null? pair? number? string? symbol?)
-
-
-
-
 
 (define type-label-to-type-goal
   (hash
@@ -1567,8 +1550,10 @@
   )
 )
 
-
-
+;;; literally replace each x with mapping[x] in state/anything
+;;;   actually also works for goal
+;;;   there are some very mysterious behaviour here
+;;;     as literal-replace* will respect substitution list inside state
 (define/contract (literal-replace* mapping st)
   (hash? any? . -> . any?)
   (define (hash-table-add added htable)
@@ -1636,17 +1621,7 @@
 (define (literal-replace from after st)
   (literal-replace* (hash from after) st))
 
-;;;  a series of shrink into
-;;; shrink-into :: set of var x state -> state
-;;;  it will make state only about vars
-;;;    !!! OVER/UNDER APPROXIMATION !!! can happen here
-;;;   basically we don't really have to have [st] iff [shrink-into .. st]
-;;;    [st] implies [shrink-into .. st] and 
-;;;    [shrink-into .. st] implies [st] are both possibly ok! since we are doing *automated proving*
-;;;      if we strengthen/weaken the condition, but somehow we still can deduce the goal, then we are fine!
 
-;;; (define (shrink-away var-from term-to st)
-;;;   (literal-replace var-from term-to st))
 
 ;;; [(term, term)] x state -> state
 ;;;  unifies each equation one by one
@@ -1667,6 +1642,7 @@
 
 ;;; return a set of vars, indicating that those vars, "s" are in the
 ;;;  form of "s =/= (cons ...)", and thus we need to break down s themselves
+;;;   only used for TO-Non-Assymetry
 (define (record-vars-on-asymmetry-in-diseq st)
   (define each-asymmetry-record! (mutable-set))
   (define (each-asymmetry prev-f rec g)
@@ -1699,6 +1675,8 @@
 (define (is-of-finite-type v)
   (disj* (== v #t) (== v #f) (== v '()))
 )
+
+
 ;;; given the st, we will break down a bunch of v's domain by the domain axiom
 ;;;  return an equivalent stream of states s.t. v is pair in one state and not pair in the others
 ;;; TODO: currently ignore proof-term
@@ -1731,6 +1709,7 @@
     (mapped-stream (lambda (st) (remove-assymetry-in-diseq asumpt st)) (pair-or-not-pair-by-axiom asumpt asymmetric-vars st))))
 
 
+;;;  Recall the definition of tproj:
 ;;; tproj :: var x List of ['car, 'cdr] 
 ;;; cxr as a path/stack of field projection/query
 ;;; (struct tproj (v cxr) #:prefab)
@@ -1747,6 +1726,8 @@
 ;;; given a tproj, we construct a tproj-ectable term for it
 ;;;  return the equation for removing the tproj
 ;;; tproj -> pair as var, cons/tree of vars
+;;;  example: a tproj-able term for (x.car.cdr == ..) 
+;;;     will become (x == ((a b) c)) (a == ...) 
 (define (equation-for-remove-tproj x)
   ;;; (define field-projection-list (tproj-cxr x))
   (define (construct-sketch path)
@@ -1756,11 +1737,11 @@
       ['() (fresh-var fpu)]
     )
   )
-  ;;; TODO: figure out why this reverse is necessary! -_-
+  ;;; TODO: figure out why this algorithm is working! -_-
   (cons (tproj-v x) (construct-sketch (reverse (tproj-cxr x))))
 )
 
-
+;;; taking car on both sides of eq
 (define (tcar-eq eq) 
   (define res `(,(tcar (car eq)) . ,(tcar (cdr eq))))
   (match res 
@@ -1768,6 +1749,9 @@
     [(cons _ (? term?)) (cons (cdr res) (car res))] 
     [_ res])
 )
+
+
+;;; taking cdr on both sides of eq
 (define (tcdr-eq eq) 
   (define res `(,(tcdr (car eq)) . ,(tcdr (cdr eq))))
   (match res 
@@ -1789,16 +1773,13 @@
 (define/contract (field-proj-form st)
   (state? . -> . state?)
   (define eqs (state-sub st))
-  ;;; (define (each-eliminate-cons single-eq) (list (tcar-eq single-eq) (tcdr-eq single-eq)))
-  ;;; given one eq
-  ;;;  return a list of eqs equivalent
-  ;;;  and make sure in unmentioned-exposed-form 
+
   (state-sub-set st (eliminate-conses eqs))
 )
 
 ;;; given a set of equations 
 ;;;  return an equivalent set of equations, with no pair inside 
-;;; basically equivalent to field-proj-form
+;;;     but only tproj inside
 (define (eliminate-conses eqs)
   ;;; (debug-dump "\n eliminate-conses's input: ~a" eqs)
   (define (each-eli-eq single-eq)
@@ -1817,24 +1798,6 @@
       (map each-eli-eq eqs))
 )
 
-;;; ;;; clear everything about v on st
-;;; ;;;  var x state -> state
-;;; ;;;   done easily by replace v with a brand new var everywhere in the st
-;;; (define/contract (clear-about v st)
-;;;   (any?  ?state? . -> . ?state?)
-;;;   ;;; (debug-dump st)
-;;;   (let* ([vname (symbol->string (var-name v))]
-;;;          [new-v (var/fresh (string->symbol (string-append vname "D")))]
-;;;          [replaced (literal-replace v new-v st)]
-;;;          )
-;;;     replaced )
-;;; )
-
-;;; will declare variable, and assert goal on all its domain
-;;; (define-syntax for-all
-;;;   (syntax-rules ()
-;;;     ((_ (x ...) g0 gs ...)
-;;;      (let ((x (var/fresh 'x)) ...) (given (x ...) (conj* g0 gs ...)) ))))
 
 (define-syntax for-all
   (syntax-rules ()
@@ -1872,15 +1835,6 @@
         (forall k (Top) (for-bound (x ...) conds g0 gs ... )) )
     )))
 
-;;; ;;; given (a series of) variable(s) we will assert the goal on all its possible
-;;; ;;;  domain
-;;; ;;;   using the original variables
-;;; (define-syntax given
-;;;   (syntax-rules ()
-;;;     ((_ () g) g)
-;;;     ((_ (x xs ...) g)
-;;;       (forall x (Top) (given (xs ...) g)))))
-
 
 
 ;;; given a state in unmentioned-exposed-form
@@ -1888,7 +1842,7 @@
 ;;;     "as much as" is because there are cases that unmentioned-var
 ;;;     has no relationship with other vars, so cannot be eliminated
 ;;; precondition: must in field-proj form
-;;; TODO: Too many bugs here
+;;; TODO: maybe many more bugs are here
 (define/contract (unmentioned-substed-form mentioned-vars st)
   (set? state? . -> . state?)
   
@@ -1975,8 +1929,9 @@
 )
 
 
-;;; DomainEnforcement -- basically currently make sure if term (tproj x car) appear
-;;;   then x is of type pair
+;;; DomainEnforcement -- 
+;;;   basically currently make sure if term (tproj x car) appear
+;;;     then x is of type pair
 (define (domain-enforcement-st st) ;; (tproj x car.cdr.car) (typeconstant x car) pair
   (define all-tprojs (collect-tprojs st))
   ;;; (debug-dump "\n    inside domain-enforcement-st all-tprojs: ~a" all-tprojs)
@@ -2055,8 +2010,8 @@
   (append eqs (append diseqs types))
 )
 
-;;; given compositions of DS where there is tproj appearances
-;;;  return a set of all tprojs
+;;; given compositions of data structure where there is tproj appearances
+;;;  return a set of all tprojs appear inside
 (define (collect-tprojs anything)
   (define result (mutable-set))
   (define (each-case prev-f rec g)
@@ -2074,10 +2029,10 @@
 )
 
 ;;; anything (most likely pairs of goals) -> anything x List of equation
-;;;   will remove every tproj, 
-;;;    an gives a set of equation explaining the remove
-;;;  for example (tproj x car) == k
-;;;    will transform to (a == k) and a list of equation [(x (cons a b))]
+;;;     will remove every tproj, 
+;;;       an gives a set of equation explaining the remove
+;;;     for example (tproj x car) == k
+;;;       will transform to (a == k) and a list of equation [(x (cons a b))]
 (define (eliminate-tproj-return-record anything) ;; tproj x car.cdr.car ;; x = (cons (cons _ (cons _ _)) _)
   (define all-tprojs (set->list (collect-tprojs anything)))
   (define all-tproj-removing-eqs (map equation-for-remove-tproj all-tprojs))
@@ -2134,7 +2089,6 @@
   ;;;  we remove none-substed appearances of unmentioned var
   (define unmentioned-removed-st (unmentioned-totally-removed mentioned-vars domain-enforced-st))
   ;;; Step 3 done
-  ;;; BUG: 
   (define atomics-of-states (conj-state->list-of-goals unmentioned-removed-st))
   (define atomics-of-var-related (filter (lambda (x) (there-is-var-in (set varx) x)) atomics-of-states))
   (define atomics-of-var-unrelated (filter (lambda (x) (not (there-is-var-in (set varx) x))) atomics-of-states) )
@@ -2149,12 +2103,6 @@
     (syntactical-simplify (foldl conj (Top) atomics-of-var-unrelated)))
   (define disj-related 
     (foldl disj (Bottom) domain-enforced-complemented-atomics-of-var-related))
-  ;;; (define disj-related-
-  ;;;   (if (equal? disj-related (Bottom))
-  ;;;     (Top)
-  ;;;     disj-related
-  ;;;   )
-  ;;; )
 
   (define returned-content (conj conj-unrelated disj-related))
   
@@ -2181,8 +2129,7 @@
 ;;;   st is in non-asymmretic form (i.e. no (var ..) =/= (cons ...))
 ;;;    st is in field-projected-form, where mentioned var are scope + var
 ;;;   st is domain-enforced
-;;; BUG: this is unsound as unmentioned-substed-form is unsound
-;;;       remove more than 
+;;; WARNING: there might be many more bugs undiscovered
 (define/contract (shrink-away st scope var)
   (state? set? var? . -> . state?)
   (define mentioned-vars (set-remove scope var))
@@ -2244,5 +2191,8 @@
       (wrap-state-stream shrinked-st)))
   (mapped-stream map-clear-about dnf-sym-stream)
 )
+
+;;; include mk-syntax here as we turns out need those things here as well
+;;;     not only useful for the users
 
 (include "mk-syntax.rkt")
