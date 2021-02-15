@@ -1039,6 +1039,79 @@
 
 ;;; original assumption: (P x)
 
+;;; st: (== b c)
+;; (== a b) -> G (== a c)
+
+;; normalized (== a b) is (== a c)
+
+
+;; (conj (== x 1) (== x y) (impl (== x 2) (== y 2)))
+;;; (conj (== x 1) (== x y) (disj (=/= x 2) (conj (== x 2) (== y 2))))
+
+;; (impl (== x 2) (== x 2))
+;; results in one state with no constraints
+
+;; (impl (== x 2) (== x 2)) ===> (disj (=/= x 2) (conj (== x 2) (== x 2)))
+;; results in two states:
+;;   x == 2
+;;   x =/= 2
+
+;; if we see (== a b) while solving G, then we can consider that (== a b) satisfied without adding this constraint to the state
+;;; \neg (== a b)
+;;; (== a b) /\ G
+
+;;; incrementally-growing-set-of-assumptions
+
+;;; where F is user-defined, and G is ==, this is a possible way to simplify without using G as a hash key:
+;;; (impl (impl F G) goal)
+
+;;; (disj (neg (impl F G))
+;;;       (conj (impl F G) goal))
+
+;;; (disj (neg (disj (neg F)
+;;;                  (conj F G)))
+;;;       (conj (disj (neg F) (conj F G)) goal))
+
+;;; (disj (conj (neg G) F)
+;;;       (conj (impl F G) goal))
+
+;;; (impl F (conj dec-G undec-G))
+;;; key: ((... \/ R \/ x==g) (impl F undec-G))
+
+
+;;; (impl (disj* (P x) (Q y) (== a b)) goal)
+;;;   ==>
+;;; (conj (impl (disj (P x) (Q y)) goal) (impl (== a b) goal))
+
+
+;;; (impl A (conj (P x) B))
+;;;   ==>
+;;; (conj (impl A (P x)) (impl A B))
+;;;  key: (P x) points to (impl A (P x))
+;;;  split using transformation for decidable B
+
+;;; incrementally-growing set of assumptions:
+;;; simple-assumptions: (set A B C (P x))
+;;; complex-assumptions: (make-immutable-hash  ;; the purpose of this is to defer dealing with complex assumptions until they become relevant (useful for solving body)
+;;;                        (G . (impl F G))  ;; i.e., if our goal is G then we can replace it with solving F
+;;;                        (D . (disj D E))  ;; i.e., if our goal is D, then we can replace entire solving process with E added directly, and this D removed
+;;;                        (E . (disj D E))
+;;; 
+;;; A is atomic     ;; base case
+;;; A is user-defined, and unfolds:
+;;;   => (conj B C) ;; just add B and C
+
+;;;   => (impl A (impl B C))  ;; key: C
+;;;   => (disj A B)           ;; key: (union (keys A) (keys B))
+
+
+;;;   => (disj (impl A (disj B C)) D)  ;; key: (union (keys B) (keys C) (keys D))
+
+;;;   => (disj D E)  ;; key D E
+;;;   => (impl F G)  ;; key G
+;;;   => (forall x domain body)  ;; key body
+;;;   => (exists x body)         ;; key body
+
 ;;; stream-of-syntactically-solvable-relation-calls:
 ;;;   (P x), (A x), (B x), ... (stream-append/interleaved (unfold-accumulate-syntactic (A x)) (unfold-accumulate-syntactic (B x))))
 
