@@ -388,7 +388,9 @@
 
 
 ;;; this one basically can help me solve the expression problem
-;;;   I can extend state as I want now  
+;;; this is the procedure that will compose a bunch of functor into
+;;;     one homomorphism
+;;; For example:  I can extend state as I want now  
 ;;; [(goal -> goal) -> (goal -> goal) -> goal -> goal] -> (goal -> goal)
 (define (overloading-functor-list endofuncs)
   (define (overloading-functor-list-with-extf endofuncs extf)
@@ -404,8 +406,7 @@
     ((overloading-functor-list-with-extf endofuncs resultf) g) )
   resultf
 )
-
-;;; example usage
+;;; Example Usage: 
 ;;; not-symbolo will be translated into (numbero v stringo v pairo v boolo)
 ;;; (define remove-neg-by-decidability
 ;;;   (define (match-single prev-f ext-f g)
@@ -422,6 +423,8 @@
 
 ;;; homomorphism on pair, will respect pair construct
 ;;;  will also respect tproj
+;;;   Recall tproj is used for intermediate representation
+;;;   -- during relative complements we need pair-less point-ful representation
 (define (pair-base-endofunctor prev-f extended-f g)
   (define rec extended-f)
   (match g
@@ -434,7 +437,7 @@
 
 
 
-;;; ;;; homomorphism on pair, except that each "composed node" will translate to "or"
+;;; ;;; homomorphism from pair, except that each "composed node" will translate to "or"
 ;;; ;;;   it's just mapping pairs into arithmetic
 ;;; ;;; for example, we have cons and unit in the language of lisp
 ;;; ;;; now you can basically look at it as another AST
@@ -453,19 +456,10 @@
 ;;; )
 
 
-;;; (define there-is-pair-base-mapping
-;;;   (hash
-;;;     'default #f
-;;;     '() #f
-;;;     cons (lambda (x y) (or x y)) ;; no short-circuting anymore
-;;;   )
-;;; )
-
-;;; mapping every cons to or, '() to false, and others to default-v and fold the result
-;;; (define (there-is-in-pair-base-functor default-v)
-;;;   (define defaulted (hash-set there-is-pair-base-mapping 'default default-v))
-;;;   (pair-base-functor (lambda (x) (hash-ref defaulted x 'NotFound))))
-  
+;;; The following two function can detect if there is 
+;;;   var existence anywhere
+;;;   in a given pair-goal
+;;;     
 
 (define/contract (there-is-var-in vars pair-goal)
   (set? any? . -> . boolean?)
@@ -473,17 +467,6 @@
   (not (set-empty? (set-intersect vars all-fvs)))
 )
 
-;;; (define/contract (there-is things pair-goal)
-;;;   (set? any? . -> . boolean?)
-;;;   (define (each-case prev-f rec g)
-;;;     (if (set-member? things g) #t (prev-f g))
-;;;   )
-
-;;;   (define result-f 
-;;;     (overloading-functor-list (list each-case goal-base-endofunctor (there-is-in-pair-base-functor #f)))
-;;;   )
-;;;   (result-f pair-goal)
-;;; )
 
 (define/contract (there-is-var-not-in vars pair-goal)
   (set? any? . -> . boolean?)
@@ -493,7 +476,7 @@
 )
 
 
-;;; ;;; example : replace 1 with 0 in an arbitrary list
+;;; Example Usage : replace 1 with 0 in an arbitrary list
 ;;; (define (replace-1-to-0 k)
 ;;;   (define (case1 prev-f extended-f g)
 ;;;     (if (equal? g 1) 0 (prev-f g)))
@@ -504,7 +487,7 @@
 
 ;;; currently implemented with side-effect,
 ;;;   it is another kind of fold but I am bad at recursion scheme
-;;;   basically return all free-variables
+;;;   basically return all free-variables appearing inside g
 (define (freevar g)
   (define fvs (mutable-set))
   (define (counter prev-f ext-f g)
@@ -522,8 +505,12 @@
   fvs
 )
 
-;;; streams
+
+;;; The following are defunctionalized stream structure
+
+;;; stream-struct is the parent of all streams
 (struct stream-struct () #:prefab)
+
 (struct bind  stream-struct (asumpt bind-s bind-g)   
   #:transparent
   #:guard (lambda (asumpt bind-s bind-g type-name)
@@ -554,16 +541,25 @@
 
 ;;; (pause st g) will fill the generated proof term into st
 ;;; it has the same specification as (start st g)
+;;; (pause st g) has same specification as (start st g)
 (struct pause stream-struct (asumpt pause-state pause-goal) #:prefab)
-(struct mapped-stream stream-struct (f stream) #:prefab)
+
+
 ;;; f :: state -> stream of states
 ;;; mapped-stream f (cons a s) = mplus (f a) (mapped-stream f s)
-(struct to-dnf stream-struct (state mark) #:prefab)
+;;;   in a lazy fashion
+(struct mapped-stream stream-struct (f stream) #:prefab)
+
+
 ;;; semantically there is or in the "state"
 ;;;   this will lift the "or"s into stream
 ;;;   at the current stage, mark is used for pointing to
 ;;;     the disj component
+;;; finally a stream of state where only conjunction is inside each state
+(struct to-dnf stream-struct (state mark) #:prefab)
 
+
+;;; a stream of syntactical solving
 (struct syn-solve stream-struct (asumpt org-asumpt st g) #:prefab)
 
 
@@ -571,10 +567,13 @@
 ;;; basically used for proof-term-generation for
 ;;;    existential quantifier
 ;;;  say we have state (v =/= 1) /\ (numbero v)
-;;; this will enumerate v to be each value
+;;; this will enumerate v to be each ground value except for $v = 1$ and number
 (struct force-v-ground stream-struct (v st) #:prefab)
 
+
 ;;; detect stream or not
+;;;   because we have #f as part of stream structure so
+;;;   we cannot easily use stream-struct?
 (define (Stream? s)
   (or (stream-struct? s)
     (match s
@@ -586,7 +585,7 @@
 
 ;;; A lot of boiler-plate code
 ;;;   (syntactical) unification on two goals, 
-;;;   the open/free variables will try to match
+;;;   the open/free variables will try to be matched
 ;;;   the inner-declared variable will debrujin indexed
 ;;;     for alpha-equivalence
 (define/contract (unify/goal ag bg st)
@@ -657,9 +656,9 @@
   )
 )
 
-;;; since a state has semantic of disjunction
-;;;  we transform it into DNF and we should be able to index each disjunct component
-;;; 
+;;; used for (to-dnf stream):
+;;;   since a state has semantic of disjunction
+;;;     we transform it into DNF and we should be able to index each disjunct component
 (define (get-state-DNF-range st)
   (define conjs (state-diseq st))
   (map length conjs)
@@ -689,12 +688,20 @@
   (define range (get-state-DNF-range st))
   (index-incremenent-by-one index range))
 
-;;; the goal is complementable iff goal is without any relate
+(define (get-state-DNF-by-index st index)
+  (define conjs (state-diseq st))
+  (define indexed-conjs (map (lambda (disjs pos) (list (list-ref disjs pos))) conjs index))
+  (state-diseq-set st indexed-conjs)
+)
+
+
+;;; the goal is complementable 
+;;;     iff goal is without any relate/no customized relations anywhere
 (define/contract (complementable-goal? g)
   (Goal? . -> . boolean?)
   (define res #t)
   ;;; side-effect for folding
-  ;;;   on visitor pattern
+  ;;;   still using visitor pattern/homomorphism
   (define (each-case prev-f rec g)
     (match g
       [(relate _ _) (begin (set! res #f) g)]
@@ -708,12 +715,14 @@
   res
 )
 
-;;; the goal is complementable iff goal is without any relate
+;;; the goal is decidable 
+;;;     iff goal is without any relate/any constructive implication
+;;;     TODO: make it more relaxed
 (define/contract (decidable-goal? g)
   (Goal? . -> . boolean?)
   (define res #t)
   ;;; side-effect for folding
-  ;;;   on visitor pattern
+  ;;;   still using visitor pattern/homomorphism
   (define (each-case prev-f rec g)
     (match g
       [(relate _ _) (begin (set! res #f) g)]
@@ -728,7 +737,9 @@
 )
 
 ;;; Goal? -> Goal? x Goal? 
-;;; g <=> g-dec /\ g-non-dec
+;;; specification: 
+;;;   g <=> (let (a,b) = (dec+non-dec g) in (conj a b))
+;;;   where a must be decidable component
 (define/contract (dec+non-dec g)
   (Goal? . -> . pair?)
   (define rec dec+non-dec)
@@ -770,22 +781,18 @@
   )
 )
 
+
+;;; Use syntactical-simplification
+;;;   right after decidable component extraction
 (define/contract (dec+non-dec-simpl g)
   (Goal? . -> . pair?)
   (if (decidable-goal? g)
       `(,g . ,(Top))
       (match-let* ([(cons a b) (dec+non-dec g)])
       `(,(syntactical-simplify a) . ,(syntactical-simplify b)))
-  )
-  
-    
+  )   
 )
 
-(define (get-state-DNF-by-index st index)
-  (define conjs (state-diseq st))
-  (define indexed-conjs (map (lambda (disjs pos) (list (list-ref disjs pos))) conjs index))
-  (state-diseq-set st indexed-conjs)
-)
 
 ;;; the special stream only used for forall
 ;;;   all the possibe results of first-attempt-s
@@ -793,37 +800,38 @@
 ;;;   bind-g will have to be a forall goal
 (struct bind-forall  stream-struct (asumpt scope first-attempt-s dv bind-g)          #:prefab)
 
-
+;;; if a stream is WHNF(?)  
 (define/contract (mature? s)
   (Stream? . -> . boolean?)
     (or (not s) (pair? s)))
 
+
 (define (not-state? x) (not (state? x)))
 
+;;; return a whnf of stream
 (define/contract (mature s)
     (Stream? . -> . Stream?)
     ;;; (assert-or-warn (not-state? s) "It is not supposed to be a state here")
     ;;; (debug-dump "\n maturing: ~a" s)
     (if (mature? s) s (mature (step s))))
   
-;;; mature the whole stream (bad!)
-;;; (define (total-mature s)
-;;;   (match s
-;;;     [(cons a b) (cons a (total-mature b))]
-;;;     [#f #f]
-;;;   )
-;;; )
 
 ;;; given a stream of states, 
 ;;;   return another stream of states 
 ;;;   make sure there is no disjunction in meaning of each state and 
 ;;;     all the disjunction are lifted to mplus
+;;;  semantic of to-dnf
 (define/contract (TO-DNF stream)
   (Stream? . -> . Stream?)
   ;;; (debug-dump "TO-DNF computing \n")
   (mapped-stream (lambda (st) (to-dnf st (get-state-DNF-initial-index st))) stream))
 
 
+;;; return an equivalent stream of state
+;;;   where each state has no assymetrical inequality inside 
+;;;     i.e. we won't have ((cons a b) =/= y)
+;;;         instead we will have (a =/= y.1) \/ (b =/= y.2) together with y = (y.1, y.2)
+;;;       of course together with the stream y is not even a pair
 (define/contract (TO-NON-Asymmetric asumpt stream)
   (assumption-base? Stream? . -> . Stream?)
   ;;; (debug-dump "TO-NON-Asymmetric computing \n")
@@ -832,39 +840,27 @@
 
 ;;; term-finite-type : term x state -> stream
 ;;;  this will assert t is either #t, #f, or '()
+;;;   NOTE: this procedure won't handle proof-term correctly
+;;;     as we know pause will always fill in one proof-term
 (define/contract (term-finite-type asumpt t st)
   (assumption-base? any? ?state? . -> . Stream?)
   (pause asumpt st (disj* (== t '()) (== t #t) (== t #f)))
 )
 
 ;;; run a goal with a given state
-;;; note that when st == #f, the returned stream will always be #f
+;;;   note that when st == #f, the returned stream will always be #f
 ;;; Specificaion: 
 ;;;   the partial proof term of st will be applied with the proof-term of g
 ;;;   and if asumpt == '(), then we will only invoke semantic computation
 (define/contract (start asumpt st g)
   (assumption-base? ?state? Goal? . -> . Stream?)
-  ;;; Invariant check:
-  ;;; (define current-hole-number (pt/h-hole-num (state-pfterm st)))
-  ;;; (define (pf/hole-num-guard x s)
-  ;;;   (define/contract (guarding st)
-  ;;;     (?state? . -> . Stream?)
-  ;;;     (if (equal? (pt/h-hole-num (state-pfterm st)) x)
-  ;;;       (wrap-state-stream st)
-  ;;;       (raise-and-warn "Invariance Breach!")))
-  ;;;   (mapped-stream guarding s)
-  ;;; )
+
+  ;;; the following is a heuristic 
+  ;;;     on which case syntactical solving will happen
   (define heuristic-to-syn-solve
     (and (or (relate? g) (Bottom? g)) 
          (not (empty-assumption-base? asumpt))))
-  ;;; (let*
-  ;;;   ([two-approach 
-  ;;;       (mplus 
-  ;;;         (syn-solving asumpt asumpt st g)
-  ;;;         (sem-solving asumpt st g))])
-  ;;;   ;;; (pf/hole-num-guard (- current-hole-number 1) two-approach)
-  ;;;   two-approach
-  ;;; )
+  
   (if heuristic-to-syn-solve
     (mplus 
       (syn-solve asumpt asumpt st g)
@@ -874,9 +870,8 @@
   
 )
 
-;;; No elimination rule for coproduct?
-;;; Yes... no because we will just introduce an axiom
-;;;   instead of introducing LFcase or something
+;;; return a proof-term for a given sum-type
+;;;   actually a elimination for (disj A B)
 ;;; (disj A B) x (A -> C) x (B -> C)  -> C
 (define/contract (LFcase-analysis sumType retType sum-term left-case right-case)
   (disj? Goal? proof-term? proof-term? proof-term? . -> . proof-term?)
@@ -894,6 +889,16 @@
   
 )
 
+
+;;; run a goal with a given state
+;;;     except we will only do syntactical solving on the given goal
+;;;   using given "asumpt"
+;;; 
+;;;  1. when asumpt is empty, we will unfold one level of relation org-asumpt
+;;;       and then do "pause/start" (cimpl org-asumpt' g)
+;;;       so that a new decidable component of org-asumpt' can be extracted/analyzed/falsified
+;;;  2. when any asumpt is actually used, we will shift the current proving target 'g'
+;;;       and thus invoke a new "pause/start" (so that new possible sem-solving can be proceeded)
 (define/contract (syn-solving asumpt org-asumpt st g)
   (assumption-base? assumption-base? ?state? Goal? . -> . Stream?)
   (debug-dump "\n syn-solving asumpt: ~a" asumpt)
@@ -921,7 +926,8 @@
       [(disj a b)
         ;;; TODO: remove duplicate computation. 
         ;;;   (syn-solve on g with org-asumpt)
-        ;;;   w/-disj will calculate above stream again
+        ;;;   w/-disj will calculate some parts of the above stream again
+        ;;;     as we already half way through org-asumpt
         (fresh-param (lhs rhs split lhs-asumpt rhs-asumpt)
           (let* (
               [split-goal (conj (cimpl a g) (cimpl b g))]
