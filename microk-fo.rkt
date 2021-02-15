@@ -964,7 +964,7 @@
               (mplus w/-cimpl w/o-cimpl)
             ))]
       [(ex v t)
-      ;;; the key is
+      ;;; the key idea is that
       ;;; ((forall v (R . cimpl . g)) and (ex v R)) . cimpl . g
           (fresh-param (axiom-deconstructor subgoal)
             (let* (
@@ -989,7 +989,6 @@
               (mplus 
                 (syn-solve remain-asumpt org-asumpt st g)
                 (pause reduced-asumpt st-pf-filled subgoal-ty))))]
-      ;;; BUG: it seems dead loop happens below, why? or maybe not?
       [(forall v domain t)
             (fresh-param (applied-term dp2)
             (let* (
@@ -1002,6 +1001,10 @@
                         ([applied-term (LFapply term-name _2) 
                             : (forall-internal . subst . [_2 // v])])
                       _1))]
+                ;;; Note: even though we seem to only allow for-all to be instantiated
+                ;;;     with only one variable
+                ;;;       the second instantiation will happen when our
+                ;;;     proving goal is shifted from g
                 [new-asumpt (cons-asumpt applied-term applied-type remain-asumpt)]
                     )
               (mapped-stream
@@ -1035,7 +1038,8 @@
   )
 )
 
-;;; Also no justification for this part
+;;; Also no proof-term generation for this part
+;;;   unfold one-level of relation inside g
 (define/contract (unfold-one-level-relate g)
   (Goal? . -> . Goal?)  
   (define (each-case prev-f rec g)
@@ -1050,6 +1054,7 @@
   (result-f g)
 )
 
+;;; detect if there is any customized relation in g
 (define/contract (has-relate g)
   (Goal? . -> . boolean?)  
   (define result #f)
@@ -1068,61 +1073,10 @@
 )
 
 
-;;; ;;; each forall will only be able to use once (you can see that in syntactical solving)
-;;; ;;;  so we need to duplicate each for-all so that it can be used multiple times
-;;; ;;; surprisingly it becomes resource-sensitive as we will record in the 
-;;; ;;;     proof term that how many times a forall assumption is instantiated
-;;; ;;; Note: this version is proof-term generation version
-;;; (define/contract (duplicate-one-level-forall asumpt st)
-;;;   (assumption-base? ?state? . -> . pair?)
-;;;   (define all-foralls
-;;;     (filter 
-;;;       (λ (term-name-goal) (forall? (cdr term-name-goal)))
-;;;       asumpt))
-
-;;;   (define-values (ret-asumpt ret-st)
-;;;     (for/fold
-;;;         ([acc-asumpt asumpt]
-;;;          [acc-st st])
-;;;         ([each-term-name-goal all-foralls])
-;;;       (match-let 
-;;;           ([(cons term-name goal) each-term-name-goal])
-;;;         (fresh-param (new-term-name)
-;;;           (values 
-;;;             (cons new-term-name goal acc-asumpt)
-;;;             (acc-st . <-pfg . (_)
-;;;               (lf-let* ([new-term-name term-name : goal])
-;;;                 _)
-;;;             ))
-;;;         )
-;;;       )
-;;;     )
-;;;   )
-
-;;;   (cons ret-asumpt ret-st)
-;;; )
-
-
-;;; ;;; this version is proof-term ignored version
-;;; ;;;   we will not justifies why goal === (duplicate-one-level-forall goal)
-;;; (define/contract (duplicate-one-level-forall g)
-;;;   (Goal? . -> . Goal?)
-
-;;;   (define (each-case prev-f rec g)
-;;;     (match g
-;;;       [(forall _ _ _) (conj g g)] ; top level duplication
-;;;       [o/w (prev-f g)]
-;;;     )
-;;;   )
-;;;   (define result-f 
-;;;     (overloading-functor-list (list each-case goal-base-endofunctor pair-base-endofunctor identity-endo-functor))
-;;;   )
-;;;   (result-f g)
-;;; )
 
 ;;; asumpt x state x Goal -> Stream
-;;;  it will first collapse all the assumptions
-;;;   and then use unfold-one-level-relate on these assumptions
+;;;  it will first collapse/conj all the assumptions into one assumption
+;;;   and then use unfold-one-level-relate on the one assumption
 ;;;   
 ;;;  this is different from others in that it is stepping assumption
 ;;;  precondition: asumpt != empty, (has-relate asumpt)
@@ -1137,13 +1091,9 @@
   
   (define unfold-conj-assumpt-ty (unfold-one-level-relate conj-assumpt-ty))
   (define s-unfold-conj-asumpt-ty (syntactical-simplify unfold-conj-assumpt-ty))
-  ;;; Note: is it true that each forall will be only used once?
-  ;;; if it is then we need duplication of forall 
-  ;;; because there is duplication, so we do duplication after syntactical simplification
-  ;;; (define forall-duplicated (duplicate-one-level-forall s-unfold-conj-asumpt-ty))
 
   (define unfolded-goal (cimpl s-unfold-conj-asumpt-ty goal)) 
-  ;;; use cimpl here to make the 
+  ;;; use cimpl here to allow newly unfolded assumption processed by sem-solving
   (match-let*
      ([(cons st all-asumpt-term) (push-lflet st conj-assumpt-term : conj-assumpt-ty)]
       [(cons st axiom-unfold)    (push-axiom st (cimpl conj-assumpt-ty unfold-conj-assumpt-ty))]
@@ -1156,7 +1106,7 @@
           (lf-let* ([unfolded-goal-term _ : unfolded-goal])
             (LFapply unfolded-goal-term s-unfold-conj-term))))]
       )
-    ;;; every might be useful assumption is already in the unfolded goal
+    ;;; every might-be-useful assumption is already in the unfolded goal
     (pause empty-assumption-base final-st unfolded-goal)
   )
 )
@@ -1164,6 +1114,8 @@
 ;;; Try to prove g is unsatisfiable under st
 ;;;   that is proving (cimpl g (Bottom)) semantically
 ;;;     whose proof-term will also be put into st
+;;;   TODO: later we will prove this part into elaborator of vanilla miniKanren
+;;;     and only allow this works on quantifier-free goals
 (define/contract (prove-goal-unsat asumpt st g)
   (assumption-base? ?state? Goal? . -> . ?state?)
   ;;; TODO: to justify 
@@ -1334,10 +1286,11 @@
     ((forall var domain goal) 
       ;;; Note: we won't support complicated (like recursive 
       ;;;   relationship) in domain as the user
-      ;;;   can always use cimpl for complicated
+      ;;;     can always use cimpl for complicated antecident/domain
       ;;;   The good thing about this is that otherwise, the following
       ;;;     "checking-domain-emptieness" will need to be 
       ;;;     rewritten into stream computation, would be horrible
+      ;;;    and also we won't have decidable domain-exhaustiveness check
       
       ;;;  the first step is actually trying prove bottom from domain or otherwise
       ;;; TODO: add syntactical solving (i.e. put domain_ into the assumption but never solve it)
@@ -1346,13 +1299,10 @@
              (k (begin (debug-dump "\n ~a : domain_ : ~a " var domain_)))] 
 
         (match domain_
-          ;;; BUGFIX: shrink-into about st
 
           ;;; in the bottom case, inside proof term
-          ;;;   we try to prove domain -> Bottom, and them prove Bottom -> goal
+          ;;;   we try to prove domain -> Bottom, and then prove Bottom -> goal
           ;;;   then by composition we are done
-          ;;; TODO: also prove bottom from syntactical aspect, I think simplify-wrt is not returning
-          ;;;       precise result
           [(Bottom) (let* 
                       ([k (debug-dump "\n one solution: ~a" st)]
                        [from-bottom-ty (cimpl (Bottom) goal)]
@@ -1375,12 +1325,12 @@
                        )
                       res 
                       ) ]
-          ;;; [(Bottom) (wrap-state-stream st)] 
           [_ 
             (let* ([ignore-one-hole-st (st . <-pfg . (_1 _2) _2)])
               (bind-forall  asumpt
                             (set-add (state-scope st) var)
                             ;;; NOTE: the following "(ex var ..)" ex var is non-trivial and not removable.
+                            ;;;     which is explicitly handling the scoped var
                             (TO-DNF (TO-NON-Asymmetric asumpt (pause asumpt ignore-one-hole-st (ex var (conj domain_ goal)))) )  
                             var 
                             (forall var domain_ goal)))]
@@ -1511,29 +1461,6 @@
     ((pause asumpt st g) (start asumpt st g))
     (_            s)))
 
-
-;;; ;;; walk*/goals :: Goal x subst -> Goal
-;;; ;;;  precondition: subst has to be idempotent
-;;; (define (walk*/goal goal subst)
-;;;   (let* ([rec (lambda (g) (walk*/goal g subst))])
-;;;     (match goal
-;;;     ;;; non trivial parts
-;;;     ;;;   deal with terms
-;;;       ((== t1 t2) 
-;;;         (== (walk* t1 subst) (walk* t2 subst)))
-;;;     ;;; ex needs shadow the exvar
-;;;       ((ex exvar gn) 
-;;;         (ex exvar (walk*/goal gn (shadow-idempotent-sub exvar subst))))
-;;;     ;;; dead recursion on others
-;;;       ((disj g1 g2)
-;;;         (disj (rec g1) (rec g2)))
-;;;       ((conj g1 g2)
-;;;         (conj (rec g1) (rec g2)))
-;;;       ((relate thunk _)
-;;;         (relate (lambda () (rec (thunk)))))
-;;;     )
-;;;   )
-;;; )
 
 ;;; trivially negate the goal, relies on the fact that
 ;;;  we have a dualized goals
