@@ -59,6 +59,9 @@
 (require "proof-term.rkt")
 (require errortrace)
 
+
+;;; The following are for functionality of error-trace
+
 (instrumenting-enabled #t)
 ;;; (profiling-enabled #t)
 ;;; (profiling-record-enabled #t)
@@ -66,10 +69,12 @@
 ;;; (coverage-counts-enabled #t)
 
 
+;;; the parent type of all goals
+;;;  and "Goal?" is helpful 
 (struct Goal () 
   #:transparent)
 
-(struct relate Goal (thunk description)      ;;;#:prefab
+(struct relate Goal (thunk description)
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
@@ -82,6 +87,9 @@
      (fprintf output-port "~a =ᴸ ~a" (==-t1 val) (==-t2 val)))]
      ;;; L stands for Lisp Elements
 )
+
+;;; stands for existential quantifier
+;;;   indicating the scope of varname, 
 (struct ex Goal    (varname g) 
   #:transparent
   #:methods gen:custom-write
@@ -95,12 +103,8 @@
                                    "Should be Goal: ~e"
                                    g)]))
 )
-;;; meta-data ex, actually will be ignored at this stage
-;;;   indicating the scope of varname, 
-;;;   but only as a hint
 
-;;; we need implement the first version of complement,
-;;;   so the complement version of each operation need to be defined
+
 (struct =/= Goal (t1 t2)
   #:transparent
   #:methods gen:custom-write
@@ -108,6 +112,8 @@
      (fprintf output-port "~a ≠ᴸ ~a" (=/=-t1 val) (=/=-t2 val)))]
 )
 
+;;; universal quantifier,
+;;;   domain decides the domain the varname quantifies on
 (struct forall Goal (varname domain g)
   #:transparent
   #:methods gen:custom-write
@@ -168,8 +174,9 @@
 
 ;;; typeinfo is a set of type-symbol
 ;;; indicating t is union of these type
-;;;   this goal is usually not interfaced to the user
-
+;;; Note: this goal is not part of exposed interface 
+;;;   only inner mechanism use it
+;;;   Users will use (not-)symbolo, (not-)numbero, .. so on
 (struct type-constraint Goal (t typeinfo)
   #:transparent
   #:methods gen:custom-write
@@ -185,13 +192,6 @@
 )
 
 
-;;; haven't decided introduce or not
-;;;   details in domain-exhausitive check
-;;; (struct pairo (t)
-;;;   #:methods gen:custom-write
-;;;   [(define (write-proc val output-port output-mode)
-;;;      (fprintf output-port "not-string ~a" (not-stringo-t val)))]
-;;; )
 
 
 (struct Top Goal ()
@@ -210,8 +210,9 @@
 )
 
 
-;; first-order microKanren
-;;; goals
+;; first-order microKanren goals
+
+
 (struct disj Goal   (g1 g2) 
   #:transparent
   #:methods gen:custom-write
@@ -240,8 +241,13 @@
                                    (list g1 g2))]))
 )
 
-;;; constructive implication, basically will skip the 
+;;; constructive implication, 
+;;; its proof term is exactly the lambda
+;;;   basically will skip the 
 ;;;   handling of antec but directly proceed to conseq
+;;;  what's special about this is that
+;;;   the system will try to extract the decidable component of antec
+;;;     to either falsify or integrated into state
 (struct cimpl  Goal (g1 g2)
   #:transparent
   #:methods gen:custom-write
@@ -256,7 +262,10 @@
                                    (list g1 g2))]))
 )
 
-;;; Syntactic assumption all the time
+;;; constructive implication as well
+;;;   what's different is that it will not deal with the antec
+;;;     and directly consider every antec as part of assumption
+;;;     (no semantic solving on assumption at all)
 (struct cimpl-syn  cimpl ()  
   #:transparent
   #:methods gen:custom-write
@@ -270,14 +279,15 @@
                                    "All should be Goal: ~e"
                                    (list g1 g2))]))
 )
-;;; (struct assumption-base (base)
-;;;   #:transparent
-;;;   #:methods gen:custom-write
-;;;   [(define (write-proc val output-port output-mode)
-;;;      (fprintf output-port "{~a}" (assumption-base-base val)))]
-;;; )
 
+;;; used for contract
+;;; TODO: change to better things
 (define (any? _) #t)
+
+
+;;; The following are a incomplete interfaces for assumption-base
+;;;   in case in the future we want to modify the implementation
+;;;   of assumption base 
 (define (assumption-base? k) (list? k))
 (define (empty-assumption-base? k) (equal? k '()))
 (define empty-assumption-base '())
@@ -309,13 +319,17 @@
   (map (lambda (x) (car x)) asumpt)
 )
 
-;;; operation for assumption-base
+;;; The above are interfaces for assumption-base
 
 
 ;;; Denote Goal-EndoFunctor type as
 ;;;      (goal -> goal) -> (goal -> goal) -> goal -> goal
 ;;; extensible function on pattern matching
 ;;;  pretentious "endofunctor" just means it maps goal to goal
+;;;   named as functor but actually just a homomorphism --
+;;;     respects all the Goal? structure that is working on Goal?
+;;;   This is inspired by TVM's IRFunctor, 
+;;;     which I believe is also inspired by something else
 ;;; goal-base-endofunctor : (goal -> goal) -> (goal -> goal) -> goal -> goal
 ;;;  prev-f will call the one on the past overloading functor
 ;;;   extended-f will use the whole composed functor
@@ -332,6 +346,11 @@
   )
 )
 
+
+;;; Denote Goal-EndoFunctor type as
+;;;      (goal -> goal) -> (goal -> goal) -> goal -> goal
+;;;   named as functor but actually just a homomorphism --
+;;;     respects all the Goal? structure that is not only working on Goal?
 (define (goal-term-base-endofunctor prev-f rec g)
   ;;; (define rec extended-f)
   (match g
@@ -352,6 +371,8 @@
   )
 )
 
+
+;;; homomorphism on state
 (define (state-base-endo-functor prev-f rec g)
   (match g
     [(state a scope pfterm d e)
@@ -1244,8 +1265,9 @@
           (pause asumpt st-~g1-dec ~g1-dec-ty)
           ;;; A -> bot /\ A
           (pause asumpt st-~g1ndec (conj g1-dec (cimpl-syn g1-ndec (Bottom)))) 
-          ;;; give up syntactical falsifying 
+          ;;; and syntactical falsifying 
           (pause asumpt st-g1ndec-g2 (conj g1-dec (cimpl-syn g1-ndec g2)))))
+          ;;; and syntactical solving
     ))
     ((relate thunk descript)
       (pause asumpt [st . <-pfg . (_) (LFpack _ descript)] (thunk)))
