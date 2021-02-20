@@ -834,6 +834,28 @@
 )
 
 
+(define-relation (lengtho x y)
+  (conde ((== x '()) (== y '()))
+         ((fresh (xf xr yr)
+            (== x (cons xf xr))
+            (== y (cons 1 yr))
+            (lengtho xr yr)))))
+
+;;; currently unhalting.
+(lengtho-test-1
+  (run 1 () (for-all (x y) (cimpl (cimpl (== x (cons 'a y))
+                                      (lengtho x '(1 1 1)))
+                                (lengtho y '(1 1)))))
+. test-reg!=>ND . 'succeed                              
+)
+
+;;; currently unhalting
+(lengtho-test-2
+  (run 1 (L) (for-all (x y) (cimpl (cimpl (== x (cons 'a y))
+                                    (lengtho x '(1 1 1)))
+                                 (lengtho y L))))
+. test-reg!=>ND . 'succeed                              
+)
 
 ;;; 
 ;;; Following test-cases are for cimpl
