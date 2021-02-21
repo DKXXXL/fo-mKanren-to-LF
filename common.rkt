@@ -199,7 +199,46 @@
 ;;;   )
 
 ;;; Now it should support tproj term subject to substitution
-(define (walk t sub)
+;;; (define (walk t sub)
+;;;   (match t
+;;;     [(var _ _) 
+;;;       (let ((xt (assf (lambda (x) (equal? t x)) sub)))
+;;;         (if xt (walk (cdr xt) sub) t))]
+;;;     [(tproj v (cons cxr rest))
+;;;       #:when (member cxr '(car cdr))
+;;;       (let ([xt (assf (lambda (x) (equal? t x)) sub)]
+;;;             [tcxr (match cxr 
+;;;                     ['car tcar] 
+;;;                     ['cdr tcdr] 
+;;;                     [o/w (raise-and-warn "Unexpected projection ~a" t)])]
+;;;             )
+;;;         (if xt 
+;;;           (walk (cdr xt) sub) 
+;;;           (tcxr (walk (tproj_ v rest) sub))))]
+;;;     [_ t]
+;;;   )
+;;; )
+
+;;;  A composite contract
+;;; (define (cons-of? a? b?)
+;;;   (lambda (t)
+;;;     (and (pair? t) (a? (car t)) (b? (cdr t)))))
+
+;;; (define-syntax conses-of?
+;;;   (syntax-rules ()
+;;;     ((_ a? b?)
+;;;       (cons-of? a? b?))
+;;;     ((_ a? b? c? ...) 
+;;;       (cons-of? a? (conses-of? b? c?)))))
+
+(define (equation? x) (pair? x))
+
+;;; TODO: rewrite into monadic style
+;;;  it will return the modified state (sta, stj modified), the new term t',
+;;;     and a proof term of (t' = t)
+(define/contract (walk t st)
+  (any? state? . -> . (values state? any? proof-term?))
+  ;;; any? state . -> . (cons )
   (match t
     [(var _ _) 
       (let ((xt (assf (lambda (x) (equal? t x)) sub)))
@@ -281,7 +320,19 @@
 ;;;   to indicate disjoint sets
 ;;;   typercd : a dictionary index -> set of type-encoding 
 ;;;     "as disjunction of possible types"
-;;;   
+;;; sta/pfterm -- state - assumption. a hashmap maps each equation in state to a term (usually assumption)
+;;;     the invariance is that [(conj sta) implies (conj sub diseq typercd)] 
+;;;      usually used for pfterm-gen for 
+;;; stj -- state - justification. 
+;;;     the invariant is that [(conj sub diseq typercd) implies (conj stj)]
+;;;     basically this will justifies where each of the statement in state comes
+;;;       from (from all the unification it passes in)
+;;;   basically above two justifies (state <=> unification argument)
+;;;  thus if the state is failing, we still have stj saying why we can derive 
+;;;   stj is most of the time empty (i.e. not filled at all)
+;;;     it will be filled only during proving unsatisfiable
+(struct state-type (stj) #:prefab)
+(struct failed-state () #:prefab) ;; indicating bottom type
 (struct state (sub scope pfterm diseq typercd) #:prefab)
 (define empty-state (state empty-sub (list initial-var) single-hole '() (hash)))
 (define-struct-updaters state)
@@ -330,16 +381,37 @@
 
 
 ;; Unification
-(define (unify/sub u v sub)
-  (let ((u (walk u sub)) (v (walk v sub)))
-    (cond
-      ((and (var? u) (var? v) (var=? u v)) sub)
-      ((var? u)                            (extend-sub u v sub))
-      ((var? v)                            (extend-sub v u sub))
-      ((and (pair? u) (pair? v))           (let ((sub (unify/sub (car u) (car v) sub)))
-                                             (and sub (unify/sub (cdr u) (cdr v) sub))))
-      (else                                (and (eqv? u v) sub)))))
+;;; (define/contract (unify/sub u v sub)
+;;;   (let ((u (walk u sub)) (v (walk v sub)))
+;;;     (cond
+;;;       ((and (var? u) (var? v) (var=? u v)) sub)
+;;;       ((var? u)                            (extend-sub u v sub))
+;;;       ((var? v)                            (extend-sub v u sub))
+;;;       ((and (pair? u) (pair? v))           (let ((sub (unify/sub (car u) (car v) sub)))
+;;;                                              (and sub (unify/sub (cdr u) (cdr v) sub))))
+;;;       (else                                (and (eqv? u v) sub)))))
 
+;;; 
+(define/contract (unify/sub u v st)
+  (any? any? state? . -> . state?)
+  (match-let*-values 
+       ([(st1 u' t:u'=u) (walk u st)] 
+        [(st2 v' t:v'=v) (walk v st1)])
+    ;;; in pfterm-gen, generates u=v by assuming u'=v'
+    ;;; in stj, generates u'=v' by assuming u=v
+    (let*
+       ([t:u'=v' ]  ;; assuming u=v, and push into 
+        [t:u=v   ]) ;; assuming u'=v', and push into 
+      (cond
+      [(and (var? u) (var? v) (var=? u v)) st2]
+      [(var? u)                            (extend-sub u v sub)]
+      [(var? v)                            (extend-sub v u sub)]
+      [(and (pair? u) (pair? v))           (let ((sub (unify/sub (car u) (car v) sub)))
+                                             (and sub (unify/sub (cdr u) (cdr v) sub)))]
+      [else                                (and (eqv? u v) sub)]))
+      
+  )
+)
 
 ;;; (define (unify u v st)
 ;;;   (let ((sub (unify/sub u v (state-sub st))))
@@ -374,6 +446,8 @@
     ([each-var-types (hash->list typecses)])
     (check-as-inf-type-disj (cdr each-var-types) (car each-var-types) acc-st)))
 
+;;; invariant -- given a state, return a stream of state
+;;;     where each state has a proof-term filled
 (define/contract (unify u v st)
   (any? any? state? . -> . any?)
   ;;; inequality-recheck :: state -> state
@@ -428,8 +502,20 @@
 
 ;;; walk with struct respecting
 ;;;  will replace each var inside a structure with what sub points to
+;;; (define/contract (walk-struct-once tm sub)
+;;;   (any? list? . -> . any?)
+;;;     (match tm
+;;;       [(cons a b) (cons (walk-struct-once a sub) (walk-struct-once b sub))]
+;;;       [(tproj x cxr) (walk tm sub)]
+;;;       [(var _ _) (walk tm sub)]
+;;;       [_ tm]
+;;;     ))
+
+;;; TODO: rewrite into monadic style
+;;;  it will return the modified state (sta, stj modified), the new term t',
+;;;     and a proof term of (t' = tm)
 (define/contract (walk-struct-once tm sub)
-  (any? list? . -> . any?)
+  (any? state? . -> . (values state? any? equation?))
     (match tm
       [(cons a b) (cons (walk-struct-once a sub) (walk-struct-once b sub))]
       [(tproj x cxr) (walk tm sub)]
@@ -440,8 +526,11 @@
 
 ;;; walk* -- walk-struct-once until fixpoint
 ;;;  unhalt only if there is cycle in sub
+;;; TODO: rewrite into monadic style
+;;;  it will return the modified state (sta, stj modified), the new term t',
+;;;     and a proof term of (t' = t)
 (define/contract (walk* tm sub)
-  (any? list? . -> . any?)
+  (any? state? . -> . (values state? any? equation?))
   (let* ([tm- (walk-struct-once tm sub)]
         ;;;  [k (debug-dump "\n walk* ~a -> ~a" tm tm-)]
          )

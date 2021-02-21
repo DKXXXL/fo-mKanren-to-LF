@@ -38,6 +38,7 @@
 
 (struct proof-term () #:prefab)
 
+
 ;;; introduction rule
 (struct LFsigma proof-term (ex body wholeType)  #:prefab)
 ;;; elimination rule
@@ -55,6 +56,33 @@
 ;;; another issue is that wholeType is necessary here, because term 
 ;;; (5, refl) : (ex x, x == 5)
 ;;; (5, refl) : (ex x, 5 == 5)
+
+;;; we introduce another proof term
+;;;   called (ex-for var binding-domain goal) 
+;;;   it has closed semantic to (forall v domain goal)
+;;;   difference is that, binding-domain has to be non-empty (of goals)
+;;;   It is mainly used for justifying (ex) goal, because once (ex) goal
+;;;     is done, we actually get a state as a result, a state is actually a set of 
+;;;     value each variable can take restricted value from the state, but not ground/concrete value
+;;;   var is a single variable, corresponds the current (ex v goal)
+;;; this can be considered as a proof term combined of lambdas, lets 
+;;;     note that the introduced free variables are attached to the binding-domain
+;;;     so semantically we don't ask for "arbitrary free variable", but just ask for the existence of
+;;; one value for the "free variable" in the binding domain
+;;;  and to check the correctness of this proof term, we only need to, during proof-check (elaboration)
+;;;   to verify that there are concrete/grounded value that satisfies binding-domain
+
+;;; notice: this proof term can inhabit in existential, and also inhabited in universal
+;;;       quantifier
+(struct LFfor proof-term (var binding-domain goal) #:prefab)
+
+;;; inhabited in the existential
+(struct ex-for LFfor #:prefab)
+;;; inhabited in the universal
+(struct uni-for LFfor #:prefab)
+;;; thus now for universal/existenail quantifer, there are two possible proof terms
+;;;   LFsigma/LFlambda and LFfor
+
 (struct LFlet proof-term (v bind bindT body) #:prefab)
 
 
@@ -98,6 +126,10 @@
 (struct LFlambda proof-term (params types body) #:prefab)
 (struct LFapply proof-term (func args) #:prefab)
 (struct LFparam proof-term (index name) #:prefab)
+;;; 
+;;; this indicates free vars in the proof term
+;;;   just place holder and requires fill-in
+(struct LFopenterm LFparam (index name) #:prefab)
 (define newLFparam
   ((lambda ()
     (define idx 0)
