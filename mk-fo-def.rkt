@@ -210,6 +210,42 @@
                                    (list g1 g2))]))
 )
 
+;;; a short hand for g1 -> g2 /\ g2 -> g1
+;;; TODO: using https://stackoverflow.com/questions/52137060/how-to-avoid-loading-cycle-in-racket
+;;;     to cycle require the "decidable-goal?" from
+;;;     because we require g1, g2 are both decidable-goal
+(struct equiv Goal (g1 g2)  
+  #:transparent
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "(~a <=> ~a)" (equiv-g1 val) (equiv-g2 val)))]
+  #:guard (lambda (g1 g2 type-name)
+                    (cond
+                      [(andmap Goal? (list g1 g2)) 
+                       (values g1 g2)]
+                      [else (error type-name
+                                   "All should be Goal: ~e"
+                                   (list g1 g2))]))
+)
+
+;;; the following goal
+;;;   it "hmap" maps each goal to a proof-term (usually a parameter)
+;;;   and its semantic is the conjunction of all these goals
+;;; 
+(struct parameter-list Goal (hmap)
+  #:transparent
+  #:guard (lambda (hmap type-name)
+                    (cond
+                      [(hashmap? hmap) 
+                       (values g1 g2)]
+                      [else (error type-name
+                                   "Should be a hashmap")]))
+)
+
+;;; the following goal is exactly the semantic of a state
+(struct wrapped-state parameter-list () 
+  #:transparent)
+
 ;;; constructive implication, basically will skip the 
 ;;;   handling of antec but directly proceed to conseq
 (struct cimpl  Goal (g1 g2)
@@ -240,6 +276,8 @@
                                    "All should be Goal: ~e"
                                    (list g1 g2))]))
 )
+
+
 
 
 ;;; streams

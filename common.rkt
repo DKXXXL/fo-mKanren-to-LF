@@ -47,10 +47,12 @@
 
 ;;; bear with it now.... let me search if there is
 ;;;  extensible record later
+
 (require struct-update)
 (require racket/contract)
 (require errortrace)
 (require "proof-term.rkt")
+(require "mk-fo-def.rkt")
 
 (instrumenting-enabled #t)
 
@@ -308,6 +310,72 @@
 (define type-label-top (set true? false? null? pair? number? string? symbol?))
 (define all-inf-type-label (set pair? number? string? symbol?))
 
+;;; we introduce monadic style of coding
+;;;   as we will need to change state during
+
+;;; we can even later supports polymorphic rows/effect for it
+;;;  as we are untyped stuff
+;;; bg->front = bg -> (bg, front)
+(struct WithBackground (bgType bg->front) #:prefab)
+
+(define WB WithBackground)
+
+;;; change the following into macro
+(define (get ty) (WB ty (λ (bg) (cons bg bg))))
+(define (set ty) (λ (term) (WB ty (λ (_) (cons term '())))))
+(define (pure ty) (λ (term) (WB ty (λ (bg) (cons bg  term)))) )
+
+(define get-state (get state-type))
+(define set-state (set state-type))
+(define pure-state (pure state-type))
+
+
+(define/contract (>>= fwb domap)
+  (WithBackground? any? . -> . WithBackground?)
+  (WithBackground
+    (let*
+      ([TY (WithBackground-bgType)]
+       [fwbdo (WithBackground-bg->front)]
+      )
+      (λ (bg)
+        (match-let* 
+            ([(cons bg1 fr1) (fwbdo bg)]
+            [(WithBackground _ swbdo) (domap fr1)]
+            [bg2+fr2 (swbdo bg1)]
+            )
+          bg2+fr2)))))
+
+(define/contract (>> a b) (>>= a (λ (_) b)))
+
+;;; Recall that
+;;; get :: (WB state-type state-type)
+;;; set :: state-type -> (WB state-type '())
+;;;   we might be able to support polymorphic rows/effect (not type inference)
+;;;     on this two operations
+;;; >>= :: (WB x K) x (K -> WB x Y) -> (WB x Y)
+;;; most importantly : do notation
+;;; (do [x = y] sth ...) = match-let ([x y]) in (do sth ...) : (WithBackground ...)
+;;; (do [x <- y] sth ...) = 
+;;;     assert y of type (WB ...)
+;;;     y >>= \x -> (do sth ...)
+;;; with above it is easy to see that we can 
+;;; (do [_ <- y] sth ...) = y >> (do sth ...) 
+;;; (do [<-end x]) = x
+;;; (do [<-return x]) = (pure-state x)
+;;;     usually it is  
+
+(define-syntax do
+  (syntax-rules (<- <-end <-return =)
+    ((_ [x = y] sth ...) 
+      (match-let ([x y]) (do sth ...)))
+    ((_ [x <- y] sth ...) 
+      (y . >>= . (match-lambda x (do sth ...))))
+    ((_ [<-end y]) 
+      y)
+    ((_ [<-return y]) 
+      (pure-state y))
+  ))
+
 
 ;;; TODO: if all of the elements in type set are for the finite, 
 ;;;   then inequality might cause trouble  
@@ -320,18 +388,13 @@
 ;;;   to indicate disjoint sets
 ;;;   typercd : a dictionary index -> set of type-encoding 
 ;;;     "as disjunction of possible types"
-;;; sta/pfterm -- state - assumption. a hashmap maps each equation in state to a term (usually assumption)
-;;;     the invariance is that [(conj sta) implies (conj sub diseq typercd)] 
-;;;      usually used for pfterm-gen for 
-;;; stj -- state - justification. 
-;;;     the invariant is that [(conj sub diseq typercd) implies (conj stj)]
-;;;     basically this will justifies where each of the statement in state comes
-;;;       from (from all the unification it passes in)
-;;;   basically above two justifies (state <=> unification argument)
-;;;  thus if the state is failing, we still have stj saying why we can derive 
-;;;   stj is most of the time empty (i.e. not filled at all)
-;;;     it will be filled only during proving unsatisfiable
-(struct state-type (stj) #:prefab)
+;;; stjty : the type that indicating the current state is equivalent to all the unification current
+;;;     state going through (must be a equiv goal)
+;;;     above looks like (conj state) <=> (conj prim-goals)
+;;; stj : the term of stjty type
+;;; sta is the proof term mapping of stjty, it maps each goal/statment inside state
+;;;     to a proof term, invariant sta == stjty.g1
+(struct state-type (sta stj stjty) #:prefab)
 (struct failed-state () #:prefab) ;; indicating bottom type
 (struct state (sub scope pfterm diseq typercd) #:prefab)
 (define empty-state (state empty-sub (list initial-var) single-hole '() (hash)))
@@ -391,19 +454,32 @@
 ;;;                                              (and sub (unify/sub (cdr u) (cdr v) sub))))
 ;;;       (else                                (and (eqv? u v) sub)))))
 
-;;; 
-(define/contract (unify/sub u v st)
-  (any? any? state? . -> . state?)
+;;; returning state, t:u=v proof-term together
+(define/contract (unify/st/proof u v st)
+  (any? any? state? . -> . (values state? proof-term?))
+  (cond 
+    [(and (pair? u) (pair v)) 
+
+    ]
+  )
   (match-let*-values 
-       ([(st1 u' t:u'=u) (walk u st)] 
-        [(st2 v' t:v'=v) (walk v st1)])
+       ([(st1 u0 t:st=>u0=u) (walk u st)]  ;;; st=> ... is an open term with wrapped state as free-variables
+        [(st2 v0 t:st=>v0=v) (walk v st1)])
     ;;; in pfterm-gen, generates u=v by assuming u'=v'
     ;;; in stj, generates u'=v' by assuming u=v
     (let*
-       ([t:u'=v' ]  ;; assuming u=v, and push into 
-        [t:u=v   ]) ;; assuming u'=v', and push into 
+       ([t:l<=>r          (state-type-stj st)]
+        [t:l0<=>r0        (LFeqv-product t:l<=>r t:st=>u0=u t:st=>v0=v)]  
+        [t:st+u0=v0=>u=v  ()]
+        [newsta]          ;; adding the current assumption u0=v0 into sta so that we have sta' = sta+u0=v0 
+        [t:u=v            t:st+u0=v0=>u=v]
+        [newst            (state-type-sta-set 
+                              (state-type-stj-set st t:l0<=>r0)
+                              new-sta)]
+        [sub              (state-sub st)]
+        ) ;; now we assume 
       (cond
-      [(and (var? u) (var? v) (var=? u v)) st2]
+      [(and (var? u) (var? v) (var=? u v)) sub]
       [(var? u)                            (extend-sub u v sub)]
       [(var? v)                            (extend-sub v u sub)]
       [(and (pair? u) (pair? v))           (let ((sub (unify/sub (car u) (car v) sub)))
@@ -514,7 +590,7 @@
 ;;; TODO: rewrite into monadic style
 ;;;  it will return the modified state (sta, stj modified), the new term t',
 ;;;     and a proof term of (t' = tm)
-(define/contract (walk-struct-once tm sub)
+(define/contract (walk-struct-once tm st)
   (any? state? . -> . (values state? any? equation?))
     (match tm
       [(cons a b) (cons (walk-struct-once a sub) (walk-struct-once b sub))]

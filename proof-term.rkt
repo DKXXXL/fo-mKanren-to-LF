@@ -25,7 +25,7 @@
   lf-let*
   )
 
-
+(require "mk-fo-def.rkt")
 
 ;;; this file is defining structure for proof terms
 ;;;  vanilla miniKanren only has 
@@ -129,7 +129,23 @@
 ;;; 
 ;;; this indicates free vars in the proof term
 ;;;   just place holder and requires fill-in
-(struct LFopenterm LFparam (index name) #:prefab)
+(struct LFopenvar LFparam (index name) #:prefab)
+
+;;; its paras is a parameter-list (of Goal), and body will have
+;;; we use (paras => body) to indicate open term's type
+(struct LFopenterm proof-term (paras body) #:prefab)
+
+;;; the l=>r and r=>l are both open terms
+;;;   the type is exactly (eqv lr.paras rl.paras)
+;;;   some other enforcements are that lr.bodyType = (conj* rl.paras); rl 
+(struct LFeqvOpenterm proof-term (lr rl) #:prefab)
+
+;;; we staged the following operation into data structure
+
+;;; when A => u' = u, A -> v' = v, A <-> B
+;;; then we have (A /\ u' = v') <-> (B /\ u = v)
+(struct LFeqv-product proof-term (t:l<=>r t:l=>u0=u t:l=>v0=v) #:prefab)
+
 (define newLFparam
   ((lambda ()
     (define idx 0)
