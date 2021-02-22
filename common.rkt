@@ -195,52 +195,11 @@
 
 ;; States
 (define empty-sub '())
-;;; (define (walk t sub)
-;;;   (let ((xt (and (var? t) (assf (lambda (x) (var=? t x)) sub))))
-;;;     (if xt (walk (cdr xt) sub) t))
-;;;   )
-
-;;; Now it should support tproj term subject to substitution
-;;; (define (walk t sub)
-;;;   (match t
-;;;     [(var _ _) 
-;;;       (let ((xt (assf (lambda (x) (equal? t x)) sub)))
-;;;         (if xt (walk (cdr xt) sub) t))]
-;;;     [(tproj v (cons cxr rest))
-;;;       #:when (member cxr '(car cdr))
-;;;       (let ([xt (assf (lambda (x) (equal? t x)) sub)]
-;;;             [tcxr (match cxr 
-;;;                     ['car tcar] 
-;;;                     ['cdr tcdr] 
-;;;                     [o/w (raise-and-warn "Unexpected projection ~a" t)])]
-;;;             )
-;;;         (if xt 
-;;;           (walk (cdr xt) sub) 
-;;;           (tcxr (walk (tproj_ v rest) sub))))]
-;;;     [_ t]
-;;;   )
-;;; )
-
-;;;  A composite contract
-;;; (define (cons-of? a? b?)
-;;;   (lambda (t)
-;;;     (and (pair? t) (a? (car t)) (b? (cdr t)))))
-
-;;; (define-syntax conses-of?
-;;;   (syntax-rules ()
-;;;     ((_ a? b?)
-;;;       (cons-of? a? b?))
-;;;     ((_ a? b? c? ...) 
-;;;       (cons-of? a? (conses-of? b? c?)))))
 
 (define (equation? x) (pair? x))
 
-;;; TODO: rewrite into monadic style
-;;;  it will return the modified state (sta, stj modified), the new term t',
-;;;     and a proof term of (t' = t)
-(define/contract (walk t st)
-  (any? state? . -> . (values state? any? proof-term?))
-  ;;; any? state . -> . (cons )
+;;; Now it should support tproj term subject to substitution
+(define (walk t sub)
   (match t
     [(var _ _) 
       (let ((xt (assf (lambda (x) (equal? t x)) sub)))
@@ -260,6 +219,34 @@
   )
 )
 
+
+
+;;; monadic style
+(define/contract (walk/state t)
+  (any? . -> . (WithBackgroundOf? (=== state-type)))
+  ;;; any? state . -> . (cons )
+  (match t
+    [(var _ _) 
+      (let* ([xt (assf (lambda (x) (equal? t x)) sub)]
+             [t:xt ] ;;; get proof term of xt
+             )
+        (if xt 
+            (walk (cdr xt) sub) 
+            t))]
+    [(tproj v (cons cxr rest))
+      #:when (member cxr '(car cdr))
+      (let ([xt (assf (lambda (x) (equal? t x)) sub)]
+            [tcxr (match cxr 
+                    ['car tcar] 
+                    ['cdr tcdr] 
+                    [o/w (raise-and-warn "Unexpected projection ~a" t)])]
+            )
+        (if xt 
+          (walk (cdr xt) sub) 
+          (tcxr (walk (tproj_ v rest) sub))))]
+    [_ t]
+  )
+)
 ;;; BUGFIX: might need to double check this
 ;;;    as we introduce a new type of 'substitutable' tproj
 (define (occurs? x t sub)
@@ -270,6 +257,23 @@
 
 (define (extend-sub x t sub)
   (and (not (occurs? x t sub)) `((,x . ,t) . ,sub)))
+
+(define (extend-sub/state x t)
+  (any? any? . -> . (WithBackgroundOf? (=== state-type)))
+  (do 
+    [st     <- get-state]
+    [sub    = (state-sub st)]
+    [sta    = (state-type-sta st)]
+    [newsub = `((,x . ,t) . ,sub)]
+    [newsta = ( )]
+    (<-end 
+      (if (occurs? x t sub)
+        (set-st (failed-state))
+        (modify-st 
+          (lambda (st) (state-type-sta-set 
+                          (state-sub-set st newsub) newsta)))))
+  )
+)
 ;;; the above version is causing substitution "non-compositional"
 ;;;   the reason this thing comes up is motivated by two reasons:
 ;;; 1. each sigma is not idempotent currently 
@@ -325,9 +329,9 @@
 (define (set ty) (λ (term) (WB ty (λ (_) (cons term '())))))
 (define (pure ty) (λ (term) (WB ty (λ (bg) (cons bg  term)))) )
 
-(define get-state (get state-type))
-(define set-state (set state-type))
-(define pure-state (pure state-type))
+(define get-st (get state-type))
+(define set-st (set state-type))
+(define pure-st (pure state-type))
 
 
 (define/contract (>>= fwb domap)
@@ -414,6 +418,12 @@
               (lambda (pft) (pft . <-pf/h-inc . (hole holes ...) body)))) )
   ))
 
+(define (WithBackgroundOf? u?) 
+  (λ (k)
+    (and (WithBackground? k) (u? (WithBackground-bgType k)))))
+
+
+(define (=== k) (λ (x) (equal? x k)))
 ;;; ;;; TODO: uncomment above
 ;;; (define-syntax <-pfg
 ;;;   (syntax-rules ()
@@ -444,49 +454,51 @@
 
 
 ;; Unification
-;;; (define/contract (unify/sub u v sub)
-;;;   (let ((u (walk u sub)) (v (walk v sub)))
-;;;     (cond
-;;;       ((and (var? u) (var? v) (var=? u v)) sub)
-;;;       ((var? u)                            (extend-sub u v sub))
-;;;       ((var? v)                            (extend-sub v u sub))
-;;;       ((and (pair? u) (pair? v))           (let ((sub (unify/sub (car u) (car v) sub)))
-;;;                                              (and sub (unify/sub (cdr u) (cdr v) sub))))
-;;;       (else                                (and (eqv? u v) sub)))))
+(define (unify/sub u v sub)
+  (let ((u (walk u sub)) (v (walk v sub)))
+    (cond
+      ((and (var? u) (var? v) (var=? u v)) sub)
+      ((var? u)                            (extend-sub u v sub))
+      ((var? v)                            (extend-sub v u sub))
+      ((and (pair? u) (pair? v))           (let ((sub (unify/sub (car u) (car v) sub)))
+                                             (and sub (unify/sub (cdr u) (cdr v) sub))))
+      (else                                (and (eqv? u v) sub)))))
 
 ;;; returning state, t:u=v proof-term together
-(define/contract (unify/st/proof u v st)
-  (any? any? state? . -> . (values state? proof-term?))
-  (cond 
-    [(and (pair? u) (pair v)) 
+(define/contract (unify/st/proof u v)
+  (any? any?  . -> . (WithBackgroundOf? (=== state-type)))
+  (do 
+    [(cons u0 t:u0=u) <- (walk u)]
+    [(cons v0 t:v0=v) <- (walk v)]
+    ;;; [t:u0=v0<=>u=v   ] ;; we then construct this
+    [u0=v0->t:u=v ] ;; construct a lambda that construct u=v using a:u0=v0
+    (<-end 
+      (cond 
+        [(and (var? u0) 
+              (var? v0) 
+              (var=? u0 v0))    ]
+        [(var? u0)             
+            (extend-sub u0 v0)]
+        [(var? v0)             
+            (extend-sub v0 u0)]
+        [(and (pair? u0) 
+              (pair? v0))  
+            (do 
+              [(cons u01 u02) = u0]
+              [(cons v01 v02) = v0]
+              [t:u01=v01 <- (unify/st/proof u01 v01)]
+              [t:u02=v02 <- (unify/st/proof u02 v02)]
+              [t:u0=v0 ] ;; construct equality using
+              [<-return t:u0=v0])]
+        [(eqv? u0 v0) ] ;; the proof is trivially LFrefl
+        [o/w ] 
+        ;; unification failed. we return bottom state
+        ;;; here in the future we will also need to justifies using axiom 
+      )
+    
+    )
+  )
 
-    ]
-  )
-  (match-let*-values 
-       ([(st1 u0 t:st=>u0=u) (walk u st)]  ;;; st=> ... is an open term with wrapped state as free-variables
-        [(st2 v0 t:st=>v0=v) (walk v st1)])
-    ;;; in pfterm-gen, generates u=v by assuming u'=v'
-    ;;; in stj, generates u'=v' by assuming u=v
-    (let*
-       ([t:l<=>r          (state-type-stj st)]
-        [t:l0<=>r0        (LFeqv-product t:l<=>r t:st=>u0=u t:st=>v0=v)]  
-        [t:st+u0=v0=>u=v  ()]
-        [newsta]          ;; adding the current assumption u0=v0 into sta so that we have sta' = sta+u0=v0 
-        [t:u=v            t:st+u0=v0=>u=v]
-        [newst            (state-type-sta-set 
-                              (state-type-stj-set st t:l0<=>r0)
-                              new-sta)]
-        [sub              (state-sub st)]
-        ) ;; now we assume 
-      (cond
-      [(and (var? u) (var? v) (var=? u v)) sub]
-      [(var? u)                            (extend-sub u v sub)]
-      [(var? v)                            (extend-sub v u sub)]
-      [(and (pair? u) (pair? v))           (let ((sub (unify/sub (car u) (car v) sub)))
-                                             (and sub (unify/sub (cdr u) (cdr v) sub)))]
-      [else                                (and (eqv? u v) sub)]))
-      
-  )
 )
 
 ;;; (define (unify u v st)
@@ -587,11 +599,10 @@
 ;;;       [_ tm]
 ;;;     ))
 
-;;; TODO: rewrite into monadic style
-;;;  it will return the modified state (sta, stj modified), the new term t',
-;;;     and a proof term of (t' = tm)
-(define/contract (walk-struct-once tm st)
-  (any? state? . -> . (values state? any? equation?))
+;;; walk with struct respecting
+;;;  will replace each var inside a structure with what sub points to
+(define/contract (walk-struct-once tm sub)
+  (any? list? . -> . any?)
     (match tm
       [(cons a b) (cons (walk-struct-once a sub) (walk-struct-once b sub))]
       [(tproj x cxr) (walk tm sub)]
@@ -599,18 +610,33 @@
       [_ tm]
     ))
 
+;;; monadic style
+(define/contract (walk-struct-once/state tm)
+  (any? state? . -> . (WithBackgroundOf? (=== state-type)))
+    (match tm
+      [(cons a b) (cons (walk-struct-once a sub) (walk-struct-once b sub))]
+      [(tproj x cxr) (walk tm sub)]
+      [(var _ _) (walk tm sub)]
+      [_ tm]
+    ))
 
 ;;; walk* -- walk-struct-once until fixpoint
 ;;;  unhalt only if there is cycle in sub
-;;; TODO: rewrite into monadic style
-;;;  it will return the modified state (sta, stj modified), the new term t',
-;;;     and a proof term of (t' = t)
 (define/contract (walk* tm sub)
-  (any? state? . -> . (values state? any? equation?))
+  (any? list? . -> . any?)
   (let* ([tm- (walk-struct-once tm sub)]
         ;;;  [k (debug-dump "\n walk* ~a -> ~a" tm tm-)]
          )
     (if (equal? tm- tm) tm (walk* tm- sub))))
+
+;;; monadic style
+(define/contract (walk*/state tm)
+  (any? state? . -> . (WithBackgroundOf? (=== state-type)))
+  (do [tm- <- (walk-struct-once/state tm)]
+      (<-end 
+        (if (equal? tm- tm)
+          (pure-st tm)
+          (walk*/state tm-)))))
 
 (define (reified-index index)
   (string->symbol
