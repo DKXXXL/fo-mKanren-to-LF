@@ -418,6 +418,11 @@
 (define pfmap-ref hash-ref)
 (define pfmap-set hash-set)
 
+(define add-to-sta)
+(define add-to-stj)
+(define add-to-tha)
+(define add-to-thj)
+
 ;;; sub -- list of substution 
 ;;; diseq -- list of list of subsitution 
 ;;;     -- interpreted as conjunction of disjunction of inequality 
@@ -429,7 +434,7 @@
 ;;; sta : the assumption of state type
 ;;; thj : the proof term of the goals been through, using sta
 ;;; tha : the assumption of (through-goal) type
-;;; invariant key(stj) == key(sta), key(thj) == key(tha)
+;;; invariant key(stj) == key(sta), key(thj) \supseteq key(tha)
 (struct state-type (sta stj tha thj) #:prefab)
 (struct failed-state () #:prefab) ;; indicating bottom type
 (struct state (sub scope pfterm diseq typercd) #:prefab)
@@ -508,51 +513,96 @@
     [(_ a b) (λ (t) (a (b t)))]))
 
 ;;; returning state, t:u=v proof-term together
-(define/contract (unify/st/proof u v)
-  (any? any?  . -> . (WithBackgroundOf? (=== state-type?)))
+;;; note the invariant
+;;;   precondition: tha is already maintained its invariance
+;;;   tha is controlled by the outer goal
+;;;   the reason is that, for example, (== (cons x y) (cons z c))
+;;;     then we should only have "(== (cons x y) (cons z c))" inside tha
+;;;     without any of the term (== x z) and (== y c)
+;;;     because specification is that tha is all the goal it been through
+;;; the generated u=v pf term only uses sta as assumption
+(define/contract (unify/st/proof u v a:u=v)
+  (any? any? proof-term? . -> . (WithBackgroundOf? (=== state-type?)))
   (do 
     [(cons u0 t:u0=u) <- (walk/state u)]
     [(cons v0 t:v0=v) <- (walk/state v)]
+    ;;; [a:u=v <- (fresh-param (eqt) (add-to-tha (== u v) eqt))]
+    ;;; add u=v into tha
     [t:u0=v0->t:u=v 
       (λ (t:u0=v0)
         (let* ([t:u=u0 (LFeq-symm t:u0=u)]
                [t:u=v0 (LFeq-trans t:u=u0 t:u0=v0)]
                [t:u=v  (LFeq-trans t:u=v0 t:v0=v)])
           t:u=v))] ;; construct a lambda that construct u=v using a:u0=v0
+    [t:u=v->t:u0=v0 
+      (λ (t:u=v)
+        (let* ([t:v=v0 (LFeq-symm t:v0=v)]
+               [t:u=v0 (LFeq-trans t:u=v t:v=v0)]
+               [t:u0=v0  (LFeq-trans t:u0=u t:u=v0)])
+          t:u0=v0))] ;; construct a lambda that construct u=v using a:u0=v0
     (<-end 
       (cond 
         [(and (var? u0) 
               (var? v0) 
               (var=? u0 v0))  
-            (pure-st (t:u0=v0->t:u=v (LFeq-refl u0)))]
-        [(var? u0)             
+            ;;; no sta has been added, thus sta, stj won't change
+            ;;; but u=v will be added to thj
+            (do 
+              [t:u=v    = (t:u0=v0->t:u=v (LFeq-refl u0))]
+              [t:u0=v0  = (LFeq-refl u0)]
+              [_ <- (add-to-stj (== u0 v0) t:u0=v0)]
+              [_ <- (add-to-thj (== u v)   t:u=v)]
+              [<-return t:u=v]
+              )]
+        [(var? u0) 
+            ;;; (u0 == v0) has been added to sta, stj 
+            ;;; and u=v will be added to thj            
             (do
-              [_ <- (extend-sub u0 v0)] ;; now we have u0=v0 inside assumption
+              [_ <- (extend-sub/state u0 v0)] ;; now we have u0=v0 inside assumption
               [st  <- get-st]
               [newsta = (state-type-sta st)]
-              [t:u0=v0 (pfmap-ref newsta (== u0 v0))]
-              [t:u=v (t:u0=v0->t:u=v t:u0=v0)]
+              [a:u0=v0 (pfmap-ref newsta (== u0 v0))]
+              [t:u=v (t:u0=v0->t:u=v a:u0=v0)]
+              [t:u0=v0 (t:u=v->t:u0=v0 a:u=v)]
+              [_ <- (add-to-stj (== u0 v0) t:u0=v0)]
+              [_ <- (add-to-thj (== u v)   t:u=v)]
               [<-return t:u=v])]
-        [(var? v0)             
+        [(var? v0)     
+            ;;; (v0 == u0) has been added to sta, stj 
+            ;;; and u=v will be added to thj        
             (do
-              [_ <- (extend-sub v0 u0)] ;; now we have u0=v0 inside assumption
+              [_ <- (extend-sub/state v0 u0)] ;; now we have u0=v0 inside assumption
               [st  <- get-st]
               [newsta = (state-type-sta st)]
-              [t:v0=u0 (pfmap-ref newsta (== v0 u0))]
-              [t:u0=v0 (LFeq-symm t:v0=u0)]
-              [t:u=v (t:u0=v0->t:u=v t:u0=v0)]
+              [a:v0=u0 (pfmap-ref newsta (== v0 u0))]
+              [a:u0=v0 (LFeq-symm a:v0=u0)]
+              [t:u=v (t:u0=v0->t:u=v a:u0=v0)]
+              [t:u0=v0 (t:u=v->t:u0=v0 a:u=v)]
+              [t:v0=u0 (LFeq-symm t:u0=v0)]
+              [_ <- (add-to-stj (== v0 u0) t:v0=u0)]
+              [_ <- (add-to-thj (== u v)   t:u=v)]
               [<-return t:u=v])]
         [(and (pair? u0) 
               (pair? v0))  
+              ;;; sta, stj unchanged
+              ;;; adding u=v into thj
             (do 
               [(cons u01 u02) = u0]
               [(cons v01 v02) = v0]
-              [t:u01=v01 <- (unify/st/proof u01 v01)]
-              [t:u02=v02 <- (unify/st/proof u02 v02)]
+              [a:u0=v0 = (t:u=v->t:u0=v0 a:u=v)]
+              [a:u01=v01+a:u02=v02 (LFeq-pis a:u0=v0)]
+              [t:u01=v01 <- (unify/st/proof u01 v01 (LFpair-pi-1 a:u01=v01+a:u02=v02))]
+              [t:u02=v02 <- (unify/st/proof u02 v02 (LFpair-pi-2 a:u01=v01+a:u02=v02))]
               [t:u0=v0   =  (LFeq-pair t:u01=v01 t:u02=v02)] ;; construct equality using
-              [<-return (t:u0=v0->t:u=v t:u0=v0)])]
+              [t:u=v     =  (t:u0=v0->t:u=v t:u0=v0)]
+              [_ <- (add-to-thj t:u=v)]
+              [<-return t:u=v])]
         [(eqv? u0 v0) 
-            (pure-st (t:u0=v0->t:u=v (LFeq-refl u0)))] ;; the proof is trivially LFrefl
+            ;;; only add thj
+            (do
+              [t:u=v (t:u0=v0->t:u=v (LFeq-refl u0))]
+              [_ <- (add-to-thj t:u=v)]
+              [<-return t:u=v])] ;; the proof is trivially LFrefl
         [o/w 
             (set-st failed-state)] 
         ;; unification failed. we return bottom state
@@ -597,6 +647,15 @@
     ([each-var-types (hash->list typecses)])
     (check-as-inf-type-disj (cdr each-var-types) (car each-var-types) acc-st)))
 
+
+(define/contract (unify/state u v a:u=v)
+  (any? any? proof-term? . -> . (WithBackgroundOf? (=== state-type?)))
+  (do
+    [t:u=v         <- (unify/st/proof u v a:u=v)]
+    [unified-state <- get-st]
+
+  )
+)
 
 (define/contract (unify u v st)
   (any? any? state? . -> . any?)
@@ -787,6 +846,8 @@
     (and result (cons result #f)))
 )
 
+
+
 ;;; neg-unify* : given a list of pairs, indicating 
 ;;;   disjunction of inequality, solve them according to the current state
 ;;;   return a state that satisifies the disjunction of inequalities
@@ -823,6 +884,13 @@
         )
       ]
   )
+)
+
+
+;;; monadic style
+(define (neg-unify*/state list-u-v list:a:u=/=v)
+  (list? list? . -> . (WithBackgroundOf? (=== state-type?)))
+
 )
 
 

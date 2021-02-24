@@ -147,6 +147,8 @@
 (struct LFeq-trans proof-term (t1 t2) #:prefab)
 ;;; a = b, c = d then (a,c) = (b,d)
 (struct LFeq-pair proof-term (t1 t2) #:prefab)
+;;; if (a,c) = (b,d) then (a=b)/\(c=d)
+(struct LFeq-pis proof-term (t1 t2) #:prefab)
 
 ;;; we staged the following operation into data structure
 
