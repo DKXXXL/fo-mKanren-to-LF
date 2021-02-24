@@ -140,7 +140,16 @@
 ;;;   some other enforcements are that lr.bodyType = (conj* rl.paras); rl 
 (struct LFeqvOpenterm proof-term (lr rl) #:prefab)
 
+
+;;; equality proof term
+(struct LFeq-refl  proof-term (x) #:prefab)
+(struct LFeq-symm  proof-term (t) #:prefab)
+(struct LFeq-trans proof-term (t1 t2) #:prefab)
+;;; a = b, c = d then (a,c) = (b,d)
+(struct LFeq-pair proof-term (t1 t2) #:prefab)
+
 ;;; we staged the following operation into data structure
+
 
 ;;; when A => u' = u, A -> v' = v, A <-> B
 ;;; then we have (A /\ u' = v') <-> (B /\ u = v)
@@ -184,6 +193,8 @@
 
 ;;; for axiom schema
 (struct LFaxiom LFProofterm () #:prefab)
+
+(struct LFassert LFProofterm () #:prefab)
 
 ;;; usually just a (assumption) parameter
 (struct LFproof LFProofterm (term) #:prefab)

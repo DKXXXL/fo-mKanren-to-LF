@@ -223,16 +223,29 @@
 
 ;;; monadic style
 (define/contract (walk/state t)
-  (any? . -> . (WithBackgroundOf? (=== state-type)))
-  ;;; any? state . -> . (cons )
+  (any? . -> . (WithBackgroundOf? (=== state-type?)))
+  ;;; any? . -> . (pair-of? )
   (match t
     [(var _ _) 
-      (let* ([xt (assf (lambda (x) (equal? t x)) sub)]
-             [t:xt ] ;;; get proof term of xt
-             )
-        (if xt 
-            (walk (cdr xt) sub) 
-            t))]
+      (do
+        [st          <- get-st]
+        [sub         = (state-sub st)]
+        [sta         = (state-type-sta st)]
+        [t=t1        = (assf (lambda (x) (equal? t x)) sub)]
+        [<-end 
+          (if t=t1
+              (do 
+                [t1   = (cdr t=t1)]
+                [a:t=t1 = (pfmap-ref sta eqxt)]
+                [a:t1=t = (LFeq-symm a:t=t1)]
+                [(cons tend t:tend=t1) <- (walk/state t1)]
+                [a:tend=t (LFeq-trans a:tend=t1 a:t1=t)]
+                [<-return (cons tend a:tend=t)])
+              (pure-st (cons t (LFeq-refl t))))])]
+    ;;; currently no proof term for tproj
+    ;;;  as it is part of internal of relative complements
+    ;;;   maybe the better way to prove relative complements is to use 
+    ;;;   proof elaboration
     [(tproj v (cons cxr rest))
       #:when (member cxr '(car cdr))
       (let ([xt (assf (lambda (x) (equal? t x)) sub)]
@@ -244,7 +257,7 @@
         (if xt 
           (walk (cdr xt) sub) 
           (tcxr (walk (tproj_ v rest) sub))))]
-    [_ t]
+    [_ (pure-st (cons t (LFeq-refl t)))]
   )
 )
 ;;; BUGFIX: might need to double check this
@@ -259,13 +272,15 @@
   (and (not (occurs? x t sub)) `((,x . ,t) . ,sub)))
 
 (define (extend-sub/state x t)
-  (any? any? . -> . (WithBackgroundOf? (=== state-type)))
+  (any? any? . -> . (WithBackgroundOf? (=== state-type?)))
   (do 
     [st     <- get-state]
     [sub    = (state-sub st)]
     [sta    = (state-type-sta st)]
     [newsub = `((,x . ,t) . ,sub)]
-    [newsta = ( )]
+    [newkey = (== x t)]
+    [newsta = (fresh-param (term) 
+                  (pfmap-set newkey term))]
     (<-end 
       (if (occurs? x t sub)
         (set-st (failed-state))
@@ -314,40 +329,54 @@
 (define type-label-top (set true? false? null? pair? number? string? symbol?))
 (define all-inf-type-label (set pair? number? string? symbol?))
 
+(define (pair-of? x? y?)
+  (lambda (t)
+    (and (pair? t) (x? (car t)) (y? cdr t))))
 ;;; we introduce monadic style of coding
 ;;;   as we will need to change state during
 
 ;;; we can even later supports polymorphic rows/effect for it
 ;;;  as we are untyped stuff
 ;;; bg->front = bg -> (bg, front)
-(struct WithBackground (bgType bg->front) #:prefab)
+(struct WithBackground (bgType bg->front) 
+    #:guard (lambda (bgT? bgf type-name)
+                    (cond
+                      [(andmap procedure? (list bgT? bgf)) 
+                       (values 
+                          bgT? 
+                          (invariant-assertion 
+                            (bgT? . -> . (pair-of? bgT? any?)) 
+                            bgf))]
+                      [else (error type-name
+                                   "Should be a hashmap")]))
+;;; #:prefab
+)
 
 (define WB WithBackground)
 
+;;; can we multi-stage it? I mean partially evaluate monadic style
 ;;; change the following into macro
 (define (get ty) (WB ty (λ (bg) (cons bg bg))))
 (define (set ty) (λ (term) (WB ty (λ (_) (cons term '())))))
 (define (pure ty) (λ (term) (WB ty (λ (bg) (cons bg  term)))) )
 
-(define get-st (get state-type))
-(define set-st (set state-type))
-(define pure-st (pure state-type))
+(define get-st (get state-type?))
+(define set-st (set state-type?))
+(define pure-st (pure state-type?))
 
 
 (define/contract (>>= fwb domap)
-  (WithBackground? any? . -> . WithBackground?)
+  (WithBackground? (any? . -> . WithBackground?) . -> . WithBackground?)
   (WithBackground
     (let*
-      ([TY (WithBackground-bgType)]
-       [fwbdo (WithBackground-bg->front)]
-      )
-      (λ (bg)
-        (match-let* 
-            ([(cons bg1 fr1) (fwbdo bg)]
-            [(WithBackground _ swbdo) (domap fr1)]
-            [bg2+fr2 (swbdo bg1)]
-            )
-          bg2+fr2)))))
+      ([fwbdo (WithBackground-bg->front fwb)])
+        (λ (bg)
+            (match-let* 
+                ([(cons bg1 fr1) (fwbdo bg)]
+                [(WithBackground _ swbdo) (domap fr1)]
+                [bg2+fr2 (swbdo bg1)]
+                )
+              bg2+fr2)))))
 
 (define/contract (>> a b) (>>= a (λ (_) b)))
 
@@ -385,6 +414,10 @@
 ;;;   then inequality might cause trouble  
 ;;;   for example, (exists x y z.) they are all different, they are all booleans
 
+(define empty-pfmap (hash))
+(define pfmap-ref hash-ref)
+(define pfmap-set hash-set)
+
 ;;; sub -- list of substution 
 ;;; diseq -- list of list of subsitution 
 ;;;     -- interpreted as conjunction of disjunction of inequality 
@@ -392,13 +425,12 @@
 ;;;   to indicate disjoint sets
 ;;;   typercd : a dictionary index -> set of type-encoding 
 ;;;     "as disjunction of possible types"
-;;; stjty : the type that indicating the current state is equivalent to all the unification current
-;;;     state going through (must be a equiv goal)
-;;;     above looks like (conj state) <=> (conj prim-goals)
-;;; stj : the term of stjty type
-;;; sta is the proof term mapping of stjty, it maps each goal/statment inside state
-;;;     to a proof term, invariant sta == stjty.g1
-(struct state-type (sta stj stjty) #:prefab)
+;;; stj : the proof term of state type, using tha
+;;; sta : the assumption of state type
+;;; thj : the proof term of the goals been through, using sta
+;;; tha : the assumption of (through-goal) type
+;;; invariant key(stj) == key(sta), key(thj) == key(tha)
+(struct state-type (sta stj tha thj) #:prefab)
 (struct failed-state () #:prefab) ;; indicating bottom type
 (struct state (sub scope pfterm diseq typercd) #:prefab)
 (define empty-state (state empty-sub (list initial-var) single-hole '() (hash)))
@@ -464,23 +496,52 @@
                                              (and sub (unify/sub (cdr u) (cdr v) sub))))
       (else                                (and (eqv? u v) sub)))))
 
+;;; better composition syntax
+(define-syntax ○
+  (syntax-rules ()
+    [(_ t) t]
+    [(_ x y ...) (x . compose . (○ y ...))] ;; x ○ y ○ ... 
+  ))
+
+(define-syntax compose
+  (syntax-rules ()
+    [(_ a b) (λ (t) (a (b t)))]))
+
 ;;; returning state, t:u=v proof-term together
 (define/contract (unify/st/proof u v)
-  (any? any?  . -> . (WithBackgroundOf? (=== state-type)))
+  (any? any?  . -> . (WithBackgroundOf? (=== state-type?)))
   (do 
-    [(cons u0 t:u0=u) <- (walk u)]
-    [(cons v0 t:v0=v) <- (walk v)]
-    ;;; [t:u0=v0<=>u=v   ] ;; we then construct this
-    [u0=v0->t:u=v ] ;; construct a lambda that construct u=v using a:u0=v0
+    [(cons u0 t:u0=u) <- (walk/state u)]
+    [(cons v0 t:v0=v) <- (walk/state v)]
+    [t:u0=v0->t:u=v 
+      (λ (t:u0=v0)
+        (let* ([t:u=u0 (LFeq-symm t:u0=u)]
+               [t:u=v0 (LFeq-trans t:u=u0 t:u0=v0)]
+               [t:u=v  (LFeq-trans t:u=v0 t:v0=v)])
+          t:u=v))] ;; construct a lambda that construct u=v using a:u0=v0
     (<-end 
       (cond 
         [(and (var? u0) 
               (var? v0) 
-              (var=? u0 v0))    ]
+              (var=? u0 v0))  
+            (pure-st (t:u0=v0->t:u=v (LFeq-refl u0)))]
         [(var? u0)             
-            (extend-sub u0 v0)]
+            (do
+              [_ <- (extend-sub u0 v0)] ;; now we have u0=v0 inside assumption
+              [st  <- get-st]
+              [newsta = (state-type-sta st)]
+              [t:u0=v0 (pfmap-ref newsta (== u0 v0))]
+              [t:u=v (t:u0=v0->t:u=v t:u0=v0)]
+              [<-return t:u=v])]
         [(var? v0)             
-            (extend-sub v0 u0)]
+            (do
+              [_ <- (extend-sub v0 u0)] ;; now we have u0=v0 inside assumption
+              [st  <- get-st]
+              [newsta = (state-type-sta st)]
+              [t:v0=u0 (pfmap-ref newsta (== v0 u0))]
+              [t:u0=v0 (LFeq-symm t:v0=u0)]
+              [t:u=v (t:u0=v0->t:u=v t:u0=v0)]
+              [<-return t:u=v])]
         [(and (pair? u0) 
               (pair? v0))  
             (do 
@@ -488,10 +549,12 @@
               [(cons v01 v02) = v0]
               [t:u01=v01 <- (unify/st/proof u01 v01)]
               [t:u02=v02 <- (unify/st/proof u02 v02)]
-              [t:u0=v0 ] ;; construct equality using
-              [<-return t:u0=v0])]
-        [(eqv? u0 v0) ] ;; the proof is trivially LFrefl
-        [o/w ] 
+              [t:u0=v0   =  (LFeq-pair t:u01=v01 t:u02=v02)] ;; construct equality using
+              [<-return (t:u0=v0->t:u=v t:u0=v0)])]
+        [(eqv? u0 v0) 
+            (pure-st (t:u0=v0->t:u=v (LFeq-refl u0)))] ;; the proof is trivially LFrefl
+        [o/w 
+            (set-st failed-state)] 
         ;; unification failed. we return bottom state
         ;;; here in the future we will also need to justifies using axiom 
       )
@@ -534,8 +597,7 @@
     ([each-var-types (hash->list typecses)])
     (check-as-inf-type-disj (cdr each-var-types) (car each-var-types) acc-st)))
 
-;;; invariant -- given a state, return a stream of state
-;;;     where each state has a proof-term filled
+
 (define/contract (unify u v st)
   (any? any? state? . -> . any?)
   ;;; inequality-recheck :: state -> state
@@ -612,12 +674,17 @@
 
 ;;; monadic style
 (define/contract (walk-struct-once/state tm)
-  (any? state? . -> . (WithBackgroundOf? (=== state-type)))
+  (any? state? . -> . (WithBackgroundOf? (=== state-type?)))
     (match tm
-      [(cons a b) (cons (walk-struct-once a sub) (walk-struct-once b sub))]
-      [(tproj x cxr) (walk tm sub)]
-      [(var _ _) (walk tm sub)]
-      [_ tm]
+      [(cons a b) 
+        (do
+          [(cons a0 t:a0=a) <- (walk-struct-once/state a)]
+          [(cons b0 t:b0=b) <- (walk-struct-once/state b)]
+          [eqt (LFeq-pair t:a0=a t:b0=b)]
+          [<-return (cons (cons a0 b0) eqt)])]
+      [(tproj x cxr) (walk/state tm)]
+      [(var _ _) (walk/state tm)]
+      [_ (pure-st (cons tm (LFeq-refl tm)))]
     ))
 
 ;;; walk* -- walk-struct-once until fixpoint
@@ -631,7 +698,7 @@
 
 ;;; monadic style
 (define/contract (walk*/state tm)
-  (any? state? . -> . (WithBackgroundOf? (=== state-type)))
+  (any? state? . -> . (WithBackgroundOf? (=== state-type?)))
   (do [tm- <- (walk-struct-once/state tm)]
       (<-end 
         (if (equal? tm- tm)
