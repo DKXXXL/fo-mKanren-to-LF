@@ -335,9 +335,15 @@
 ;;; we introduce monadic style of coding
 ;;;   as we will need to change state during
 
+;;; we need to introduct a racket/generic for isNothing
+;;; so that WithBackground is basically StateT (Maybe T)
+;;;  see https://docs.racket-lang.org/reference/struct-generics.html
+
 ;;; we can even later supports polymorphic rows/effect for it
 ;;;  as we are untyped stuff
-;;; bg->front = bg -> (bg, front)
+;;; TODO: bg->front = bg -> (bg, front | #f)
+;;;   and bg supports Emptyable as racket/generic
+;;;     Emptyable supports isNone? and none operation
 (struct WithBackground (bgType bg->front) 
     #:guard (lambda (bgT? bgf type-name)
                     (cond
@@ -359,23 +365,33 @@
 (define (get ty) (WB ty (λ (bg) (cons bg bg))))
 (define (set ty) (λ (term) (WB ty (λ (_) (cons term '())))))
 (define (pure ty) (λ (term) (WB ty (λ (bg) (cons bg  term)))) )
+(define (run ty)  
+  (λ(wb st)
+    (match-let* 
+      ([(WithBackground ty? bg->front) wb]
+       [_ (assert-or-warn (ty? st) "Wrong WithBackground Invocation\n")])
+      (bg->front st))))
 
-(define get-st (get state-type?))
-(define set-st (set state-type?))
+(define get-st  (get state-type?))
+(define set-st  (set state-type?))
 (define pure-st (pure state-type?))
+(define run-st  (run state-type?))
 
-
+;;; 
 (define/contract (>>= fwb domap)
   (WithBackground? (any? . -> . WithBackground?) . -> . WithBackground?)
   (WithBackground
     (let*
-      ([fwbdo (WithBackground-bg->front fwb)])
+      ([isNone? failed-state?] ;; BUGFIX: adopt to generic later
+       [fwbdo (WithBackground-bg->front fwb)])
         (λ (bg)
-            (match-let* 
-                ([(cons bg1 fr1) (fwbdo bg)]
-                [(WithBackground _ swbdo) (domap fr1)]
-                [bg2+fr2 (swbdo bg1)]
-                )
+            (if (isNone? bg)
+              (cons bg #f)
+              (match-let* 
+                  ([(cons bg1 fr1) (fwbdo bg)]
+                  [(WithBackground _ swbdo) (domap fr1)]
+                  [bg2+fr2 (swbdo bg1)]
+                  ))
               bg2+fr2)))))
 
 (define/contract (>> a b) (>>= a (λ (_) b)))
@@ -436,7 +452,7 @@
 ;;; tha : the assumption of (through-goal) type
 ;;; invariant key(stj) == key(sta), key(thj) \supseteq key(tha)
 (struct state-type (sta stj tha thj) #:prefab)
-(struct failed-state () #:prefab) ;; indicating bottom type
+(struct failed-state (bot-from-sta bot-from-tha) #:prefab) ;; indicating bottom type
 (struct state (sub scope pfterm diseq typercd) #:prefab)
 (define empty-state (state empty-sub (list initial-var) single-hole '() (hash)))
 (define-struct-updaters state)
@@ -604,7 +620,7 @@
               [_ <- (add-to-thj t:u=v)]
               [<-return t:u=v])] ;; the proof is trivially LFrefl
         [o/w 
-            (set-st failed-state)] 
+            (set-st (failed-state (void)))] 
         ;; unification failed. we return bottom state
         ;;; here in the future we will also need to justifies using axiom 
       )
@@ -888,9 +904,42 @@
 
 
 ;;; monadic style
-(define (neg-unify*/state list-u-v list:a:u=/=v)
-  (list? list? . -> . (WithBackgroundOf? (=== state-type?)))
+;;;   the second is a big disjunction
+;;; precondition: (type a:Vu=/=v) is the disjunction of inequalities
+(define (neg-unify*/state list-u-v a:Vu=/=v)
+  (list? proof-term? . -> . (WithBackgroundOf? (=== state-type?)))
+  (match list-u-v
+    ['() #f]
+    [(cons (cons u v) rest)
+      (do 
+        [old-st <- get-st]
+        [a:u=v  =  (fresh-param (t) t)]
+        [(cons new-st t:u=v) = (run-st (unify/state u v a:u=v) old-st)]
+        [newly-added         = (extract-new (state-sub newst) (state-sub oldst))]
+        [<-end 
+          (match newly-added
+            [#f  
+                ;;; u=/=v is satisfied in new-st (a failed state),
+                ;;;   where we should have a u = v -> bottom
+                ;;;  or maybe just a bottom proof term from tha, sta
+                ;;;    we need to add the proof into thj
+                ;;; together with Vu=/=v (the big disjunction)
+                ;;; no change on sta, stj
+                (set-st old-st)]
+            ['()  
+                ;;; u=/=v is never satisfied, we proceed to check the rest
+                ;;;  if rest is satisfied, we can construct thj
+                ;;; no change on sta stj
+                (neg-unify*/state rest)]
+            [(cons _ _)
+                ;;; u=/=v is satisfied with newly given constraints
 
+            ]
+          )
+        ]
+      )
+    ]
+  )
 )
 
 
