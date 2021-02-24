@@ -420,7 +420,7 @@
   `(,tm-result : ≠ ,conj-disj-diseqs )
   )           
 (define (reify/initial-var st)
-  (debug-dump "\n reify with state: ~a" st)
+  (printf "\n reify with state: ~a" (state-pfterm-set st 'None))
   (reify initial-var st))
 
 ;;; reify the variable toggether with the constraints
