@@ -461,6 +461,7 @@
         (let* (
           [subst (state-sub st)]
           ;;; [old-type-info (state-typercd st)]
+          ;;; Note: I am using unify to check consistency after unify/sub
           [unification-info-single-stream (unify u v st)]
           [unification-info-st 
             (and unification-info-single-stream 

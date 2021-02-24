@@ -933,6 +933,24 @@
 (define-relation (False x)
   (False x))
 
+(Simple-Rewrite-1
+  (run 1 ()  (for-all (x z) (cimpl (conj (== x z)(False z)) 
+                                   (False x))))
+  . test-reg!=>ND . 'succeed  
+)
+
+
+(Simple-Rewrite-2
+  (run 1 ()  (for-all (x z) (cimpl (conj (== z x)(False z)) 
+                                   (False x))))
+  . test-reg!=>ND . 'succeed  
+)
+
+(Simple-Rewrite-3
+  (run 1 (x z)  (conj (== x z) (cimpl (False z)
+                                   (False x))))
+  . test-reg!=>ND . 'succeed  
+)
 
 (Syn-solve-1
   (run 1 (a)  (cimpl (False a) (False a)))

@@ -594,7 +594,8 @@
     ; this could be a state, a goal, and etc.
     ;;; we will at the end transform it into a stream of state
     (match (cons ag bg)
-    [(cons (relate _ b) (relate _ d))
+    [(cons (relate _ b) (relate _ d)) 
+      ;;; Note: Use Leibniz equality here for pf-term generation 
       (and (equal? (car b) (car d)) (== b d))]
     [(cons (== a b) (== c d))
       (conj* (== a c) (== b d))]
