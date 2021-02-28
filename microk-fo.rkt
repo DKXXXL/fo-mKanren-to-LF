@@ -867,6 +867,42 @@
   (st . <-pfg . (LFaxiom (cimpl g (Bottom)))) 
 )
 
+
+
+;;; following run will also add 
+;;; Note: will change tha
+(define/contract (run-unify s t st)
+  (any? any? state-type? . -> . (cons-of? state-type? proof-term?))
+  (run-st st 
+    (do
+      [a:s=t <- (fresh-param (term) (add-to-tha (== s t) term))] 
+      [<-end (unify/state s t a:s=t)]
+    ))
+)
+
+;;; precondition:
+;;;     v is not of finite type 
+;;; Note: will change tha
+(define/contract (run-inf-typecst v type?* st)
+  (any? set? state-type? . -> . (cons-of? state-type? proof-term?))
+  (run-st st 
+    (do
+      [a:has-type <- (fresh-param (term) (add-to-tha (type-constraint v type?*) term))] 
+      [<-end (check-as-inf-type-disj/state v type?* a:has-type)]
+    ))
+)
+
+
+;;; Note: will change tha
+(define/contract (run-neg-unify a b st)
+  (any? set? state-type? . -> . (cons-of? state-type? proof-term?))
+  (run-st st 
+    (do
+      [a:a=/=b <- (fresh-param (term) (add-to-tha (=/= s t) term))] 
+      [<-end (neg-unify/state a b a:a=/=b)]
+    ))
+)
+
 ;;; run a goal with a given state
 ;;; note that when st == #f, the returned stream will always be #f
 ;;; Specificaion: 
@@ -973,8 +1009,18 @@
     ))
     ((relate thunk descript)
       (pause asumpt [st . <-pfg . (_) (LFpack _ descript)] (thunk)))
-    ((== t1 t2) (unify t1 t2 (prim-goal-filled-st st g) ))
-    ((=/= t1 t2) (neg-unify t1 t2 (prim-goal-filled-st st g) ))
+    ((== t1 t2) 
+      (match-let* 
+          [(cons new-st t:t1=t2) (run-unify t1 t2 st)]
+          [new-st-w/pf             (new-st . <-pfg . t:t1=t2)]
+        (wrap-state-stream new-st-w/pf)))
+    ((=/= t1 t2)
+      (match-let* 
+          [(cons new-st t:t1=/=t2) (run-neg-unify t1 t2 st)]
+          [new-st-w/pf             (new-st . <-pfg . t:t1=/=t2)]
+        (wrap-state-stream new-st-w/pf)))
+
+
     ((symbolo t1)  (wrap-state-stream (check-as-inf-type symbol? t1 (prim-goal-filled-st st g))))
     ((not-symbolo t1) 
       (mplus 
@@ -993,6 +1039,7 @@
 
     ((type-constraint t types)
       (wrap-state-stream (check-as-inf-type-disj types t (prim-goal-filled-st st g))))
+
     ((ex v gn) 
       ;;; TODO: make scope a ordered set (or just a list)
       (let* (

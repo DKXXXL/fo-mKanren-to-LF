@@ -727,7 +727,7 @@
     [unified-st <- get-st]
     [unified-st-typecst = (state-typercd unified-st)]
     [unified-st-ineq    = (state-diseq  unified-st)]
-    [rechecking-st      = (state-diseq-set '())]
+    [rechecking-st      = (state-typercd (state-diseq-set unified-st '()) (hash))]
     [_ <- (set-st rechecking-st)]
     ;;; now we need to recheck 
     ;;;     all the inequalities and 
