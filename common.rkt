@@ -22,7 +22,6 @@
   unify/sub
   walk*
   term?
-  unitize-metavar
   reify
   reify/initial-var
   neg-unify
@@ -231,15 +230,21 @@
         [st          <- get-st]
         [sub         = (state-sub st)]
         [sta         = (state-type-sta st)]
+        [stj         = (state-type-stj st)]
         [t=t1        = (assf (lambda (x) (equal? t x)) sub)]
         [<-end 
           (if t=t1
               (do 
                 [t1   = (cdr t=t1)]
-                [a:t=t1 = (pfmap-ref sta eqxt)]
+                [a:t=t1 = (pfmap-ref sta (== t t1))]
+                [stj:t=t1 = (pfmap-ref stj (== t t1))]
                 [a:t1=t = (LFeq-symm a:t=t1)]
+                [stj:t1=t = (LFeq-symm stj:t=t1)]
                 [(cons tend t:tend=t1) <- (walk/state t1)]
-                [a:tend=t (LFeq-trans a:tend=t1 a:t1=t)]
+                [stj:tend=t1 <- (query-stj (== tend t1))]
+                [a:tend=t   = (LFeq-trans a:tend=t1 a:t1=t)]
+                [stj:tend=t = (LFeq-trans stj:tend=t1 stj:t1=t)]
+                [_ <- (add-to-stj (== tend t) stj:tend=t)]
                 [<-return (cons tend a:tend=t)])
               (pure-st (cons t (LFeq-refl t))))])]
     ;;; currently no proof term for tproj
@@ -434,10 +439,22 @@
 (define pfmap-ref hash-ref)
 (define pfmap-set hash-set)
 
-(define add-to-sta)
+(define/contract (add-to-sta tykey term)
+  (Goal? any? . -> . (WithBackgroundOf? (=== state-type?)))
+  ;;; (WithBackgrounds state-type? any?)
+  ;;;   the newly added stuff will be returned
+  (do 
+    [st <- get-st]
+    [newst = (state-sta-update st (λ (mapping) (pfmap-set mapping tykey term)))]
+    [_ <- (set-st newst)]
+    [<-return term]))
+(define query-sta)
 (define add-to-stj)
+(define query-stj)
 (define add-to-tha)
+(define query-tha)
 (define add-to-thj)
+(define query-thj)
 
 ;;; sub -- list of substution 
 ;;; diseq -- list of list of subsitution 
@@ -577,8 +594,8 @@
               [_ <- (extend-sub/state u0 v0)] ;; now we have u0=v0 inside assumption
               [st  <- get-st]
               [newsta = (state-type-sta st)]
-              [a:u0=v0 (pfmap-ref newsta (== u0 v0))]
-              [t:u=v (t:u0=v0->t:u=v a:u0=v0)]
+              [a:u0=v0 = (pfmap-ref newsta (== u0 v0))]
+              [t:u=v   = (t:u0=v0->t:u=v a:u0=v0)]
               [t:u0=v0 (t:u=v->t:u0=v0 a:u=v)]
               [_ <- (add-to-stj (== u0 v0) t:u0=v0)]
               [_ <- (add-to-thj (== u v)   t:u=v)]
@@ -617,10 +634,26 @@
             ;;; only add thj
             (do
               [t:u=v (t:u0=v0->t:u=v (LFeq-refl u0))]
-              [_ <- (add-to-thj t:u=v)]
+              [_ <- (add-to-thj (== u v) t:u=v)]
               [<-return t:u=v])] ;; the proof is trivially LFrefl
         [o/w 
-            (set-st (failed-state (void)))] 
+        ;;;   we will have u=v inside tha, thj
+        ;;;     u0=v0 inside sta, stj
+        ;;;   we will also have a bottom inside stj, but not bottom in thj
+            (do
+              [tha:u=v     =  a:u=v]
+              [sta:u0=v0   <- (fresh (term) (add-to-tha (== u0 v0) term))]
+              ;;; add to thj
+              [thj:u=v     <- (t:u0=v0->t:u=v sta:u0=v0)]
+              [stj:u0=v0   <- (t:u=v->t:u0=v0 tha:u=v)]
+              [to-bottom   =  (LFassert ((== u0 v0) . impl . (Bottom)))]
+              ;;; add bottom to thj
+              ;;; [_          <- (add-to-thj (Bottom) (LFapply to-bottom sta:u0=v0))]
+              ;;; add bottom to stj
+              [_          <- (add-to-stj (Bottom) (LFapply to-bottom stj:u0=v0))]
+              ;;; get into failed-state
+              [<-return thj:u=v]
+            )] 
         ;; unification failed. we return bottom state
         ;;; here in the future we will also need to justifies using axiom 
       )
@@ -830,16 +863,7 @@
 )
 
 
-;; Replace Meta-var inside term with Unit
-(define (unitize-metavar tm)
-  (let ([um unitize-metavar])
-    (match tm
-      [(var _ _) '()]
-      [(cons a b) (cons (um a) (um b))]
-      [x x]
-    )
-  )
-)
+
 
 
 ;;; subroutine : extract the added substiution
@@ -908,6 +932,13 @@
 ;;; precondition: (type a:Vu=/=v) is the disjunction of inequalities
 (define (neg-unify*/state list-u-v a:Vu=/=v)
   (list? proof-term? . -> . (WithBackgroundOf? (=== state-type?)))
+  (define all-disj-inequ-type 
+    (for/fold
+      [acc-goal (Bottom)]
+      [each-u-v-pair list-u-v]
+      (match-let* 
+        [(cons u v) each-u-v-pair]
+        (disj (=/= u v) acc-goal))))
   (match list-u-v
     ['() #f]
     [(cons (cons u v) rest)
@@ -920,20 +951,53 @@
           (match newly-added
             [#f  
                 ;;; u=/=v is satisfied in new-st (a failed state),
+                ;;;  thus we have u0=/=v0 as 
                 ;;;   where we should have a u = v -> bottom
-                ;;;  or maybe just a bottom proof term from tha, sta
-                ;;;    we need to add the proof into thj
+                ;;;       or maybe just a bottom proof term from tha, sta
+                ;;;   then we need to add the proof into thj, which is a simple assert
                 ;;; together with Vu=/=v (the big disjunction)
                 ;;; no change on sta, stj
-                (set-st old-st)]
+                (do                 
+                  [(cons u0 thj:u0=u) <- (walk/state u)]
+                  [(cons v0 thj:v0=v) <- (walk/state v)]
+                  [thj:u=v->u0=v0     =  ]
+                  ;;; [to-bottom   =  (LFassert ((== u0 v0) . impl . (Bottom)))]
+                  [new-st-thj     = (state-thj new-st)]
+                  [new-st-sta     = (state-sta new-st)]
+                  [bot            = (pfmap-ref new-st-thj (Bottom))]
+                  [the-parameter  = (pfmap-ref new-st-sta (== u0 v0))]
+                  [u0=v0->bot     = (LFassert ((== u0 v0) . impl . (Bottom)))]
+                  ;;; TODO: check free var in u0=v0->bot is bounded by old-state-sta
+                  [t:u=v->bot       = (fresh-param (t) (LFlambda t (== u v) (LFapply u0=v0->bot (thj:u=v->u0=v0 t))))]
+                  [axiom-neg      = (LFaxiom (impl (impl (== u v) (Bottom) (=/= u v))))]
+                  [t:u=/=v        = (LFapply axiom-neg t:u=v->bot)]
+                  [t:Vu=/=v       = (LFapply (LFassert ( (=/= u v) . impl . all-disj-inequ-type )) t:u=/=v)]
+                  [_              <- (add-to-thj (=/= u v) t:u=/=v)]
+                  [_              <- (add-to-thj all-disj-inequ-type t:Vu=/=v)]
+                  [<-return t:Vu=/=v]
+                )]
             ['()  
                 ;;; u=/=v is never satisfied, we proceed to check the rest
                 ;;;  if rest is satisfied, we can construct thj
+                ;;;   because it is easy to see that u=v can be proved
+                ;;;  in fact it is alreaady proved in new-st
                 ;;; no change on sta stj
-                (neg-unify*/state rest)]
+                (do 
+                  [_              <- (set-st new-st)]
+                  [(disj _ rest-inequ)  = all-disj-inequ-type]
+                  [contrapositive = (LFassert ((== u v) . impl . ((=/= u v) . impl . (Bottom))))]
+                  [not-u=/=v      = (LFapply contrapositive t:u=/=v)]
+                  [exclude-impossible = 
+                      (LFassert (((=/= u v) . impl . (Bottom)) . 
+                                  impl . ( all-disj-inequ-type . impl . rest-inequ))))]
+                  [a:rest-inequ   = (LFapply (LFapply exclude-impossible not-u=/=v) a:Vu=/=v)] 
+                  [<-end (neg-unify*/state rest a:rest-inequ)]
+                )]
             [(cons _ _)
                 ;;; u=/=v is satisfied with newly given constraints
-
+                ;;; at this stage we have proof term for
+                ;;;   u==v iff Λ (ui == vi)
+                ;;; whose contrapositive is the proof we want
             ]
           )
         ]
@@ -941,6 +1005,7 @@
     ]
   )
 )
+
 
 
 (define (state-sub-update-nofalse st f)
@@ -1028,6 +1093,146 @@
           [v (and (ormap (lambda (x?) (x? v)) (set->list inf-type?*)) st)]) ))
     ;;; return the following
     infinite-type-checked-state
+)
+
+(define/contract (term-not-finite-type x)
+  (any? . -> . Goal?)
+  (conj* (=/= x '()) (=/= x #t) (=/= x #f)))
+
+
+(define/contract (has-type-resp-equ-axiom-goal x0 x ty?*)
+    (any? any? set? . -> . Goal?)
+    ((x0 . == . x) 
+      . impl . 
+      ((type-constraint x0 ty?*) . impl . (type-constraint x ty?*))))
+
+
+(define/contract (has-type-intersect-axiom-goal x ty1?* ty2?*)
+    (any? set? set? . -> . Goal?)
+    ((type-constraint x0 ty1?*)
+      . impl . 
+      ((type-constraint x0 ty2?*) . impl . (type-constraint x (set-intersect ty1?* ty2?*)))))
+
+(define/contract (has-type-intersect-axiom-goal x ty1?* ty2?*)
+    (any? set? set? . -> . Goal?)
+    ((type-constraint x0 ty1?*)
+      . impl . 
+      ((type-constraint x0 ty2?*) . impl . (type-constraint x (set-intersect ty1?* ty2?*)))))
+
+(define/contract (has-type-subset-axiom-goal x ty1?* ty2?*)
+    (any? set? set? . -> . Goal?)
+    (assert-or-warn (subset? ty1?* ty2?*) "Not subtype inclusion! \n")
+    ((type-constraint x0 ty1?*) . impl (type-constraint x0 ty2?*)))
+
+
+(define/contract (has-empty-type-bottom x)
+    (any? set? set? . -> . Goal?)
+    (assert-or-warn (subset? ty1?* ty2?*) "Not subtype inclusion! \n")
+    ((type-constraint x (set)) . impl . (Bottom)))
+
+
+
+;;; precondition: (term-not-finite-type x) is in tha
+(define/contract (check-as-inf-type-disj/state type?* x a:has-type)
+  (set? any? . -> . (WithBackgroundOf? (=== state-type?)))
+  (define type-constraint-goal (type-constraint t type?*))
+  (if (set-empty? type?*)
+    (do 
+      [_ <- (add-to-thj type-constraint-goal )]
+      ;;; return bottom state
+
+    )
+  )
+
+  ;;; we will need to add t:has-type into thj
+  ;;;    also add t:has-type to stj/sta
+  ;;;     if we encounter 
+  (do 
+    [(cons x0 t:x0=x)  <- (walk/state x)]
+    [t:x=x0       = (LFeq-symm t:x0=x)]
+    [<-end 
+      (match x0 
+        [(var _ _ )
+            (do 
+              [x0TypeRcded <- (type-info-query x0 'NotSet)]
+              [x0TypeOrg =
+                (if (equal? x0Type 'NotSet)
+                  all-inf-type-label
+                  x0TypeRcded)]
+              [inf-type-axiom = (LFaxiom ( (term-not-finite-type x) . -> . (type-constraint x all-inf-type-label) ))]
+              [not-finite-x <- (query-tha (term-not-finite-type x))]
+              [inf-type-x   = (LFapply inf-type-axiom not-finite-x)]
+              
+              [inf-type-x0  = (LFapply (has-type-resp-equ-axiom-goal t:x=x0 inf-type-x))]
+              [prev-stj:has-type-Rcded <- 
+                (if (equal? x0Type 'NotSet)
+                    inf-type-x0
+                    (query-stj (type-constraint x0 x0TypeOrg)))]
+              [x0Type    = (set-intersect x0TypeOrg type?*)]
+
+              ;;; add to sta/tha
+              [sta:has-type <- (fresh-param (term) (add-to-sta (type-constraint x0 x0Type) term))]
+              [tha:has-type <- (fresh-param (term) (add-to-tha (type-constraint x  type?*) term))]
+              ;;; add to stj/thj
+              [stj:x0-has-type?* = 
+                (LFapply* (LFassert (has-type-resp-equ-axiom-goal x x0 type?*)) t:x=x0 tha:has-type)]
+              [stj:x0-has-x0Type =
+                (LFapply* (LFassert (has-type-intersect-axiom-goal x0 type?* x0TypeOrg)) stj:x0-has-type?* prev-stj:has-type-Rcded)]
+              [_ <- (add-to-stj (type-constraint x0 x0Type) stj:x0-has-x0Type)]
+              [thj:x-has-x0Type = 
+                (LFapply* (LFassert (has-type-resp-equ-axiom-goal x0 x x0Type)) t:x0=x sta:has-type)]
+              [thj:x-has-type?* =
+                (LFapply* (LFassert (has-type-subset-axiom-goal x x0Type type?*)) thj:x-has-x0Type)]
+              [_ <- (add-to-thj (type-constraint x  type?*) thj:x-has-type?*)]
+              ;;; Now deal with type information in the state
+              [_ <- (type-info-set x0 x0Type)]
+              [<-end 
+                (if (set-empty? x0Type)
+                    ;;; we are in bottom state
+                    (do 
+                      [stj:bottom (LFapply* (LFassert (has-empty-type-bottom x0)) stj:x0-has-x0Type)]
+                      [thj:bottom (LFapply* (LFassert (has-empty-type-bottom x))  thj:x-has-x0Type)]
+                      [_ <- (add-to-stj (Bottom) stj:bottom)]
+                      [_ <- (add-to-thj (Bottom) thj:bottom)]
+                      [<-return thj:x-has-type?*]
+                    )
+                    (pure-st thj:x-has-type?*))
+              ]
+            )]
+        [o/w 
+          (do 
+            [check-all-type-cst (ormap (lambda (x?) (x? v)) (set->list type?*))]
+            [<-end
+              (if check-all-type-cst
+                (do 
+                  [thj:checked-x0    = (LFassert (type-constraint x0 type?*))]
+                  [thj:checked-x     = (LFapply* (LFassert (has-type-resp-equ-axiom-goal x0 x type?*)) t:x0=x thj:checked-x0)]
+                  [_ <- (add-to-thj (type-constraint x type?) thj:checked-x)]
+                  [<-return thj:checked-proof])
+                
+                (do 
+                ;;; add to stj a bottom type
+                  [checked-x0   = (LFassert ((type-constraint x0 type?*) . -> . (Bottom)))]
+                  ;;; [sta:hastype <- (fresh (term) (add-to-sta (type-constraint x0 type?*) term))]
+                  ;;; [tha:hastype <- (fresh (term) (add-to-tha (type-constraint x type?*) term))]
+                  ;;; [_ <- (add-to-thj (Bottom) (LFapply* checked-x0 sta:has-type))]
+                  [thj:x=x0          = (LFeq-symm t:x0=x)]
+                  [stj:x0=x          <- (query-stj (== x0 x))]
+                  [stj:x=x0          = (LFeq-symm stj:x0=x)]
+                  [tha:checked-x     = a:has-type]
+                  [tha:checked-x0    = (LFapply* (LFassert (has-type-resp-equ-axiom-goal x x0 (set))) thj )]
+                  [stj:checked-x     ]
+                  ;;; [thj:checked-x     = (LFapply* (LFassert (has-type-resp-equ-axiom-goal x0 x type?*)) thj:x0=x thj:checked-x0)]
+                  [_ <- (add-to-thj (type-constraint x type?*) thj:checked-x)]
+                  )
+              )
+            ]
+          )
+        ]
+      
+      )
+    ]
+  )
 )
 
 ;;; check-as-inf-type :: inf-type-label  x term x (state or #f) -> (state or #f)

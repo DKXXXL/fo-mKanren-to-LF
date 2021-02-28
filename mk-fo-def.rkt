@@ -246,6 +246,20 @@
 (struct wrapped-state parameter-list () 
   #:transparent)
 
+;;; just a abbreviation of ~g1 \/ g2
+(struct impl Goal (g1 g2)
+  #:transparent
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "(~a => ~a)" (impl-g1 val) (impl-g2 val)))]
+  #:guard (lambda (g1 g2 type-name)
+                    (cond
+                      [(andmap Goal? (list g1 g2)) 
+                       (values g1 g2)]
+                      [else (error type-name
+                                   "All should be Goal: ~e"
+                                   (list g1 g2))]))
+)
 ;;; constructive implication, basically will skip the 
 ;;;   handling of antec but directly proceed to conseq
 (struct cimpl  Goal (g1 g2)

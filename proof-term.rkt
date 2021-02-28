@@ -125,6 +125,15 @@
 ;;;  But constructivity requires us to consider proposition as types
 (struct LFlambda proof-term (params types body) #:prefab)
 (struct LFapply proof-term (func args) #:prefab)
+
+(define-syntax LFapply*
+  (syntax-rules ()
+    ((_ l x) (LFapply l x))
+    ((_ l x y ...) 
+      (LFapply* (LFapply l x) y ...))
+    ))
+
+
 (struct LFparam proof-term (index name) #:prefab)
 ;;; 
 ;;; this indicates free vars in the proof term
@@ -196,6 +205,9 @@
 ;;; for axiom schema
 (struct LFaxiom LFProofterm () #:prefab)
 
+;;; a term of an arbitrary type
+;;; during type checking, we will check if the type is inhabit
+;;;  usually to encode something absurd like (1 == 2 -> Bottom)
 (struct LFassert LFProofterm () #:prefab)
 
 ;;; usually just a (assumption) parameter
