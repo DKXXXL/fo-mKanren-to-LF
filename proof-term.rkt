@@ -164,7 +164,11 @@
 
 ;;; when A => u' = u, A -> v' = v, A <-> B
 ;;; then we have (A /\ u' = v') <-> (B /\ u = v)
-(struct LFeqv-product proof-term (t:l<=>r t:l=>u0=u t:l=>v0=v) #:prefab)
+;;; (struct LFeqv-product proof-term (t:l<=>r t:l=>u0=u t:l=>v0=v) #:prefab)
+
+;;; on cartesian monodial category
+(struct LFeqv-product proof-term (l-params r-params l-proofs r-proofs) #:prefab)
+
 
 (define newLFparam
   ((lambda ()

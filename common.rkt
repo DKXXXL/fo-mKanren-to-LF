@@ -652,7 +652,8 @@
               ;;; add bottom to stj
               [_          <- (add-to-stj (Bottom) (LFapply to-bottom stj:u0=v0))]
               ;;; get into failed-state
-              [<-return thj:u=v]
+              [_ <- (set-st (failed-state))]
+              [<-return '()]
             )] 
         ;; unification failed. we return bottom state
         ;;; here in the future we will also need to justifies using axiom 
@@ -1037,6 +1038,48 @@
                 ;;; at this stage we have proof term for
                 ;;;   u==v iff Λ (ui == vi)
                 ;;; whose contrapositive is the proof we want
+                (do 
+                  [newsubs    = newly-added]
+                  
+                  [new-st-sta = (state-type-sta new-st)]
+                  [new-st-tha = (state-type-tha new-st)]
+                  [l-new-eqs = (map (λ (p) (== (car p) (cdr p))) newsubs)]
+                  [n-l-new-eqs = (complement l-new-eqs)]
+                  [r-equ     = (== u v)]
+                  [n-r-equ   = (=/= u v)]
+                  [about-rest = (foldl disj (Bottom)
+                                  (map (λ (t) (=/= (car t) (cdr t))) newsubs))]
+                  [target-type-for-stj = (foldl disj (Bottom)
+                                  (map (λ (t) (=/= (car t) (cdr t))) newsubs))]
+                  [target-type-for-thj = (foldl disj (Bottom)
+                                  (map (λ (t) (=/= (car t) (cdr t))) list-u-v))]
+                  ;;; we extract proof for l-new-eqs <-> r-equ
+                  [l-params  = (map (λ (eq) (pfmap-ref new-st-sta eq)) l-new-eqs)]
+                  [l-proofs  = (map (λ (eq) (pfmap-ref new-st-stj eq)) l-new-eqs)]
+                  [r-param   = (pfmap-ref new-sta-tha r-equ)]
+                  [r-proof    = (pfmap-ref new-sta-thj r-equ)]
+                  [l<->r-type = (equiv (foldl conj l-new-eqs (Top)) r-equ)]
+                  [l<->r      = (LFeqv-product l-params (list r-params) l-proofs (list r-proof))]
+                  [n-l<->r-type = (equiv n-l-new-eqs n-r-equ)]
+                  [l<->r->n-l<->r = (LFassert (l<->r-type . impl . n-l<->r-type))]
+                  [n-l<->r    = (LFapply* l<->r->n-l<->r l<->r)]
+                  [n-l2<->r2  = (LFapply* (LFassert ((equiv n-l-new-eqs n-r-equ) . impl . (equiv (disj n-l-new-eqs about-rest) (disj n-r-equ about-rest)))) n-l<->r)]
+                  ;;; now we modify state
+                  [updating-sta-pair = (append newly-added rest)]
+                  [updating-sta-goal = (foldl disj (Bottom) (map (λ (t) (=/= (car t) (cdr t)))) updating-sta-pair)]
+                  [updating-tha-pair = list-u-v]
+                  [updating-tha-goal = (foldl disj (Bottom) (map (λ (t) (=/= (car t) (cdr t)))) updating-tha-pair)]
+                  [updated-st = (state-diseq-update old-st (lambda (x) (cons (append newly-added rest) x)))]
+                  [_          <- (set-st updated-st)]
+                  ;;; now we add tha, sta about updated-st 
+                  [sta-l          <- (fresh (term) (add-to-sta updating-sta-goal))]
+                  [tha-r          <- (fresh (term) (add-to-tha updating-tha-goal))]
+                  [n-r     = (LFapply* (LFpair-pi-1 n-l2<->r2) sta-l)]
+                  [n-l     = (LFapply* (LFpair-pi-2 n-l2<->r2) tha-r)]
+                  [_    <- (add-to-stj target-type-for-stj n-l)]
+                  [_    <- (add-to-thj target-type-for-thj n-r)]
+                  [<-return n-r]
+                )
             ]
           )
         ]
