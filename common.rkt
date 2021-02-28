@@ -699,10 +699,49 @@
 
 (define/contract (unify/state u v a:u=v)
   (any? any? proof-term? . -> . (WithBackgroundOf? (=== state-type?)))
-  (do
-    [t:u=v         <- (unify/st/proof u v a:u=v)]
-    [unified-state <- get-st]
+  (define/contract (inequality-recheck conj-disj-pair)
+    (list? . -> . (WithBackgroundOf? (=== state-type?)))
+    (for/fold 
+      [acc       (pure-st '())]
+      [each-disj conj-disj-pair]
+      ((neg-unify*/state each-disj) . >> . acc)
+    ))
+  )
 
+  (define/contract (typecst-recheck var-type-pair)
+    (list? . -> . (WithBackgroundOf? (=== state-type?)))
+    (for/fold 
+      [acc (pure-st '())]
+      [each var-type-pair]
+      (match-let* 
+        [(cons v cst) each]
+        ((if (set? cst)
+             (check-as-inf-type-disj/state v cst)
+             (pure-st '())) 
+         . >> . acc))))
+
+  (do
+    [old-st     <- get-st]
+    [t:u=v         <- (unify/st/proof u v a:u=v)]
+    [unified-st <- get-st]
+    [unified-st-typecst = (state-typercd unified-st)]
+    [unified-st-ineq    = (state-diseq  unified-st)]
+    [rechecking-st      = (state-diseq-set '())]
+    [_ <- (set-st rechecking-st)]
+    ;;; now we need to recheck 
+    ;;;     all the inequalities and 
+    ;;;     all the type-cst
+    ;;;     about the new vars
+    [new-subst     = (extract-new (state-sub unified-st) (state-sub old-st))]
+    [new-vars      = (map car new-subst)]
+    ;;; get related type-cst from 
+    [related-type-csts = 
+      (map (λ (v) (cons v (hash-ref unified-st-typecst v 'UNFOUND))) new-vars)]
+    ;;; TODO: remove those extracted type-cst (why?)
+    [_ <- (typecst-recheck related-type-csts)]
+    ;;; get all inequalities and re-check
+    [_ <- (inequality-recheck unified-st-ineq)]
+    [<-return t:u=v]
   )
 )
 
@@ -1220,10 +1259,12 @@
                   [stj:x0=x          <- (query-stj (== x0 x))]
                   [stj:x=x0          = (LFeq-symm stj:x0=x)]
                   [tha:checked-x     = a:has-type]
-                  [tha:checked-x0    = (LFapply* (LFassert (has-type-resp-equ-axiom-goal x x0 (set))) thj )]
-                  [stj:checked-x     ]
+                  [stj:checked-x0    = (LFapply* (LFassert (has-type-resp-equ-axiom-goal x x0 (set))) stj:x0=x tha:checked-x)]
+                  [stj:bottom        = (LFapply* checked-x0 stj:checked-x0)]
+                  [_ <- (add-to-stj (Bottom) stj:bottom)]
+                  [<-end (failed-state)]
                   ;;; [thj:checked-x     = (LFapply* (LFassert (has-type-resp-equ-axiom-goal x0 x type?*)) thj:x0=x thj:checked-x0)]
-                  [_ <- (add-to-thj (type-constraint x type?*) thj:checked-x)]
+                  ;;; [_ <- (add-to-thj (type-constraint x type?*) thj:checked-x)]
                   )
               )
             ]
