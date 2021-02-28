@@ -376,11 +376,18 @@
       ([(WithBackground ty? bg->front) wb]
        [_ (assert-or-warn (ty? st) "Wrong WithBackground Invocation\n")])
       (bg->front st))))
+(define (modify ty)
+  (λ (f)
+    (do [st <- get-st]
+        [_ <- (set-st (f st))]
+        [<-return '()])))
+
 
 (define get-st  (get state-type?))
 (define set-st  (set state-type?))
 (define pure-st (pure state-type?))
 (define run-st  (run state-type?))
+(define modify-st (modify state-type?))
 
 ;;; 
 (define/contract (>>= fwb domap)
