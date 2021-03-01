@@ -1,5 +1,14 @@
 #lang racket
 (provide 
+
+  ;;; Debug Facility
+  debug-dump-w/level
+  debug-dump
+  raise-and-warn
+  assert-or-warn
+  assert
+  set-debug-info-threshold!
+
   (struct-out Goal)
   (struct-out disj)
   (struct-out conj)
@@ -33,6 +42,7 @@
   for-all
   for-bound
   for-bounds
+  complement
 
   any?
   assumption-base?
@@ -40,6 +50,14 @@
   empty-assumption-base?
 
   Stream?
+
+  type-label-top
+  all-inf-type-label
+  true?
+  false?
+
+  is-of-finite-type
+
 
 )
 
@@ -217,6 +235,18 @@
                                    "All should be Goal: ~e"
                                    (list g1 g2))]))
 )
+
+(define-syntax conj*
+  (syntax-rules ()
+    ((_)                succeed)
+    ((_ g)              g)
+    ((_ gs ... g-final) (conj (conj* gs ...) g-final))))
+(define-syntax disj*
+  (syntax-rules ()
+    ((_)           fail)
+    ((_ g)         g)
+    ((_ g0 gs ...) (disj g0 (disj* gs ...)))))
+
 
 ;;; a short hand for g1 -> g2 /\ g2 -> g1
 ;;; TODO: using https://stackoverflow.com/questions/52137060/how-to-avoid-loading-cycle-in-racket
@@ -404,4 +434,104 @@
       (let ( [k (var/fresh 'k)] ) 
         (forall k (Top) (for-bound (x ...) conds g0 gs ... )) )
     )))
+
+;;; trivially negate the goal, relies on the fact that
+;;;  we have a dualized goals
+;;; doesn't support user-customized goal, and universal-quantification
+(define/contract (complement g)
+  (Goal? . -> . Goal?)
+  (let ([c complement])
+    (match g
+      [(disj g1 g2) (conj (c g1) (c g2))]
+      [(conj g1 g2) (disj (c g1) (c g2))]
+      [(cimpl a b) ;;; \neg a \lor b 
+        (conj a (complement b))]
+      [(relate _ _) 
+        (raise-and-warn "User-Relation not supported.")]
+      [(== t1 t2) (=/= t1 t2)]
+      [(=/= t1 t2) (== t1 t2)]
+      [(ex a gn) (forall a (Top) (c gn))]
+      [(forall v bound gn) ;; forall v. bound => g
+        (ex v (conj bound (complement gn))) ]
+      [(numbero t) (not-numbero t)]
+      [(not-numbero t) (numbero t)]
+      [(stringo t) (not-stringo t)]
+      [(not-stringo t) (stringo t)]
+      [(symbolo t) (not-symbolo t)]
+      [(not-symbolo t) (symbolo t)]
+      [(type-constraint t types) 
+        (disj (type-constraint t (set-subtract all-inf-type-label types)) (is-of-finite-type t))]
+      [(Top) (Bottom)]
+      [(Bottom) (Top)]
+    )
+  )
+)
+
+(define (true? v) (equal? v #t))
+(define (false? v) (equal? v #f))
+;;; (null? '() )
+
+(define type-label-top (set true? false? null? pair? number? string? symbol?))
+(define all-inf-type-label (set pair? number? string? symbol?))
+
+;;; var -> goal
+;;;   a bunch of goal asserts v is of finite type
+(define/contract (is-of-finite-type v)
+  (any? . -> . Goal?)
+  (disj* (== v #t) (== v #f) (== v '()))
+)
+
+
+;;; debug info
+
+(define (debug-info-initialization)
+  (define debug-info-threshold 
+    (if (equal? debug-output-info 'ON) -100 1))
+  (define (get-debug-info-threshold)
+    debug-info-threshold)
+
+  (define (set-debug-info-threshold! l)
+    (set! debug-info-threshold l))
+  
+  (values get-debug-info-threshold set-debug-info-threshold!)
+)
+
+(define-values 
+  (get-debug-info-threshold set-debug-info-threshold!)
+  (debug-info-initialization))
+
+
+(define-syntax debug-dump-w/level
+  (syntax-rules ()
+    ((_ l x ...) 
+      (if (>= l (get-debug-info-threshold)) 
+        (printf x ...)
+        'Threshold-Too-High))
+          ))
+
+(define-syntax debug-dump
+  (syntax-rules ()
+    ((_ x ...) 
+      (debug-dump-w/level 0 x ...))))
+
+(define-syntax raise-and-warn
+  (syntax-rules ()
+    ((_ x ...) 
+      (begin (debug-dump-w/level 100 x ...) (/ 1 0)))))
+
+(define-syntax assert-or-warn
+  (syntax-rules ()
+    ((_ COND x ...) 
+      (if COND
+        #t
+        (begin (debug-dump-w/level 100 x ...) (/ 1 0)  )))))
+
+(define-syntax assert
+  (syntax-rules ()
+    ((_ COND) 
+      (assert-or-warn COND "Assertion Violated!"))))
+
+
+;;; set the following to 'ON then we will have debug info
+(define debug-output-info 'OFF)
 

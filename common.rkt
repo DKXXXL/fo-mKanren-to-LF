@@ -28,10 +28,7 @@
   wrap-state-stream
   check-as-inf-type-disj
   check-as-inf-type
-  type-label-top
-  all-inf-type-label
-  true?
-  false?
+
   any?
   ?state?
   debug-dump-w/level
@@ -55,8 +52,6 @@
 
 (instrumenting-enabled #t)
 
-;;; set the following to 'ON then we will have debug info
-(define debug-output-info 'OFF)
 
 
 ;; Logic variables
@@ -76,53 +71,6 @@
 ;; reset the maximum existing var-id to 0
 (define var-number (void)) 
 ;; return the maximum existing var-id, unless it is 0
-
-(define (debug-info-initialization)
-  (define debug-info-threshold 
-    (if (equal? debug-output-info 'ON) -100 1))
-  (define (get-debug-info-threshold)
-    debug-info-threshold)
-
-  (define (set-debug-info-threshold! l)
-    (set! debug-info-threshold l))
-  
-  (values get-debug-info-threshold set-debug-info-threshold!)
-)
-
-(define-values 
-  (get-debug-info-threshold set-debug-info-threshold!)
-  (debug-info-initialization))
-
-
-(define-syntax debug-dump-w/level
-  (syntax-rules ()
-    ((_ l x ...) 
-      (if (>= l (get-debug-info-threshold)) 
-        (printf x ...)
-        'Threshold-Too-High))
-          ))
-
-(define-syntax debug-dump
-  (syntax-rules ()
-    ((_ x ...) 
-      (debug-dump-w/level 0 x ...))))
-
-(define-syntax raise-and-warn
-  (syntax-rules ()
-    ((_ x ...) 
-      (begin (debug-dump-w/level 100 x ...) (/ 1 0)))))
-
-(define-syntax assert-or-warn
-  (syntax-rules ()
-    ((_ COND x ...) 
-      (if COND
-        #t
-        (begin (debug-dump-w/level 100 x ...) (/ 1 0)  )))))
-
-(define-syntax assert
-  (syntax-rules ()
-    ((_ COND) 
-      (assert-or-warn COND "Assertion Violated!"))))
 
 
 (let ((index 0))
@@ -332,12 +280,6 @@
 ;;;   (filter (lambda (pair) (not (equal? (car pair) x))) subst)
 ;;; )
 
-(define (true? v) (equal? v #t))
-(define (false? v) (equal? v #f))
-;;; (null? '() )
-
-(define type-label-top (set true? false? null? pair? number? string? symbol?))
-(define all-inf-type-label (set pair? number? string? symbol?))
 
 (define (pair-of? x? y?)
   (lambda (t)
@@ -720,8 +662,8 @@
   (define/contract (inequality-recheck conj-disj-pair)
     (list? . -> . (WithBackgroundOf? (=== state-type?)))
     (for/fold 
-      [acc       (pure-st #f)]
-      [each-disj conj-disj-pair]
+      ([acc       (pure-st #f)])
+      ([each-disj conj-disj-pair])
       ((neg-unify*/state each-disj) . >> . acc)
     ))
   
@@ -729,10 +671,10 @@
   (define/contract (typecst-recheck var-type-pair)
     (list? . -> . (WithBackgroundOf? (=== state-type?)))
     (for/fold 
-      [acc (pure-st '())]
-      [each var-type-pair]
+      ([acc (pure-st '())])
+      ([each var-type-pair])
       (match-let* 
-        [(cons v cst) each]
+        ([(cons v cst) each])
         ((if (set? cst)
              (check-as-inf-type-disj/state v cst)
              (pure-st '())) 
@@ -845,7 +787,7 @@
         (do
           [(cons a0 t:a0=a) <- (walk-struct-once/state a)]
           [(cons b0 t:b0=b) <- (walk-struct-once/state b)]
-          [eqt (LFeq-pair t:a0=a t:b0=b)]
+          [eqt = (LFeq-pair t:a0=a t:b0=b)]
           [<-return (cons (cons a0 b0) eqt)])]
       [(tproj x cxr) (walk/state tm)]
       [(var _ _) (walk/state tm)]
@@ -991,10 +933,10 @@
   (list? proof-term? . -> . (WithBackgroundOf? (=== state-type?)))
   (define all-disj-inequ-type 
     (for/fold
-      [acc-goal (Bottom)]
-      [each-u-v-pair list-u-v]
+      ([acc-goal (Bottom)])
+      ([each-u-v-pair list-u-v])
       (match-let* 
-        [(cons u v) each-u-v-pair]
+        ([(cons u v) each-u-v-pair])
         (disj (=/= u v) acc-goal))))
   (match list-u-v
     ['() #f]
@@ -1003,7 +945,7 @@
         [old-st <- get-st]
         [a:u=v  =  (fresh-param (t) t)]
         [(cons new-st t:u=v) = (run-st (unify/state u v a:u=v) old-st)]
-        [newly-added         = (extract-new (state-sub newst) (state-sub oldst))]
+        [newly-added         = (extract-new (state-sub new-st) (state-sub old-st))]
         [<-end 
           (match newly-added
             [#f  
@@ -1042,8 +984,9 @@
                 (do 
                   [_              <- (set-st new-st)]
                   [(disj _ rest-inequ)  = all-disj-inequ-type]
-                  [contrapositive = (LFassert ((== u v) . impl . ((=/= u v) . impl . (Bottom))))]
-                  [not-u=/=v      = (LFapply contrapositive t:u=/=v)]
+                  [proof-by-contra = (LFassert ((== u v) . impl . ((=/= u v) . impl . (Bottom))))]
+                  [thj:u==v       <- (query-thj (== u v))]
+                  [not-u=/=v      = (LFapply proof-by-contra thj:u==v)]
                   [exclude-impossible = 
                       (LFassert (((=/= u v) . impl . (Bottom)) . 
                                   impl . ( all-disj-inequ-type . impl . rest-inequ)))]

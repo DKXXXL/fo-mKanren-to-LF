@@ -6,16 +6,7 @@
 ;; Low-level goals
 (define succeed (== #t #t))
 (define fail    (== #f #t))
-(define-syntax conj*
-  (syntax-rules ()
-    ((_)                succeed)
-    ((_ g)              g)
-    ((_ gs ... g-final) (conj (conj* gs ...) g-final))))
-(define-syntax disj*
-  (syntax-rules ()
-    ((_)           fail)
-    ((_ g)         g)
-    ((_ g0 gs ...) (disj g0 (disj* gs ...)))))
+
 
 (define-syntax ex-s
   (syntax-rules ()

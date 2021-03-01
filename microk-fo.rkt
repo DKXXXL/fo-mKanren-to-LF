@@ -1342,37 +1342,6 @@
 ;;;   )
 ;;; )
 
-;;; trivially negate the goal, relies on the fact that
-;;;  we have a dualized goals
-;;; doesn't support user-customized goal, and universal-quantification
-(define/contract (complement g)
-  (Goal? . -> . Goal?)
-  (let ([c complement])
-    (match g
-      [(disj g1 g2) (conj (c g1) (c g2))]
-      [(conj g1 g2) (disj (c g1) (c g2))]
-      [(cimpl a b) ;;; \neg a \lor b 
-        (conj a (complement b))]
-      [(relate _ _) 
-        (raise-and-warn "User-Relation not supported.")]
-      [(== t1 t2) (=/= t1 t2)]
-      [(=/= t1 t2) (== t1 t2)]
-      [(ex a gn) (forall a (Top) (c gn))]
-      [(forall v bound gn) ;; forall v. bound => g
-        (ex v (conj bound (complement gn))) ]
-      [(numbero t) (not-numbero t)]
-      [(not-numbero t) (numbero t)]
-      [(stringo t) (not-stringo t)]
-      [(not-stringo t) (stringo t)]
-      [(symbolo t) (not-symbolo t)]
-      [(not-symbolo t) (symbolo t)]
-      [(type-constraint t types) 
-        (disj (type-constraint t (set-subtract all-inf-type-label types)) (is-of-finite-type t))]
-      [(Top) (Bottom)]
-      [(Bottom) (Top)]
-    )
-  )
-)
 
 
 ;;; following is a none opaque decision procedure for exhaustive domain checking
@@ -1574,11 +1543,7 @@
   (set->list each-asymmetry-record!)
 )
 
-;;; var -> goal
-;;;   a bunch of goal asserts v is of finite type
-(define (is-of-finite-type v)
-  (disj* (== v #t) (== v #f) (== v '()))
-)
+
 ;;; given the st, we will break down a bunch of v's domain by the domain axiom
 ;;;  return an equivalent stream of states s.t. v is pair in one state and not pair in the others
 ;;; TODO: currently ignore proof-term
@@ -2088,5 +2053,6 @@
       (wrap-state-stream shrinked-st)))
   (mapped-stream map-clear-about dnf-sym-stream)
 )
+
 
 (include "mk-syntax.rkt")
