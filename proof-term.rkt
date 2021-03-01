@@ -77,9 +77,9 @@
 (struct LFfor proof-term (var binding-domain goal) #:prefab)
 
 ;;; inhabited in the existential
-(struct ex-for LFfor #:prefab)
+(struct ex-for LFfor () #:prefab)
 ;;; inhabited in the universal
-(struct uni-for LFfor #:prefab)
+(struct uni-for LFfor () #:prefab)
 ;;; thus now for universal/existenail quantifer, there are two possible proof terms
 ;;;   LFsigma/LFlambda and LFfor
 

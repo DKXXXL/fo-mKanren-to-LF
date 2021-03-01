@@ -406,7 +406,7 @@
                   ))
               bg2+fr2)))))
 
-(define/contract (>> a b) (>>= a (λ (_) b)))
+(define (>> a b) (>>= a (λ (_) b)))
 
 ;;; Recall that
 ;;; get :: (WB state-type state-type)
@@ -455,6 +455,7 @@
     [newst = (state-sta-update st (λ (mapping) (pfmap-set mapping tykey term)))]
     [_ <- (set-st newst)]
     [<-return term]))
+
 (define query-sta)
 (define add-to-stj)
 (define query-stj)
@@ -714,7 +715,7 @@
       [each-disj conj-disj-pair]
       ((neg-unify*/state each-disj) . >> . acc)
     ))
-  )
+  
 
   (define/contract (typecst-recheck var-type-pair)
     (list? . -> . (WithBackgroundOf? (=== state-type?)))
@@ -1036,7 +1037,7 @@
                   [not-u=/=v      = (LFapply contrapositive t:u=/=v)]
                   [exclude-impossible = 
                       (LFassert (((=/= u v) . impl . (Bottom)) . 
-                                  impl . ( all-disj-inequ-type . impl . rest-inequ))))]
+                                  impl . ( all-disj-inequ-type . impl . rest-inequ)))]
                   [a:rest-inequ   = (LFapply (LFapply exclude-impossible not-u=/=v) a:Vu=/=v)] 
                   [<-end (neg-unify*/state rest a:rest-inequ)]
                 )]
@@ -1211,7 +1212,7 @@
 (define/contract (has-type-subset-axiom-goal x ty1?* ty2?*)
     (any? set? set? . -> . Goal?)
     (assert-or-warn (subset? ty1?* ty2?*) "Not subtype inclusion! \n")
-    ((type-constraint x0 ty1?*) . impl (type-constraint x0 ty2?*)))
+    ((type-constraint x0 ty1?*) . impl . (type-constraint x0 ty2?*)))
 
 
 (define/contract (has-empty-type-bottom x)

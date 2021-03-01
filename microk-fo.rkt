@@ -47,10 +47,7 @@
 ;;;      (fprintf output-port "{~a}" (assumption-base-base val)))]
 ;;; )
 
-(define (any? _) #t)
-(define (assumption-base? k) (list? k))
-(define (empty-assumption-base? k) (equal? k '()))
-(define empty-assumption-base '())
+
 
 
 ;;; return (cons (cons index assumption) remaining-assumptiob-base)
@@ -273,14 +270,6 @@
 
 
 
-;;; detect stream or not
-(define (Stream? s)
-  (or (stream-struct? s)
-    (match s
-      [#f #t]
-      [(cons k r) (Stream? r)]
-      [o/w #f]
-    )))
 
 
 ;;; A lot of boiler-plate code
@@ -1032,7 +1021,7 @@
                     [a:type-cst <- (fresh-param (term) (add-to-tha (type-constraint t1 type-info) ))]
                     [t:type-cst <- (check-as-inf-type-disj/state t1 a:type-cst)]
                     [_ <- (pf-filled t:type-cst)])))]
-          (mapped-stream do-each-state stream))
+          (mapped-stream do-each-state stream)))
     ((not-symbolo t1) 
         (match-let*
             [stream (pause st (not-finite-type t1))]
@@ -1726,42 +1715,6 @@
 ;;;   (syntax-rules ()
 ;;;     ((_ (x ...) g0 gs ...)
 ;;;      (let ((x (var/fresh 'x)) ...) (given (x ...) (conj* g0 gs ...)) ))))
-
-(define-syntax for-all
-  (syntax-rules ()
-    ((_ (x) g0 gs ...)
-      (let ( [x (var/fresh 'x)] ) 
-        (forall x (Top) (conj* g0 gs ...))))
-
-    ((_ (x y ...) g0 gs ...)
-      (let ( [x (var/fresh 'x)] ) 
-        (forall x (Top) (for-all (y ...) g0 gs ...))))
-  ))
-
-(define-syntax for-bounds
-  (syntax-rules ()
-    ((_ (x ...) () g0 gs ...)
-      (for-all (x ...) g0 gs ...))
-
-    ((_ (x) (cond0 conds ...) g0 gs ...)
-      (let ( [x (var/fresh 'x)] ) 
-        (forall x (conj* cond0 conds ...) (conj* g0 gs ...)) ) )
-  
-    ((_ (k x ...) (cond0 conds ...) g0 gs ...)
-      (let ( [k (var/fresh 'k)] ) 
-        (forall k (Top) (for-bound (x ...) (cond0 conds ...) g0 gs ... )) )
-    )))
-
-(define-syntax for-bound
-  (syntax-rules ()
-    ((_ (x) conds g0 gs ...)
-      (let ( [x (var/fresh 'x)] ) 
-        (forall x conds (conj* g0 gs ...)) ) )
-  
-    ((_ (k x ...) conds g0 gs ...)
-      (let ( [k (var/fresh 'k)] ) 
-        (forall k (Top) (for-bound (x ...) conds g0 gs ... )) )
-    )))
 
 ;;; ;;; given (a series of) variable(s) we will assert the goal on all its possible
 ;;; ;;;  domain

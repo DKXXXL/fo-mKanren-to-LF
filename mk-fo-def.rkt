@@ -33,6 +33,13 @@
   for-bound
   for-bounds
 
+  any?
+  assumption-base?
+  empty-assumption-base
+  empty-assumption-base?
+
+  Stream?
+
 )
 
 
@@ -228,23 +235,23 @@
                                    (list g1 g2))]))
 )
 
-;;; the following goal
-;;;   it "hmap" maps each goal to a proof-term (usually a parameter)
-;;;   and its semantic is the conjunction of all these goals
-;;; 
-(struct parameter-list Goal (hmap)
-  #:transparent
-  #:guard (lambda (hmap type-name)
-                    (cond
-                      [(hashmap? hmap) 
-                       (values g1 g2)]
-                      [else (error type-name
-                                   "Should be a hashmap")]))
-)
+;;; ;;; the following goal
+;;; ;;;   it "hmap" maps each goal to a proof-term (usually a parameter)
+;;; ;;;   and its semantic is the conjunction of all these goals
+;;; ;;; 
+;;; (struct parameter-list Goal (hmap)
+;;;   #:transparent
+;;;   #:guard (lambda (hmap type-name)
+;;;                     (cond
+;;;                       [(hash? hmap) 
+;;;                        (values g1 g2)]
+;;;                       [else (error type-name
+;;;                                    "Should be a hashmap")]))
+;;; )
 
-;;; the following goal is exactly the semantic of a state
-(struct wrapped-state parameter-list () 
-  #:transparent)
+;;; ;;; the following goal is exactly the semantic of a state
+;;; (struct wrapped-state parameter-list () 
+;;;   #:transparent)
 
 ;;; just a abbreviation of ~g1 \/ g2
 (struct impl Goal (g1 g2)
@@ -345,3 +352,55 @@
 ;;;  say we have state (v =/= 1) /\ (numbero v)
 ;;; this will enumerate v to be each value
 (struct force-v-ground stream-struct (v st) #:prefab)
+
+(define (any? _) #t)
+(define (assumption-base? k) (list? k))
+(define (empty-assumption-base? k) (equal? k '()))
+(define empty-assumption-base '())
+
+;;; detect stream or not
+(define (Stream? s)
+  (or (stream-struct? s)
+    (match s
+      [#f #t]
+      [(cons k r) (Stream? r)]
+      [o/w #f]
+    )))
+
+
+(define-syntax for-all
+  (syntax-rules ()
+    ((_ (x) g0 gs ...)
+      (let ( [x (var/fresh 'x)] ) 
+        (forall x (Top) (conj* g0 gs ...))))
+
+    ((_ (x y ...) g0 gs ...)
+      (let ( [x (var/fresh 'x)] ) 
+        (forall x (Top) (for-all (y ...) g0 gs ...))))
+  ))
+
+(define-syntax for-bounds
+  (syntax-rules ()
+    ((_ (x ...) () g0 gs ...)
+      (for-all (x ...) g0 gs ...))
+
+    ((_ (x) (cond0 conds ...) g0 gs ...)
+      (let ( [x (var/fresh 'x)] ) 
+        (forall x (conj* cond0 conds ...) (conj* g0 gs ...)) ) )
+  
+    ((_ (k x ...) (cond0 conds ...) g0 gs ...)
+      (let ( [k (var/fresh 'k)] ) 
+        (forall k (Top) (for-bound (x ...) (cond0 conds ...) g0 gs ... )) )
+    )))
+
+(define-syntax for-bound
+  (syntax-rules ()
+    ((_ (x) conds g0 gs ...)
+      (let ( [x (var/fresh 'x)] ) 
+        (forall x conds (conj* g0 gs ...)) ) )
+  
+    ((_ (k x ...) conds g0 gs ...)
+      (let ( [k (var/fresh 'k)] ) 
+        (forall k (Top) (for-bound (x ...) conds g0 gs ... )) )
+    )))
+
