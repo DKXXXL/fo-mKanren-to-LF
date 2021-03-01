@@ -36,6 +36,8 @@
   ;;; check-as-inf-type
 
   do
+  >>=
+  >>
   run-st
   get-st
   set-st
@@ -107,6 +109,33 @@
   )
 )
 
+;;; we introduce monadic style of coding
+;;;   as we will need to change state during
+
+;;; we need to introduct a racket/generic for isNothing
+;;; so that WithBackground is basically StateT (Maybe T)
+;;;  see https://docs.racket-lang.org/reference/struct-generics.html
+
+;;; we can even later supports polymorphic rows/effect for it
+;;;  as we are untyped stuff
+;;; TODO: bg->front = bg -> (bg, front | #f)
+;;;   and bg supports Emptyable as racket/generic
+;;;     Emptyable supports isNone? and none operation
+(struct WithBackground (bgType bg->front) 
+    #:guard (lambda (bgT? bgf type-name)
+                    (cond
+                      [(andmap procedure? (list bgT? bgf)) 
+                       (values 
+                          bgT? 
+                          (invariant-assertion 
+                            (bgT? . -> . (pair-of? bgT? any?)) 
+                            bgf))]
+                      [else (error type-name
+                                   "Should be a hashmap")]))
+;;; #:prefab
+)
+
+
 (define (WithBackgroundOf? u?) 
   (λ (k)
     (and (WithBackground? k) (u? (WithBackground-bgType k)))))
@@ -114,6 +143,59 @@
 
 (define (=== k) (λ (x) (equal? x k)))
 
+;;; 
+(define/contract (>>= fwb domap)
+  (WithBackground? (any? . -> . WithBackground?) . -> . WithBackground?)
+  (WithBackground
+    (WithBackground-bgType fwb)
+    (let*
+      ([isNone? failed-state?] ;; BUGFIX: adopt to generic later
+       [fwbdo (WithBackground-bg->front fwb)])
+        (λ (bg)
+            (if (isNone? bg)
+              (cons bg #f)
+              (match-let* 
+                  ([(cons bg1 fr1) (fwbdo bg)]
+                  [(WithBackground _ swbdo) (domap fr1)]
+                  [bg2+fr2 (swbdo bg1)])
+                bg2+fr2))))))
+
+(define (>> a b) (>>= a (λ (_) b)))
+
+;;; Recall that
+;;; get :: (WB state-type state-type)
+;;; set :: state-type -> (WB state-type '())
+;;;   we might be able to support polymorphic rows/effect (not type inference)
+;;;     on this two operations
+;;; >>= :: (WB x K) x (K -> WB x Y) -> (WB x Y)
+;;; most importantly : do notation
+;;; (do [x = y] sth ...) = match-let ([x y]) in (do sth ...) : (WithBackground ...)
+;;; (do [x <- y] sth ...) = 
+;;;     assert y of type (WB ...)
+;;;     y >>= \x -> (do sth ...)
+;;; with above it is easy to see that we can 
+;;; (do [_ <- y] sth ...) = y >> (do sth ...) 
+;;; (do [<-end x]) = x
+;;; (do [<-return x]) = (pure-st x)
+;;;     usually it is  
+
+(define-syntax do
+  (syntax-rules (<- <-end <-return =)
+    ((_ [ x = y ] sth ...) 
+      (match-let ([x y]) (do sth ...)))
+    ((_ [ x <- y ] sth ...) 
+      (>>= y (match-lambda [x (do sth ...)])))
+    ((_ [ <-end y ]) 
+      y)
+    ((_ [ <-return y ]) 
+      (pure-st y))
+  ))
+
+
+
+(struct state-type (sta stj tha thj) #:prefab)
+(struct failed-state state-type (bot-from-tha) #:prefab) ;; indicating bottom type
+(struct state state-type (sub scope pfterm diseq typercd) #:prefab)
 
 ;;; monadic style
 (define/contract (walk/state t)
@@ -188,7 +270,7 @@
                   (pfmap-set newkey term))]
     (<-end 
       (if (occurs? x t sub)
-        (set-st (failed-state))
+        (failed-current-st)
         (modify-st 
           (lambda (st) (state-type-sta-set 
                           (state-sub-set st newsub) newsta)))))
@@ -231,33 +313,12 @@
 (define (pair-of? x? y?)
   (lambda (t)
     (and (pair? t) (x? (car t)) (y? cdr t))))
-;;; we introduce monadic style of coding
-;;;   as we will need to change state during
-
-;;; we need to introduct a racket/generic for isNothing
-;;; so that WithBackground is basically StateT (Maybe T)
-;;;  see https://docs.racket-lang.org/reference/struct-generics.html
-
-;;; we can even later supports polymorphic rows/effect for it
-;;;  as we are untyped stuff
-;;; TODO: bg->front = bg -> (bg, front | #f)
-;;;   and bg supports Emptyable as racket/generic
-;;;     Emptyable supports isNone? and none operation
-(struct WithBackground (bgType bg->front) 
-    #:guard (lambda (bgT? bgf type-name)
-                    (cond
-                      [(andmap procedure? (list bgT? bgf)) 
-                       (values 
-                          bgT? 
-                          (invariant-assertion 
-                            (bgT? . -> . (pair-of? bgT? any?)) 
-                            bgf))]
-                      [else (error type-name
-                                   "Should be a hashmap")]))
-;;; #:prefab
-)
 
 (define WB WithBackground)
+
+
+
+
 
 ;;; can we multi-stage it? I mean partially evaluate monadic style
 ;;; change the following into macro
@@ -265,7 +326,7 @@
 (define (set ty) (λ (term) (WB ty (λ (_) (cons term '())))))
 (define (pure ty) (λ (term) (WB ty (λ (bg) (cons bg  term)))) )
 (define (run ty)  
-  (λ(wb st)
+  (λ (wb st)
     (match-let* 
       ([(WithBackground ty? bg->front) wb]
        [_ (assert-or-warn (ty? st) "Wrong WithBackground Invocation\n")])
@@ -308,54 +369,6 @@
     [<-return #f]
   ) 
 )
-
-;;; 
-(define/contract (>>= fwb domap)
-  (WithBackground? (any? . -> . WithBackground?) . -> . WithBackground?)
-  (WithBackground
-    (let*
-      ([isNone? failed-state?] ;; BUGFIX: adopt to generic later
-       [fwbdo (WithBackground-bg->front fwb)])
-        (λ (bg)
-            (if (isNone? bg)
-              (cons bg #f)
-              (match-let* 
-                  ([(cons bg1 fr1) (fwbdo bg)]
-                  [(WithBackground _ swbdo) (domap fr1)]
-                  [bg2+fr2 (swbdo bg1)])
-                bg2+fr2))))))
-
-(define (>> a b) (>>= a (λ (_) b)))
-
-;;; Recall that
-;;; get :: (WB state-type state-type)
-;;; set :: state-type -> (WB state-type '())
-;;;   we might be able to support polymorphic rows/effect (not type inference)
-;;;     on this two operations
-;;; >>= :: (WB x K) x (K -> WB x Y) -> (WB x Y)
-;;; most importantly : do notation
-;;; (do [x = y] sth ...) = match-let ([x y]) in (do sth ...) : (WithBackground ...)
-;;; (do [x <- y] sth ...) = 
-;;;     assert y of type (WB ...)
-;;;     y >>= \x -> (do sth ...)
-;;; with above it is easy to see that we can 
-;;; (do [_ <- y] sth ...) = y >> (do sth ...) 
-;;; (do [<-end x]) = x
-;;; (do [<-return x]) = (pure-st x)
-;;;     usually it is  
-
-(define-syntax do
-  (syntax-rules (<- <-end <-return =)
-    ((_ [ x = y ] sth ...) 
-      (match-let ([x y]) (do sth ...)))
-    ((_ [ x <- y ] sth ...) 
-      (>>= y (match-lambda [x (do sth ...)])))
-    ((_ [ <-end y ]) 
-      y)
-    ((_ [ <-return y ]) 
-      (pure-st y))
-  ))
-
 
 ;;; TODO: if all of the elements in type set are for the finite, 
 ;;;   then inequality might cause trouble  
@@ -412,9 +425,7 @@
 ;;; thj : the proof term of the goals been through, using sta
 ;;; tha : the assumption of (through-goal) type
 ;;; invariant key(stj) == key(sta), key(thj) \supseteq key(tha)
-(struct state-type (sta stj tha thj) #:prefab)
-(struct failed-state (bot-from-tha) #:prefab) ;; indicating bottom type
-(struct state (sub scope pfterm diseq typercd) #:prefab)
+
 (define empty-state (state empty-sub (list initial-var) single-hole '() (hash)))
 (define-struct-updaters state)
 (define-struct-updaters state-type)
@@ -594,7 +605,7 @@
               ;;; add bottom to stj
               [_          <- (add-to-stj (Bottom) (LFapply to-bottom stj:u0=v0))]
               ;;; get into failed-state
-              [_ <- (set-st (failed-state))]
+              [_ <- failed-current-st]
               [<-return '()]
             )] 
         ;; unification failed. we return bottom state
@@ -763,7 +774,7 @@
 
 ;;; monadic style
 (define/contract (walk-struct-once/state tm)
-  (any? state? . -> . (WithBackgroundOf? (=== state-type?)))
+  (any? . -> . (WithBackgroundOf? (=== state-type?)))
     (match tm
       [(cons a b) 
         (do
@@ -787,7 +798,7 @@
 
 ;;; monadic style
 (define/contract (walk*/state tm)
-  (any? state? . -> . (WithBackgroundOf? (=== state-type?)))
+  (any? . -> . (WithBackgroundOf? (=== state-type?)))
   (do [tm- <- (walk-struct-once/state tm)]
       (<-end 
         (if (equal? tm- tm)
@@ -944,8 +955,8 @@
                 ;;; together with Vu=/=v (the big disjunction)
                 ;;; no change on sta, stj
                 (do                 
-                  [(cons u0 thj:u0=u) <- (walk/state u)]
-                  [(cons v0 thj:v0=v) <- (walk/state v)]
+                  [(cons u0 thj:u0=u) <- (walk*/state u)]
+                  [(cons v0 thj:v0=v) <- (walk*/state v)]
                   [thj:u=v->u0=v0     =  
                       (λ (t:u=v)
                         (let* ([t:v=v0 (LFeq-symm thj:v0=v)]
@@ -1157,21 +1168,21 @@
 
 
 (define/contract (has-empty-type-bottom x)
-    (any? set? set? . -> . Goal?)
+    (any? . -> . Goal?)
     ((type-constraint x (set)) . impl . (Bottom)))
 
 
 
 ;;; precondition: (term-not-finite-type x) is in tha
 (define/contract (check-as-inf-type-disj/state type?* x a:has-type)
-  (set? any? . -> . (WithBackgroundOf? (=== state-type?)))
+  (set? any? proof-term? . -> . (WithBackgroundOf? (=== state-type?)))
   (define type-constraint-goal (type-constraint x type?*))
 
   ;;; we will need to add t:has-type into thj
   ;;;    also add t:has-type to stj/sta
   ;;;     if we encounter 
   (do 
-    [(cons x0 t:x0=x)  <- (walk/state x)]
+    [(cons x0 t:x0=x)  <- (walk*/state x)]
     [t:x=x0       = (LFeq-symm t:x0=x)]
     [<-end 
       (match x0 
@@ -1246,7 +1257,7 @@
                   [stj:checked-x0    = (LFapply* (LFassert (has-type-resp-equ-axiom-goal x x0 (set))) stj:x0=x tha:checked-x)]
                   [stj:bottom        = (LFapply* checked-x0 stj:checked-x0)]
                   [_ <- (add-to-stj (Bottom) stj:bottom)]
-                  [<-end (failed-state)]
+                  [<-end failed-current-st]
                   ;;; [thj:checked-x     = (LFapply* (LFassert (has-type-resp-equ-axiom-goal x0 x type?*)) thj:x0=x thj:checked-x0)]
                   ;;; [_ <- (add-to-thj (type-constraint x type?*) thj:checked-x)]
                   )

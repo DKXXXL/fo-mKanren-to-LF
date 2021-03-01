@@ -121,8 +121,8 @@
 
 (define (state-base-endo-functor prev-f rec g)
   (match g
-    [(state a scope pfterm d e)
-      (state (rec a) scope pfterm (rec d) (rec e))]
+    [(state sta stj tha thj a scope pfterm d e)
+      (state sta stj tha thj (rec a) scope pfterm (rec d) (rec e))]
     [_ (prev-f g)]
   )
 )
