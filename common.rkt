@@ -242,7 +242,7 @@
                 [stj:t1=t = (LFeq-symm stj:t=t1)]
                 [(cons tend t:tend=t1) <- (walk/state t1)]
                 [stj:tend=t1 <- (query-stj (== tend t1))]
-                [a:tend=t   = (LFeq-trans a:tend=t1 a:t1=t)]
+                [a:tend=t   = (LFeq-trans stj:tend=t1 a:t1=t)]
                 [stj:tend=t = (LFeq-trans stj:tend=t1 stj:t1=t)]
                 [_ <- (add-to-stj (== tend t) stj:tend=t)]
                 [<-return (cons tend a:tend=t)])
@@ -253,15 +253,20 @@
     ;;;   proof elaboration
     [(tproj v (cons cxr rest))
       #:when (member cxr '(car cdr))
-      (let ([xt (assf (lambda (x) (equal? t x)) sub)]
-            [tcxr (match cxr 
-                    ['car tcar] 
-                    ['cdr tcdr] 
-                    [o/w (raise-and-warn "Unexpected projection ~a" t)])]
-            )
-        (if xt 
-          (walk (cdr xt) sub) 
-          (tcxr (walk (tproj_ v rest) sub))))]
+        (do 
+          [st   <- get-st]
+          [sub  = (state-sub st)]
+          [xt   = (assf (lambda (x) (equal? t x)) sub)]
+          [tcxr = (match cxr 
+                      ['car tcar] 
+                      ['cdr tcdr] 
+                      [o/w (raise-and-warn "Unexpected projection ~a" t)])]
+          [<-end 
+            (if xt 
+              (walk/state (cdr xt))
+              (do 
+                [(cons term pf) <- (walk/state (tproj_ v rest))]
+                [<-return (cons (tcxr term) pf)]))])]
     [_ (pure-st (cons t (LFeq-refl t)))]
   )
 )
@@ -279,7 +284,7 @@
 (define (extend-sub/state x t)
   (any? any? . -> . (WithBackgroundOf? (=== state-type?)))
   (do 
-    [st     <- get-state]
+    [st     <- get-st]
     [sub    = (state-sub st)]
     [sta    = (state-type-sta st)]
     [newsub = `((,x . ,t) . ,sub)]
@@ -422,19 +427,19 @@
 ;;; with above it is easy to see that we can 
 ;;; (do [_ <- y] sth ...) = y >> (do sth ...) 
 ;;; (do [<-end x]) = x
-;;; (do [<-return x]) = (pure-state x)
+;;; (do [<-return x]) = (pure-st x)
 ;;;     usually it is  
 
 (define-syntax do
   (syntax-rules (<- <-end <-return =)
-    ((_ [x = y] sth ...) 
+    ((_ [ x = y ] sth ...) 
       (match-let ([x y]) (do sth ...)))
-    ((_ [x <- y] sth ...) 
-      (y . >>= . (match-lambda x (do sth ...))))
-    ((_ [<-end y]) 
+    ((_ [ x <- y ] sth ...) 
+      (>>= y (match-lambda [x (do sth ...)])))
+    ((_ [ <-end y ]) 
       y)
-    ((_ [<-return y]) 
-      (pure-state y))
+    ((_ [ <-return y ]) 
+      (pure-st y))
   ))
 
 
@@ -446,23 +451,26 @@
 (define pfmap-ref hash-ref)
 (define pfmap-set hash-set)
 
-(define/contract (add-to-sta tykey term)
-  (Goal? any? . -> . (WithBackgroundOf? (=== state-type?)))
-  ;;; (WithBackgrounds state-type? any?)
-  ;;;   the newly added stuff will be returned
-  (do 
-    [st <- get-st]
-    [newst = (state-sta-update st (λ (mapping) (pfmap-set mapping tykey term)))]
-    [_ <- (set-st newst)]
-    [<-return term]))
 
-(define query-sta)
-(define add-to-stj)
-(define query-stj)
-(define add-to-tha)
-(define query-tha)
-(define add-to-thj)
-(define query-thj)
+
+(define (query-x x-getter)
+  (do [st <- get-st]
+      [<-return (pfmap-ref (x-getter st) key)]))
+
+(define (add-to-x x-updator typekey t)
+    (do [st <- get-st]
+        [new-st = (x-updator st (λ (h) (pfmap-set h typekey t)))]
+        [<-return t]))
+
+(define (query-sta key) (query-x state-type-sta))
+(define (query-stj key) (query-x state-type-stj))
+(define (query-tha key) (query-x state-type-tha))
+(define (query-thj key) (query-x state-type-thj))
+
+(define (add-to-sta typekey t) (add-to-x state-type-sta-update typekey t))
+(define (add-to-stj typekey t) (add-to-x state-type-stj-update typekey t))
+(define (add-to-tha typekey t) (add-to-x state-type-tha-update typekey t))
+(define (add-to-thj typekey t) (add-to-x state-type-thj-update typekey t))
 
 ;;; sub -- list of substution 
 ;;; diseq -- list of list of subsitution 
@@ -1203,11 +1211,6 @@
       . impl . 
       ((type-constraint x0 ty2?*) . impl . (type-constraint x (set-intersect ty1?* ty2?*)))))
 
-(define/contract (has-type-intersect-axiom-goal x ty1?* ty2?*)
-    (any? set? set? . -> . Goal?)
-    ((type-constraint x0 ty1?*)
-      . impl . 
-      ((type-constraint x0 ty2?*) . impl . (type-constraint x (set-intersect ty1?* ty2?*)))))
 
 (define/contract (has-type-subset-axiom-goal x ty1?* ty2?*)
     (any? set? set? . -> . Goal?)
