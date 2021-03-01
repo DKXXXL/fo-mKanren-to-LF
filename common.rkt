@@ -407,9 +407,8 @@
               (match-let* 
                   ([(cons bg1 fr1) (fwbdo bg)]
                   [(WithBackground _ swbdo) (domap fr1)]
-                  [bg2+fr2 (swbdo bg1)]
-                  ))
-              bg2+fr2)))))
+                  [bg2+fr2 (swbdo bg1)])
+                bg2+fr2))))))
 
 (define (>> a b) (>>= a (λ (_) b)))
 
@@ -453,7 +452,7 @@
 
 
 
-(define (query-x x-getter)
+(define (query-x key x-getter)
   (do [st <- get-st]
       [<-return (pfmap-ref (x-getter st) key)]))
 
@@ -462,10 +461,10 @@
         [new-st = (x-updator st (λ (h) (pfmap-set h typekey t)))]
         [<-return t]))
 
-(define (query-sta key) (query-x state-type-sta))
-(define (query-stj key) (query-x state-type-stj))
-(define (query-tha key) (query-x state-type-tha))
-(define (query-thj key) (query-x state-type-thj))
+(define (query-sta key) (query-x key state-type-sta))
+(define (query-stj key) (query-x key state-type-stj))
+(define (query-tha key) (query-x key state-type-tha))
+(define (query-thj key) (query-x key state-type-thj))
 
 (define (add-to-sta typekey t) (add-to-x state-type-sta-update typekey t))
 (define (add-to-stj typekey t) (add-to-x state-type-stj-update typekey t))
@@ -485,10 +484,12 @@
 ;;; tha : the assumption of (through-goal) type
 ;;; invariant key(stj) == key(sta), key(thj) \supseteq key(tha)
 (struct state-type (sta stj tha thj) #:prefab)
-(struct failed-state (bot-from-sta bot-from-tha) #:prefab) ;; indicating bottom type
+(struct failed-state (bot-from-tha) #:prefab) ;; indicating bottom type
 (struct state (sub scope pfterm diseq typercd) #:prefab)
 (define empty-state (state empty-sub (list initial-var) single-hole '() (hash)))
 (define-struct-updaters state)
+(define-struct-updaters state-type)
+(define-struct-updaters failed-state)
 
 ;;; lift <-pf/h-inc into state
 (define-syntax <-pfg
@@ -577,13 +578,13 @@
     [(cons v0 t:v0=v) <- (walk/state v)]
     ;;; [a:u=v <- (fresh-param (eqt) (add-to-tha (== u v) eqt))]
     ;;; add u=v into tha
-    [t:u0=v0->t:u=v 
+    [t:u0=v0->t:u=v =
       (λ (t:u0=v0)
         (let* ([t:u=u0 (LFeq-symm t:u0=u)]
                [t:u=v0 (LFeq-trans t:u=u0 t:u0=v0)]
                [t:u=v  (LFeq-trans t:u=v0 t:v0=v)])
           t:u=v))] ;; construct a lambda that construct u=v using a:u0=v0
-    [t:u=v->t:u0=v0 
+    [t:u=v->t:u0=v0 =
       (λ (t:u=v)
         (let* ([t:v=v0 (LFeq-symm t:v0=v)]
                [t:u=v0 (LFeq-trans t:u=v t:v=v0)]
@@ -612,7 +613,7 @@
               [newsta = (state-type-sta st)]
               [a:u0=v0 = (pfmap-ref newsta (== u0 v0))]
               [t:u=v   = (t:u0=v0->t:u=v a:u0=v0)]
-              [t:u0=v0 (t:u=v->t:u0=v0 a:u=v)]
+              [t:u0=v0 = (t:u=v->t:u0=v0 a:u=v)]
               [_ <- (add-to-stj (== u0 v0) t:u0=v0)]
               [_ <- (add-to-thj (== u v)   t:u=v)]
               [<-return t:u=v])]
@@ -623,11 +624,11 @@
               [_ <- (extend-sub/state v0 u0)] ;; now we have u0=v0 inside assumption
               [st  <- get-st]
               [newsta = (state-type-sta st)]
-              [a:v0=u0 (pfmap-ref newsta (== v0 u0))]
-              [a:u0=v0 (LFeq-symm a:v0=u0)]
-              [t:u=v (t:u0=v0->t:u=v a:u0=v0)]
-              [t:u0=v0 (t:u=v->t:u0=v0 a:u=v)]
-              [t:v0=u0 (LFeq-symm t:u0=v0)]
+              [a:v0=u0 = (pfmap-ref newsta (== v0 u0))]
+              [a:u0=v0 = (LFeq-symm a:v0=u0)]
+              [t:u=v   = (t:u0=v0->t:u=v a:u0=v0)]
+              [t:u0=v0 = (t:u=v->t:u0=v0 a:u=v)]
+              [t:v0=u0 = (LFeq-symm t:u0=v0)]
               [_ <- (add-to-stj (== v0 u0) t:v0=u0)]
               [_ <- (add-to-thj (== u v)   t:u=v)]
               [<-return t:u=v])]
@@ -639,7 +640,7 @@
               [(cons u01 u02) = u0]
               [(cons v01 v02) = v0]
               [a:u0=v0 = (t:u=v->t:u0=v0 a:u=v)]
-              [a:u01=v01+a:u02=v02 (LFeq-pis a:u0=v0)]
+              [a:u01=v01+a:u02=v02 = (LFeq-pis a:u0=v0)]
               [t:u01=v01 <- (unify/st/proof u01 v01 (LFpair-pi-1 a:u01=v01+a:u02=v02))]
               [t:u02=v02 <- (unify/st/proof u02 v02 (LFpair-pi-2 a:u01=v01+a:u02=v02))]
               [t:u0=v0   =  (LFeq-pair t:u01=v01 t:u02=v02)] ;; construct equality using
@@ -649,16 +650,16 @@
         [(eqv? u0 v0) 
             ;;; only add thj
             (do
-              [t:u=v (t:u0=v0->t:u=v (LFeq-refl u0))]
+              [t:u=v = (t:u0=v0->t:u=v (LFeq-refl u0))]
               [_ <- (add-to-thj (== u v) t:u=v)]
               [<-return t:u=v])] ;; the proof is trivially LFrefl
-        [o/w 
+        [#t 
         ;;;   we will have u=v inside tha, thj
         ;;;     u0=v0 inside sta, stj
         ;;;   we will also have a bottom inside stj, but not bottom in thj
             (do
               [tha:u=v     =  a:u=v]
-              [sta:u0=v0   <- (fresh (term) (add-to-tha (== u0 v0) term))]
+              [sta:u0=v0   <- (fresh-param (term) (add-to-tha (== u0 v0) term))]
               ;;; add to thj
               [thj:u=v     <- (t:u0=v0->t:u=v sta:u0=v0)]
               [stj:u0=v0   <- (t:u=v->t:u0=v0 tha:u=v)]
@@ -719,7 +720,7 @@
   (define/contract (inequality-recheck conj-disj-pair)
     (list? . -> . (WithBackgroundOf? (=== state-type?)))
     (for/fold 
-      [acc       (pure-st '())]
+      [acc       (pure-st #f)]
       [each-disj conj-disj-pair]
       ((neg-unify*/state each-disj) . >> . acc)
     ))

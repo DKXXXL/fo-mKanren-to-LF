@@ -4,6 +4,7 @@
   (struct-out disj)
   (struct-out conj)
   (struct-out cimpl)
+  (struct-out impl)
   (struct-out relate)
   (struct-out ==)
   (struct-out =/=)
