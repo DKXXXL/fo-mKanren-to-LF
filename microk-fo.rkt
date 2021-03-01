@@ -1015,19 +1015,19 @@
       (pause asumpt [st . <-pfg . (_) (LFpack _ descript)] (thunk)))
     ((== t1 t2) 
       (match-let* 
-          [(cons new-st t:t1=t2) (run-unify t1 t2 st)]
-          [new-st-w/pf             (new-st . <-pfg . t:t1=t2)]
+          ([(cons new-st t:t1=t2) (run-unify t1 t2 st)]
+          [new-st-w/pf             (new-st . <-pfg . t:t1=t2)])
         (wrap-state-stream new-st-w/pf)))
     ((=/= t1 t2)
       (match-let* 
-          [(cons new-st t:t1=/=t2) (run-neg-unify t1 t2 st)]
-          [new-st-w/pf             (new-st . <-pfg . t:t1=/=t2)]
+          ([(cons new-st t:t1=/=t2) (run-neg-unify t1 t2 st)]
+          [new-st-w/pf             (new-st . <-pfg . t:t1=/=t2)])
         (wrap-state-stream new-st-w/pf)))
 
 
     ((symbolo t1)  
         (match-let*
-            [stream (pause st (not-finite-type t1))]
+            ([stream (pause st (term-not-finite-type t1))]
             [do-each-state
               (λ (st) 
                 (run-st st 
@@ -1035,11 +1035,12 @@
                     [type-info  = (set symbol?)]
                     [a:type-cst <- (fresh-param (term) (add-to-tha (type-constraint t1 type-info) ))]
                     [t:type-cst <- (check-as-inf-type-disj/state t1 a:type-cst)]
-                    [_ <- (pf-filled t:type-cst)])))]
+                    [_ <- (pf-filled t:type-cst)]
+                    [<-return '()])))])
           (mapped-stream do-each-state stream)))
     ((not-symbolo t1) 
         (match-let*
-            [stream (pause st (not-finite-type t1))]
+            ([stream (pause st (term-not-finite-type t1))]
             [do-each-state
               (λ (st) 
                 (run-st st 
@@ -1047,14 +1048,15 @@
                     [type-info  = (set-remove all-inf-type-label symbol?)]
                     [a:type-cst <- (fresh-param (term) (add-to-tha (type-constraint t1 type-info) ))]
                     [t:type-cst <- (check-as-inf-type-disj/state t1 a:type-cst)]
-                    [_ <- (pf-filled t:type-cst)])))]
+                    [_ <- (pf-filled t:type-cst)]
+                    [<-return '()])))])
           (mplus 
             (term-finite-type asumpt t1 (prim-goal-filled-st (st . <-pfg . (_ ignore) _) g))
             (mapped-stream do-each-state stream) ))) 
 
     ((numbero t1) 
         (match-let*
-            [stream (pause st (not-finite-type t1))]
+            ([stream (pause st (term-not-finite-type t1))]
             [do-each-state
               (λ (st) 
                 (run-st st 
@@ -1062,11 +1064,12 @@
                     [type-info  = (set number?)]
                     [a:type-cst <- (fresh-param (term) (add-to-tha (type-constraint t1 type-info) ))]
                     [t:type-cst <- (check-as-inf-type-disj/state t1 a:type-cst)]
-                    [_ <- (pf-filled t:type-cst)])))]
+                    [_ <- (pf-filled t:type-cst)]
+                    [<-return '()])))])
           (mapped-stream do-each-state stream)))
     ((not-numbero t1)  
         (match-let*
-            [stream (pause st (not-finite-type t1))]
+            ([stream (pause st (term-not-finite-type t1))]
             [do-each-state
               (λ (st) 
                 (run-st st 
@@ -1074,13 +1077,14 @@
                     [type-info  = (set-remove all-inf-type-label symbol?)]
                     [a:type-cst <- (fresh-param (term) (add-to-tha (type-constraint t1 type-info) ))]
                     [t:type-cst <- (check-as-inf-type-disj/state t1 a:type-cst)]
-                    [_ <- (pf-filled t:type-cst)])))]
+                    [_ <- (pf-filled t:type-cst)]
+                    [<-return '()])))])
           (mplus 
             (term-finite-type asumpt t1 (prim-goal-filled-st (st . <-pfg . (_ ignore) _) g))
             (mapped-stream do-each-state stream) ))) 
     ((stringo t1) 
         (match-let*
-            [stream (pause st (not-finite-type t1))]
+            ([stream (pause st (term-not-finite-type t1))]
             [do-each-state
               (λ (st) 
                 (run-st st 
@@ -1088,12 +1092,13 @@
                     [type-info  = (set string?)]
                     [a:type-cst <- (fresh-param (term) (add-to-tha (type-constraint t1 type-info) ))]
                     [t:type-cst <- (check-as-inf-type-disj/state t1 a:type-cst)]
-                    [_ <- (pf-filled t:type-cst)])))]
+                    [_ <- (pf-filled t:type-cst)]
+                    [<-return '()])))])
           (mapped-stream do-each-state stream)))
     
     ((not-stringo t1)  
         (match-let*
-            [stream (pause st (not-finite-type t1))]
+            ([stream (pause st (term-not-finite-type t1))]
             [do-each-state
               (λ (st) 
                 (run-st st 
@@ -1101,14 +1106,16 @@
                     [type-info  = (set-remove all-inf-type-label string?)]
                     [a:type-cst <- (fresh-param (term) (add-to-tha (type-constraint t1 type-info) ))]
                     [t:type-cst <- (check-as-inf-type-disj/state t1 a:type-cst)]
-                    [_ <- (pf-filled t:type-cst)])))]
+                    [_ <- (pf-filled t:type-cst)]
+                    [<-return '()]
+                    )))])
           (mplus 
             (term-finite-type asumpt t1 (prim-goal-filled-st (st . <-pfg . (_ ignore) _) g))
             (mapped-stream do-each-state stream) )))
 
-    ((type-constraint t types)
+    ((type-constraint t1 types)
         (match-let*
-            [stream (pause st (not-finite-type t1))]
+            ([stream (pause st (term-not-finite-type t1))]
             [do-each-state
               (λ (st) 
                 (run-st st 
@@ -1116,7 +1123,8 @@
                     [type-info  = types]
                     [a:type-cst <- (fresh-param (term) (add-to-tha (type-constraint t1 type-info) ))]
                     [t:type-cst <- (check-as-inf-type-disj/state t1 a:type-cst)]
-                    [_ <- (pf-filled t:type-cst)])))]
+                    [_ <- (pf-filled t:type-cst)]
+                    [<-return '()])))])
           (mapped-stream do-each-state stream)))
 
     ((ex v gn) 

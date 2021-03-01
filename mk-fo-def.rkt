@@ -50,6 +50,7 @@
   
   (struct-out stream-struct)
   (struct-out mplus)
+  mplus*
   (struct-out bind)
   (struct-out pause)
   (struct-out mapped-stream)
@@ -570,6 +571,9 @@
 
 ;;; debug info
 
+;;; set the following to 'ON then we will have debug info
+(define debug-output-info 'OFF)
+
 (define (debug-info-initialization)
   (define debug-info-threshold 
     (if (equal? debug-output-info 'ON) -100 1))
@@ -618,6 +622,5 @@
       (assert-or-warn COND "Assertion Violated!"))))
 
 
-;;; set the following to 'ON then we will have debug info
-(define debug-output-info 'OFF)
+
 

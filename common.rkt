@@ -7,6 +7,7 @@
   (struct-out state-type)
   (struct-out failed-state)
   pair-of?
+  
 
   empty-state
   state-sub
@@ -18,6 +19,7 @@
   state-scope-set
   state-typercd-cst-add
   state-typercd-set
+  WithBackgroundOf?
   unify
   unify/state
   unify/sub
@@ -30,6 +32,7 @@
   wrap-state-stream
   check-as-inf-type-disj
   check-as-inf-type-disj/state
+  term-not-finite-type
   ;;; check-as-inf-type
 
   do
@@ -43,6 +46,7 @@
   add-to-tha
   query-stj
   query-thj
+  pf-filled
 
   any?
   ?state?
@@ -103,6 +107,12 @@
   )
 )
 
+(define (WithBackgroundOf? u?) 
+  (λ (k)
+    (and (WithBackground? k) (u? (WithBackground-bgType k)))))
+
+
+(define (=== k) (λ (x) (equal? x k)))
 
 
 ;;; monadic style
@@ -266,6 +276,16 @@
         [_ <- (set-st (f st))]
         [<-return '()])))
 
+(define-syntax pf-filled
+  (syntax-rules ()
+    ((_ term ...) 
+      (do 
+        [st <- get-st]
+        [new-st = (st . <-pfg . term ...)]
+        [_ <- (set-st new-st)]
+        [<-return '()]
+      ))))
+
 
 (define get-st  (get state-type?))
 (define set-st  (set state-type?))
@@ -414,12 +434,8 @@
               (lambda (pft) (pft . <-pf/h-inc . (hole holes ...) body)))) )
   ))
 
-(define (WithBackgroundOf? u?) 
-  (λ (k)
-    (and (WithBackground? k) (u? (WithBackground-bgType k)))))
 
 
-(define (=== k) (λ (x) (equal? x k)))
 ;;; ;;; TODO: uncomment above
 ;;; (define-syntax <-pfg
 ;;;   (syntax-rules ()
