@@ -2,12 +2,12 @@
 (provide
   (struct-out var)
   initial-var
-  var/fresh
+  
   (struct-out state)
-  (struct-out tproj)
-  tcar
-  tcdr
-  tproj_
+  (struct-out state-type)
+  (struct-out failed-state)
+  pair-of?
+
   empty-state
   state-sub
   state-sub-set
@@ -19,15 +19,30 @@
   state-typercd-cst-add
   state-typercd-set
   unify
+  unify/state
   unify/sub
   walk*
   term?
   reify
   reify/initial-var
   neg-unify
+  neg-unify/state
   wrap-state-stream
   check-as-inf-type-disj
-  check-as-inf-type
+  check-as-inf-type-disj/state
+  ;;; check-as-inf-type
+
+  do
+  run-st
+  get-st
+  set-st
+  pure-st
+  modify-st
+  failed-current-st
+  add-to-sta
+  add-to-tha
+  query-stj
+  query-thj
 
   any?
   ?state?
@@ -54,85 +69,6 @@
 
 
 
-;; Logic variables
-(struct var (name index) ;;;#:prefab
-  #:transparent
-  #:methods gen:custom-write
-  [(define (write-proc val output-port output-mode)
-     (fprintf output-port "~a#~a" (var-name val) (var-index val)))]
-)
-(define (var=? x1 x2)
-  (= (var-index x1) (var-index x2)))
-(define initial-var (var #f 0))
-
-(define var/fresh (void))
-;; return a new var with incremented id
-(define var-reset! (void)) 
-;; reset the maximum existing var-id to 0
-(define var-number (void)) 
-;; return the maximum existing var-id, unless it is 0
-
-
-(let ((index 0))
-  (begin 
-    (set! var/fresh     
-      (lambda (name) 
-        (set! index (+ 1 index))
-        (var name index)))
-    (set! var-reset!
-      (lambda () (set! index 0)))
-    (set! var-number (lambda () index))  
-  )
-)
-
-(struct tproj (v cxr)
-  ;;; #:prefab 
-  #:transparent
-  #:guard (lambda (v cxr type-name)
-                    (cond
-                      [(and (var? v) (pair? cxr)) 
-                       (values v cxr)]
-                      [else (error type-name
-                                   "bad v: ~e"
-                                   v)]))
-)
-
-
-(define (tcar t) 
-  (match t 
-    [(cons a b) a]
-    [(tproj x y) (tproj x (cons 'car y))]
-    [(var _ _) (tproj t (list 'car))]
-    [_ (raise-and-warn "tcar: Unexpected Value ~a" t)]
-  ))
-
-(define (tcdr t) 
-  (match t 
-    [(cons a b) b]
-    [(tproj x y) (tproj x (cons 'cdr y))]
-    [(var _ _) (tproj t (list 'cdr))]
-    [_ (raise-and-warn "tcdr: Unexpected Value ~a" t)]
-  ))
-
-(define (term? x) (or (var? x) (tproj? x)))
-
-;;; normalize a tproj term so that tproj-v is always a var 
-(define (tproj_ term cxr)
-  
-  ;;; (define (m x) (match x ['car tcar] ['cdr tcdr]))
-  ;;; (define (compose f g) (lambda (x) (f (g x))))
-  ;;; (define mcxr (map m cxr))
-  ;;; (define )
-  (if (var? term) 
-    (if (null? cxr)
-      term
-      (tproj term cxr))
-    (match cxr
-      [(cons 'car rest) (tcar (tproj_ term rest))]
-      [(cons 'cdr rest) (tcdr (tproj_ term rest))]
-      ['() term] 
-    ))
-)
 
 ;;; (define var/fresh
 ;;;   (let ((index 0))
@@ -141,6 +77,7 @@
 ;;;       ))
 
 ;; States
+(define initial-var (var #f 0))
 (define empty-sub '())
 
 (define (equation? x) (pair? x))
@@ -335,6 +272,22 @@
 (define pure-st (pure state-type?))
 (define run-st  (run state-type?))
 (define modify-st (modify state-type?))
+(define failed-current-st
+  (do 
+    [st <- get-st]
+    [to-bottom <- (query-stj (Bottom))]
+    [st-pf-info = (struct-copy state-type st)]
+    [failed-st  = 
+      (failed-state 
+        (state-type-sta st) 
+        (state-type-stj st)
+        (state-type-tha st)
+        (state-type-thj st)
+        to-bottom)]
+    [_ <- (set-st failed-st)]
+    [<-return #f]
+  ) 
+)
 
 ;;; 
 (define/contract (>>= fwb domap)
@@ -412,6 +365,20 @@
 (define (add-to-stj typekey t) (add-to-x state-type-stj-update typekey t))
 (define (add-to-tha typekey t) (add-to-x state-type-tha-update typekey t))
 (define (add-to-thj typekey t) (add-to-x state-type-thj-update typekey t))
+
+(define (type-info-query v unfound)
+  (do 
+    [st <- get-st]
+    [typercd = (state-typercd st)]
+    [<-return (hash-ref typercd v unfound)]))
+
+(define (type-info-set k v)
+  (do 
+    [st <- get-st]
+    [typercd = (state-typercd st)]
+    [new-st  = (hash-set typercd k v)]
+    [_       <- (set-st new-st)]
+    [<-return '()]))
 
 ;;; sub -- list of substution 
 ;;; diseq -- list of list of subsitution 
@@ -643,7 +610,6 @@
   (state-typercd-set st new-type-info)
 )
 
-(define (any? _) #t)
 
 ;;; check if a given state has a valid/consistent type constraints
 ;;;   if not, return #f
@@ -926,6 +892,11 @@
 )
 
 
+(define (neg-unify/state u v a:u=/=v)
+  (any? any? proof-term? . -> . (WithBackgroundOf? (=== state-type?)))
+  (neg-unify*/state (list (cons u v)) a:u=/=v)
+)
+
 ;;; monadic style
 ;;;   the second is a big disjunction
 ;;; precondition: (type a:Vu=/=v) is the disjunction of inequalities
@@ -959,10 +930,15 @@
                 (do                 
                   [(cons u0 thj:u0=u) <- (walk/state u)]
                   [(cons v0 thj:v0=v) <- (walk/state v)]
-                  [thj:u=v->u0=v0     =  ]
+                  [thj:u=v->u0=v0     =  
+                      (λ (t:u=v)
+                        (let* ([t:v=v0 (LFeq-symm thj:v0=v)]
+                              [t:u=v0 (LFeq-trans t:u=v t:v=v0)]
+                              [t:u0=v0  (LFeq-trans thj:u0=u t:u=v0)])
+                          t:u0=v0))]
                   ;;; [to-bottom   =  (LFassert ((== u0 v0) . impl . (Bottom)))]
-                  [new-st-thj     = (state-thj new-st)]
-                  [new-st-sta     = (state-sta new-st)]
+                  [new-st-thj     = (state-type-thj new-st)]
+                  [new-st-sta     = (state-type-sta new-st)]
                   [bot            = (pfmap-ref new-st-thj (Bottom))]
                   [the-parameter  = (pfmap-ref new-st-sta (== u0 v0))]
                   [u0=v0->bot     = (LFassert ((== u0 v0) . impl . (Bottom)))]
@@ -1003,6 +979,8 @@
                   
                   [new-st-sta = (state-type-sta new-st)]
                   [new-st-tha = (state-type-tha new-st)]
+                  [new-st-stj = (state-type-stj new-st)]
+                  [new-st-thj = (state-type-thj new-st)]
                   [l-new-eqs = (map (λ (p) (== (car p) (cdr p))) newsubs)]
                   [n-l-new-eqs = (complement l-new-eqs)]
                   [r-equ     = (== u v)]
@@ -1016,10 +994,10 @@
                   ;;; we extract proof for l-new-eqs <-> r-equ
                   [l-params  = (map (λ (eq) (pfmap-ref new-st-sta eq)) l-new-eqs)]
                   [l-proofs  = (map (λ (eq) (pfmap-ref new-st-stj eq)) l-new-eqs)]
-                  [r-param   = (pfmap-ref new-sta-tha r-equ)]
-                  [r-proof    = (pfmap-ref new-sta-thj r-equ)]
+                  [r-param   = (pfmap-ref new-st-tha r-equ)]
+                  [r-proof    = (pfmap-ref new-st-thj r-equ)]
                   [l<->r-type = (equiv (foldl conj l-new-eqs (Top)) r-equ)]
-                  [l<->r      = (LFeqv-product l-params (list r-params) l-proofs (list r-proof))]
+                  [l<->r      = (LFeqv-product l-params (list r-param) l-proofs (list r-proof))]
                   [n-l<->r-type = (equiv n-l-new-eqs n-r-equ)]
                   [l<->r->n-l<->r = (LFassert (l<->r-type . impl . n-l<->r-type))]
                   [n-l<->r    = (LFapply* l<->r->n-l<->r l<->r)]
@@ -1032,8 +1010,8 @@
                   [updated-st = (state-diseq-update old-st (lambda (x) (cons (append newly-added rest) x)))]
                   [_          <- (set-st updated-st)]
                   ;;; now we add tha, sta about updated-st 
-                  [sta-l          <- (fresh (term) (add-to-sta updating-sta-goal))]
-                  [tha-r          <- (fresh (term) (add-to-tha updating-tha-goal))]
+                  [sta-l          <- (fresh-param (term) (add-to-sta updating-sta-goal))]
+                  [tha-r          <- (fresh-param (term) (add-to-tha updating-tha-goal))]
                   [n-r     = (LFapply* (LFpair-pi-1 n-l2<->r2) sta-l)]
                   [n-l     = (LFapply* (LFpair-pi-2 n-l2<->r2) tha-r)]
                   [_    <- (add-to-stj target-type-for-stj n-l)]
@@ -1151,20 +1129,19 @@
 
 (define/contract (has-type-intersect-axiom-goal x ty1?* ty2?*)
     (any? set? set? . -> . Goal?)
-    ((type-constraint x0 ty1?*)
+    ((type-constraint x ty1?*)
       . impl . 
-      ((type-constraint x0 ty2?*) . impl . (type-constraint x (set-intersect ty1?* ty2?*)))))
+      ((type-constraint x ty2?*) . impl . (type-constraint x (set-intersect ty1?* ty2?*)))))
 
 
 (define/contract (has-type-subset-axiom-goal x ty1?* ty2?*)
     (any? set? set? . -> . Goal?)
     (assert-or-warn (subset? ty1?* ty2?*) "Not subtype inclusion! \n")
-    ((type-constraint x0 ty1?*) . impl . (type-constraint x0 ty2?*)))
+    ((type-constraint x ty1?*) . impl . (type-constraint x ty2?*)))
 
 
 (define/contract (has-empty-type-bottom x)
     (any? set? set? . -> . Goal?)
-    (assert-or-warn (subset? ty1?* ty2?*) "Not subtype inclusion! \n")
     ((type-constraint x (set)) . impl . (Bottom)))
 
 
@@ -1172,14 +1149,7 @@
 ;;; precondition: (term-not-finite-type x) is in tha
 (define/contract (check-as-inf-type-disj/state type?* x a:has-type)
   (set? any? . -> . (WithBackgroundOf? (=== state-type?)))
-  (define type-constraint-goal (type-constraint t type?*))
-  (if (set-empty? type?*)
-    (do 
-      [_ <- (add-to-thj type-constraint-goal )]
-      ;;; return bottom state
-
-    )
-  )
+  (define type-constraint-goal (type-constraint x type?*))
 
   ;;; we will need to add t:has-type into thj
   ;;;    also add t:has-type to stj/sta
@@ -1193,7 +1163,7 @@
             (do 
               [x0TypeRcded <- (type-info-query x0 'NotSet)]
               [x0TypeOrg =
-                (if (equal? x0Type 'NotSet)
+                (if (equal? x0TypeRcded 'NotSet)
                   all-inf-type-label
                   x0TypeRcded)]
               [inf-type-axiom = (LFaxiom ( (term-not-finite-type x) . -> . (type-constraint x all-inf-type-label) ))]
@@ -1202,7 +1172,7 @@
               
               [inf-type-x0  = (LFapply (has-type-resp-equ-axiom-goal t:x=x0 inf-type-x))]
               [prev-stj:has-type-Rcded <- 
-                (if (equal? x0Type 'NotSet)
+                (if (equal? x0TypeRcded 'NotSet)
                     inf-type-x0
                     (query-stj (type-constraint x0 x0TypeOrg)))]
               [x0Type    = (set-intersect x0TypeOrg type?*)]
@@ -1227,8 +1197,8 @@
                 (if (set-empty? x0Type)
                     ;;; we are in bottom state
                     (do 
-                      [stj:bottom (LFapply* (LFassert (has-empty-type-bottom x0)) stj:x0-has-x0Type)]
-                      [thj:bottom (LFapply* (LFassert (has-empty-type-bottom x))  thj:x-has-x0Type)]
+                      [stj:bottom = (LFapply* (LFassert (has-empty-type-bottom x0)) stj:x0-has-x0Type)]
+                      [thj:bottom = (LFapply* (LFassert (has-empty-type-bottom x))  thj:x-has-x0Type)]
                       [_ <- (add-to-stj (Bottom) stj:bottom)]
                       [_ <- (add-to-thj (Bottom) thj:bottom)]
                       [<-return thj:x-has-type?*]
@@ -1236,16 +1206,16 @@
                     (pure-st thj:x-has-type?*))
               ]
             )]
-        [o/w 
+        [v 
           (do 
-            [check-all-type-cst (ormap (lambda (x?) (x? v)) (set->list type?*))]
+            [check-all-type-cst = (ormap (lambda (x?) (x? v)) (set->list type?*))]
             [<-end
               (if check-all-type-cst
                 (do 
                   [thj:checked-x0    = (LFassert (type-constraint x0 type?*))]
                   [thj:checked-x     = (LFapply* (LFassert (has-type-resp-equ-axiom-goal x0 x type?*)) t:x0=x thj:checked-x0)]
-                  [_ <- (add-to-thj (type-constraint x type?) thj:checked-x)]
-                  [<-return thj:checked-proof])
+                  [_ <- (add-to-thj (type-constraint x type?*) thj:checked-x)]
+                  [<-return thj:checked-x])
                 
                 (do 
                 ;;; add to stj a bottom type

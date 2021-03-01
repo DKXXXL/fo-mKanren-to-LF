@@ -19,8 +19,10 @@
   (struct-out LFeq-trans)
   (struct-out LFeq-pair)
   (struct-out LFeq-pis)
+  (struct-out LFeqv-product)
   (struct-out LFassert)
   (struct-out LFapply)
+  LFapply*
   (struct-out LispU)
   (struct-out pt/h)
   pth-compose

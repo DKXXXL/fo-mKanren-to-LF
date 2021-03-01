@@ -269,6 +269,21 @@
 )
 
 
+;;; Syntactic assumption all the time
+(struct cimpl-syn  cimpl ()  
+  #:transparent
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "(~a ⟶ ~a)" (cimpl-g1 val) (cimpl-g2 val)))]
+  #:guard (lambda (g1 g2 type-name)
+                    (cond
+                      [(andmap Goal? (list g1 g2)) 
+                       (values g1 g2)]
+                      [else (error type-name
+                                   "All should be Goal: ~e"
+                                   (list g1 g2))]))
+)
+
 
 
 
@@ -861,7 +876,7 @@
 ;;; following run will also add 
 ;;; Note: will change tha
 (define/contract (run-unify s t st)
-  (any? any? state-type? . -> . (cons-of? state-type? proof-term?))
+  (any? any? state-type? . -> . (pair-of? state-type? proof-term?))
   (run-st st 
     (do
       [a:s=t <- (fresh-param (term) (add-to-tha (== s t) term))] 
@@ -873,7 +888,7 @@
 ;;;     v is not of finite type 
 ;;; Note: will change tha
 (define/contract (run-inf-typecst v type?* st)
-  (any? set? state-type? . -> . (cons-of? state-type? proof-term?))
+  (any? set? state-type? . -> . (pair-of? state-type? proof-term?))
   (run-st st 
     (do
       [a:has-type <- (fresh-param (term) (add-to-tha (type-constraint v type?*) term))] 
@@ -884,10 +899,10 @@
 
 ;;; Note: will change tha
 (define/contract (run-neg-unify a b st)
-  (any? set? state-type? . -> . (cons-of? state-type? proof-term?))
+  (any? set? state-type? . -> . (pair-of? state-type? proof-term?))
   (run-st st 
     (do
-      [a:a=/=b <- (fresh-param (term) (add-to-tha (=/= s t) term))] 
+      [a:a=/=b <- (fresh-param (term) (add-to-tha (=/= a b) term))] 
       [<-end (neg-unify/state a b a:a=/=b)]
     ))
 )

@@ -9,12 +9,27 @@
   assert
   set-debug-info-threshold!
 
+
+  ;;; variables
+  var/fresh
+  (struct-out tproj)
+  (struct-out var)
+  tcar
+  tcdr
+  tproj_
+  term?
+  var=?
+
+
   (struct-out Goal)
   (struct-out disj)
+  disj*
   (struct-out conj)
+  conj*
   (struct-out cimpl)
   (struct-out impl)
   (struct-out relate)
+  (struct-out equiv)
   (struct-out ==)
   (struct-out =/=)
   (struct-out ex)
@@ -30,6 +45,7 @@
   (struct-out not-symbolo)
   (struct-out not-numbero)
   (struct-out not-stringo)
+  (struct-out type-constraint)
 
   
   (struct-out stream-struct)
@@ -314,21 +330,6 @@
                                    (list g1 g2))]))
 )
 
-;;; Syntactic assumption all the time
-(struct cimpl-syn  cimpl ()  
-  #:transparent
-  #:methods gen:custom-write
-  [(define (write-proc val output-port output-mode)
-     (fprintf output-port "(~a ⟶ ~a)" (cimpl-g1 val) (cimpl-g2 val)))]
-  #:guard (lambda (g1 g2 type-name)
-                    (cond
-                      [(andmap Goal? (list g1 g2)) 
-                       (values g1 g2)]
-                      [else (error type-name
-                                   "All should be Goal: ~e"
-                                   (list g1 g2))]))
-)
-
 
 
 
@@ -397,6 +398,91 @@
       [(cons k r) (Stream? r)]
       [o/w #f]
     )))
+
+
+(define var/fresh (void))
+;; return a new var with incremented id
+(define var-reset! (void)) 
+;; reset the maximum existing var-id to 0
+(define var-number (void)) 
+;; return the maximum existing var-id, unless it is 0
+
+
+(let ((index 0))
+  (begin 
+    (set! var/fresh     
+      (lambda (name) 
+        (set! index (+ 1 index))
+        (var name index)))
+    (set! var-reset!
+      (lambda () (set! index 0)))
+    (set! var-number (lambda () index))  
+  )
+)
+
+
+
+;; Logic variables
+(struct var (name index) ;;;#:prefab
+  #:transparent
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "~a#~a" (var-name val) (var-index val)))]
+)
+(define (var=? x1 x2)
+  (= (var-index x1) (var-index x2)))
+
+
+(struct tproj (v cxr)
+  ;;; #:prefab 
+  #:transparent
+  #:guard (lambda (v cxr type-name)
+                    (cond
+                      [(and (var? v) (pair? cxr)) 
+                       (values v cxr)]
+                      [else (error type-name
+                                   "bad v: ~e"
+                                   v)]))
+)
+
+;;; normalize a tproj term so that tproj-v is always a var 
+(define (tproj_ term cxr)
+  
+  ;;; (define (m x) (match x ['car tcar] ['cdr tcdr]))
+  ;;; (define (compose f g) (lambda (x) (f (g x))))
+  ;;; (define mcxr (map m cxr))
+  ;;; (define )
+  (if (var? term) 
+    (if (null? cxr)
+      term
+      (tproj term cxr))
+    (match cxr
+      [(cons 'car rest) (tcar (tproj_ term rest))]
+      [(cons 'cdr rest) (tcdr (tproj_ term rest))]
+      ['() term] 
+    ))
+)
+
+
+
+(define (tcar t) 
+  (match t 
+    [(cons a b) a]
+    [(tproj x y) (tproj x (cons 'car y))]
+    [(var _ _) (tproj t (list 'car))]
+    [_ (raise-and-warn "tcar: Unexpected Value ~a" t)]
+  ))
+
+(define (tcdr t) 
+  (match t 
+    [(cons a b) b]
+    [(tproj x y) (tproj x (cons 'cdr y))]
+    [(var _ _) (tproj t (list 'cdr))]
+    [_ (raise-and-warn "tcdr: Unexpected Value ~a" t)]
+  ))
+
+(define (term? x) (or (var? x) (tproj? x)))
+
 
 
 (define-syntax for-all
