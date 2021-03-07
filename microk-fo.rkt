@@ -1462,7 +1462,7 @@
       ;;; other extended construct -- like state
       ;;;  very untyped...
       ;;;  (a = a) (type-constrant a (number?))
-      [(state a scope pfterm d e) 
+      [(state sta stj tha thj a scope pfterm d e)
         (let* ([new-sub-possible-with-cycle (rec a)] 
                [new-sub (filter (lambda (x) (not (equal? (car x) (cdr x)))) new-sub-possible-with-cycle)]
                 ;;; TODO: we will only remove (a = a) and 
@@ -1472,7 +1472,7 @@
                 (map (lambda (x) (cons (car x) (walk* (cdr x) new-sub))) old-hash-list)]
                [new-mapping (make-hash new-hash-list)]
                [rec (lambda (any) (literal-replace* new-mapping any)) ])
-          (state new-sub scope pfterm (rec d) (rec e)))]
+          (state sta stj tha thj new-sub scope pfterm (rec d) (rec e)))]
       ;;; or type constraint information,
       ;;;  we only need to deal with type information
 

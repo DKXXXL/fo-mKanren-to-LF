@@ -155,7 +155,8 @@
             (if (isNone? bg)
               (cons bg #f)
               (match-let* 
-                  ([(cons bg1 fr1) (fwbdo bg)]
+                  ([ _ (assert-or-warn (state? bg) "Error\n")]
+                  [(cons bg1 fr1) (fwbdo bg)]
                   [(WithBackground _ swbdo) (domap fr1)]
                   [bg2+fr2 (swbdo bg1)])
                 bg2+fr2))))))
@@ -192,10 +193,13 @@
   ))
 
 
-
-(struct state-type (sta stj tha thj) #:prefab)
-(struct failed-state state-type (bot-from-tha) #:prefab) ;; indicating bottom type
-(struct state state-type (sub scope pfterm diseq typercd) #:prefab)
+(define state-type-field-info 
+    (make-hash 
+      `([sta . 0][stj . 1][tha . 2][thj . 3])))
+      
+(struct state-type (sta stj tha thj) #:transparent)
+(struct failed-state state-type (bot-from-tha) #:transparent) ;; indicating bottom type
+(struct state state-type (sub scope pfterm diseq typercd) #:transparent)
 
 ;;; monadic style
 (define/contract (walk/state t)
@@ -267,10 +271,10 @@
     [newsub = `((,x . ,t) . ,sub)]
     [newkey = (== x t)]
     [newsta = (fresh-param (term) 
-                  (pfmap-set newkey term))]
+                  (pfmap-set sta newkey term))]
     (<-end 
       (if (occurs? x t sub)
-        (failed-current-st)
+        failed-current-st
         (modify-st 
           (lambda (st) (state-type-sta-set 
                           (state-sub-set st newsub) newsta)))))
@@ -310,10 +314,10 @@
 ;;; )
 
 
-(define (pair-of? x? y?)
-  (lambda (t)
-    (and (pair? t) (x? (car t)) (y? cdr t))))
-
+(define-syntax pair-of?
+  (syntax-rules ()
+    ((_ c1 c2) 
+      (cons/c c1 c2))))
 (define WB WithBackground)
 
 
@@ -326,11 +330,14 @@
 (define (set ty) (λ (term) (WB ty (λ (_) (cons term '())))))
 (define (pure ty) (λ (term) (WB ty (λ (bg) (cons bg  term)))) )
 (define (run ty)  
-  (λ (wb st)
+  (invariant-assertion
+    (ty (WithBackgroundOf? (=== ty)) . -> . any?)
+    (λ (st wb)
     (match-let* 
       ([(WithBackground ty? bg->front) wb]
        [_ (assert-or-warn (ty? st) "Wrong WithBackground Invocation\n")])
       (bg->front st))))
+  )
 (define (modify ty)
   (λ (f)
     (do [st <- get-st]
@@ -357,7 +364,6 @@
   (do 
     [st <- get-st]
     [to-bottom <- (query-stj (Bottom))]
-    [st-pf-info = (struct-copy state-type st)]
     [failed-st  = 
       (failed-state 
         (state-type-sta st) 
@@ -375,8 +381,12 @@
 ;;;   for example, (exists x y z.) they are all different, they are all booleans
 
 (define empty-pfmap (hash))
+(define pfmap? hash?)
 (define pfmap-ref hash-ref)
-(define pfmap-set hash-set)
+(define pfmap-set 
+  (invariant-assertion
+    (pfmap? any? any? . -> . pfmap?)
+    hash-set))
 
 
 
@@ -426,9 +436,42 @@
 ;;; tha : the assumption of (through-goal) type
 ;;; invariant key(stj) == key(sta), key(thj) \supseteq key(tha)
 
-(define empty-state (state empty-sub (list initial-var) single-hole '() (hash)))
+(define empty-state 
+    (state empty-pfmap empty-pfmap empty-pfmap empty-pfmap 
+           empty-sub (list initial-var) single-hole '() (hash)))
 (define-struct-updaters state)
-(define-struct-updaters state-type)
+;;; (define-struct-updaters state-type)
+;;; the above is really useless -- it is not respecting subtype information
+
+;;; only working on prefab currently
+(define (row-update term type-constructor field-index new-info)
+  (let* 
+    ([row-info         (struct->list term)]
+     [updated-row-info (list-set row-info field-index new-info)])
+    (apply type-constructor updated-row-info)))
+
+(define (state-type-row-update-on field) 
+    (let* ([fid  (hash-ref state-type-field-info field)])
+      (invariant-assertion
+        (state-type? any? . -> . state-type?)
+          (λ (term new) 
+            (let* 
+              ([struc-type  (struct-info term)]
+               [constructor (struct-type-make-constructor struc-type)])
+              (row-update term constructor fid new)
+            )))))
+
+(define-values 
+  (state-type-sta-set state-type-stj-set
+   state-type-tha-set state-type-thj-set)
+(values 
+  (state-type-row-update-on 'sta)
+  (state-type-row-update-on 'stj)
+  (state-type-row-update-on 'tha)
+  (state-type-row-update-on 'thj)
+)
+)
+
 (define-struct-updaters failed-state)
 
 ;;; lift <-pf/h-inc into state
@@ -679,7 +722,7 @@
     [unified-st <- get-st]
     [unified-st-typecst = (state-typercd unified-st)]
     [unified-st-ineq    = (state-diseq  unified-st)]
-    [rechecking-st      = (state-typercd (state-diseq-set unified-st '()) (hash))]
+    [rechecking-st      = (state-typercd-set (state-diseq-set unified-st '()) (hash))]
     [_ <- (set-st rechecking-st)]
     ;;; now we need to recheck 
     ;;;     all the inequalities and 
