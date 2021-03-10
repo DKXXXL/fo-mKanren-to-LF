@@ -331,6 +331,9 @@
 ;;;     which I believe is also inspired by something else
 ;;; goal-base-endofunctor : (goal -> goal) -> (goal -> goal) -> goal -> goal
 ;;;  prev-f will call the one on the past overloading functor
+;;; RENAME: prev-f => rec-parent
+;;; RENAME: rec => rec-root
+;;; RENAME: endo-functor => goal-map
 ;;;   extended-f will use the whole composed functor
 ;;;  this functor will do nothing but recurse on the tree
 (define (goal-base-endofunctor prev-f rec g)
@@ -347,6 +350,7 @@
 ;;;      (goal -> goal) -> (goal -> goal) -> goal -> goal
 ;;;   named as functor but actually just a homomorphism --
 ;;;     respects all the Goal? structure that is not only working on Goal?
+;;; RENAME: goal-term-map
 (define (goal-term-base-endofunctor prev-f rec g)
   ;;; (define rec extended-f)
   (match g
@@ -388,6 +392,8 @@
 ;;;     one homomorphism
 ;;; For example:  I can extend state as I want now  
 ;;; [(goal -> goal) -> (goal -> goal) -> goal -> goal] -> (goal -> goal)
+;;; RENAME: overloading-functor-list => compose-maps
+;;; RENAME: endofuncs => maps 
 (define (overloading-functor-list endofuncs)
   (define (overloading-functor-list-with-extf endofuncs extf)
     (match endofuncs
@@ -477,7 +483,7 @@
 ;;;   var existence anywhere
 ;;;   in a given pair-goal
 ;;;     
-
+;;; RENAME: vars-member?
 (define/contract (there-is-var-in vars pair-goal)
   (set? any? . -> . boolean?)
   (define all-fvs (freevar pair-goal))
@@ -485,6 +491,7 @@
 )
 
 
+;;; RENAME: vars-missing?
 (define/contract (there-is-var-not-in vars pair-goal)
   (set? any? . -> . boolean?)
   (define all-fvs (freevar pair-goal))
@@ -505,15 +512,18 @@
 ;;; currently implemented with side-effect,
 ;;;   it is another kind of fold but I am bad at recursion scheme
 ;;;   basically return all free-variables appearing inside g
+;;; RENAME: goal-freevars, 
+;;; RENAME: goal-vars (if doesn't respect)
+;;; RENAME: o/w => _
 (define (freevar g)
   (define fvs (mutable-set))
   (define (counter prev-f ext-f g)
     (match g
       [(var _ _) (begin (set-add! fvs g) g)]
-      [o/w (prev-f g)]
+      [_ (prev-f g)]
     )
   )
-  
+  ;;; RENAME: g-visitor
   (define result-f 
     (overloading-functor-list (list counter goal-term-base-endofunctor pair-base-endofunctor state-base-endo-functor identity-endo-functor))
   )
@@ -528,6 +538,9 @@
 ;;; stream-struct is the parent of all streams
 (struct stream-struct () #:prefab)
 
+;;; RENAME: asumpt => assmpt
+;;; RENAME: bind-s => s
+;;; RENAME: bind-g => g
 (struct bind  stream-struct (asumpt bind-s bind-g)   
   #:transparent
   #:guard (lambda (asumpt bind-s bind-g type-name)
@@ -538,6 +551,8 @@
                        (values asumpt bind-s bind-g)]
                       [else (error type-name)]))
 )
+;;; RENAME: mplus-s1 => s1
+;;; RENAME: remove all unnecessary prefix for the following
 (struct mplus stream-struct (mplus-s1 mplus-s2) 
   #:transparent
   #:guard (lambda (mplus-s1 mplus-s2 type-name)
@@ -559,6 +574,7 @@
 ;;; (pause st g) will fill the generated proof term into st
 ;;; it has the same specification as (start st g)
 ;;; (pause st g) has same specification as (start st g)
+
 (struct pause stream-struct (asumpt pause-state pause-goal) #:prefab)
 
 
@@ -575,10 +591,13 @@
 ;;; finally a stream of state where only conjunction is inside each state
 ;;;  a /\ (b \/ c) /\ (d \/ e) 
 ;;;  1 -> a /\ c /\ e; 2 -> a /\ b /\ e ... 
+;;;   RENAME: mark => address
 (struct to-dnf stream-struct (state mark) #:prefab)
 
 
 ;;; a stream of syntactical solving
+;;; RENAME: asumpt => assmpt
+;;; RENAME: org-asumpt => init-assmpt
 (struct syn-solve stream-struct (asumpt org-asumpt st g) #:prefab)
 
 
@@ -678,11 +697,13 @@
 ;;; used for (to-dnf stream):
 ;;;   since a state has semantic of disjunction
 ;;;     we transform it into DNF and we should be able to index each disjunct component
+;;; RENAME: get-state-DNF-address-range 
 (define (get-state-DNF-range st)
   (define conjs (state-diseq st))
   (map length conjs)
 )
 
+;;; RENAME: get-state-DNF-initial-address 
 (define (get-state-DNF-initial-index st)
   (define conjs (state-diseq st))
   (map (lambda (x) 0) conjs)
@@ -690,6 +711,7 @@
 
 ;;; return #f if there is no next
 ;;; precondition: length l == length range
+;;; RENAME: address++
 (define (index-incremenent-by-one l range)
   (match (cons l range)
     [(cons '() '()) #f]
@@ -702,7 +724,7 @@
   )
 )
 
-
+;;; RENAME: index => address for all the following
 (define (get-state-DNF-next-index st index)
   (define range (get-state-DNF-range st))
   (index-incremenent-by-one index range))
@@ -760,6 +782,8 @@
 ;;; specification: 
 ;;;   g <=> (let (a,b) = (dec+non-dec g) in (conj a b))
 ;;;   where a must be decidable component
+;;; {dec} + {non-dec}
+;;; RENAME: split-dec+nondec
 (define/contract (dec+non-dec g)
   (Goal? . -> . pair?)
   (define rec dec+non-dec)
@@ -800,6 +824,7 @@
 
 ;;; Use syntactical-simplification
 ;;;   right after decidable component extraction
+;;; RENAME: simplify-dec+nondec
 (define/contract (dec+non-dec-simpl g)
   (Goal? . -> . pair?)
   (if (decidable-goal? g)
@@ -814,6 +839,9 @@
 ;;;   all the possibe results of first-attempt-s
 ;;;   will be complemented and intersect with the domain of the bind-g
 ;;;   bind-g will have to be a forall goal
+;;;  RENAME: dv => domain-var
+;;;  RENAME: first-attempt-s => state
+;;;  RENAME: s => state
 (struct bind-forall  stream-struct (asumpt scope first-attempt-s dv bind-g)          #:prefab)
 
 ;;; if a stream is WHNF(?)  
