@@ -67,6 +67,7 @@
 
 (require struct-update)
 (require racket/contract)
+(require racket/struct)
 (require errortrace)
 (require "proof-term.rkt")
 (require "mk-fo-def.rkt")
@@ -155,10 +156,9 @@
             (if (isNone? bg)
               (cons bg #f)
               (match-let* 
-                  ([ _ (assert-or-warn (state? bg) "Error\n")]
-                  [(cons bg1 fr1) (fwbdo bg)]
-                  [(WithBackground _ swbdo) (domap fr1)]
-                  [bg2+fr2 (swbdo bg1)])
+                  ([(cons bg1 fr1) (fwbdo bg)]
+                   [(WithBackground _ swbdo) (domap fr1)]
+                   [bg2+fr2 (swbdo bg1)])
                 bg2+fr2))))))
 
 (define (>> a b) (>>= a (λ (_) b)))
@@ -185,9 +185,11 @@
     ((_ [ x = y ] sth ...) 
       (match-let ([x y]) (do sth ...)))
     ((_ [ x <- y ] sth ...) 
-      (>>= y (match-lambda [x (do sth ...)])))
+      (let* ([_ (assert-or-warn (WithBackground? y) "Error at :~s\n" #'y)])
+        (>>= y (match-lambda [x (do sth ...)])) ) )
     ((_ [ <-end y ]) 
-      y)
+      (let* ([_ (assert-or-warn (WithBackground? y) "Error at :~s\n" #'y)]) 
+        y))
     ((_ [ <-return y ]) 
       (pure-st y))
   ))
@@ -394,9 +396,11 @@
   (do [st <- get-st]
       [<-return (pfmap-ref (x-getter st) key)]))
 
-(define (add-to-x x-updator typekey t)
+(define/contract (add-to-x x-updator typekey t)
+  (any? any? any? . -> . WithBackground?)
     (do [st <- get-st]
         [new-st = (x-updator st (λ (h) (pfmap-set h typekey t)))]
+        [_ <- (set-st new-st)]
         [<-return t]))
 
 (define (query-sta key) (query-x key state-type-sta))
@@ -404,7 +408,9 @@
 (define (query-tha key) (query-x key state-type-tha))
 (define (query-thj key) (query-x key state-type-thj))
 
-(define (add-to-sta typekey t) (add-to-x state-type-sta-update typekey t))
+(define (add-to-sta typekey t)
+
+ (add-to-x state-type-sta-update typekey t))
 (define (add-to-stj typekey t) (add-to-x state-type-stj-update typekey t))
 (define (add-to-tha typekey t) (add-to-x state-type-tha-update typekey t))
 (define (add-to-thj typekey t) (add-to-x state-type-thj-update typekey t))
@@ -455,9 +461,9 @@
       (invariant-assertion
         (state-type? any? . -> . state-type?)
           (λ (term new) 
-            (let* 
-              ([struc-type  (struct-info term)]
-               [constructor (struct-type-make-constructor struc-type)])
+            (let*-values 
+              ([(struc-type _)  (struct-info term)]
+               [(constructor) (struct-type-make-constructor struc-type)])
               (row-update term constructor fid new)
             )))))
 
@@ -471,6 +477,18 @@
   (state-type-row-update-on 'thj)
 )
 )
+
+(define-values 
+  (state-type-sta-update state-type-stj-update
+   state-type-tha-update state-type-thj-update)
+  (let* 
+    ((updator (λ (getter setter) 
+                  (λ (obj f) (setter obj (f (getter obj)))))))
+  (values 
+    (updator state-type-sta state-type-sta-set)
+    (updator state-type-stj state-type-stj-set)
+    (updator state-type-tha state-type-tha-set)
+    (updator state-type-thj state-type-thj-set))))
 
 (define-struct-updaters failed-state)
 
@@ -640,8 +658,8 @@
               [tha:u=v     =  a:u=v]
               [sta:u0=v0   <- (fresh-param (term) (add-to-tha (== u0 v0) term))]
               ;;; add to thj
-              [thj:u=v     <- (t:u0=v0->t:u=v sta:u0=v0)]
-              [stj:u0=v0   <- (t:u=v->t:u0=v0 tha:u=v)]
+              [thj:u=v     = (t:u0=v0->t:u=v sta:u0=v0)]
+              [stj:u0=v0   = (t:u=v->t:u0=v0 tha:u=v)]
               [to-bottom   =  (LFassert ((== u0 v0) . impl . (Bottom)))]
               ;;; add bottom to thj
               ;;; [_          <- (add-to-thj (Bottom) (LFapply to-bottom sta:u0=v0))]
@@ -702,8 +720,6 @@
       ([each-disj conj-disj-pair])
       ((neg-unify*/state each-disj) . >> . acc)
     ))
-  
-
   (define/contract (typecst-recheck var-type-pair)
     (list? . -> . (WithBackgroundOf? (=== state-type?)))
     (for/fold 
