@@ -1,8 +1,10 @@
-#lang racket
+#lang errortrace racket
 
 (require "mk-fo.rkt")
 (require racket/format)
 (require errortrace)
+(require rackunit/text-ui)
+
 ;;; (require "examples-for-test.rkt")
 
 (require rackunit)
@@ -10,6 +12,7 @@
 (provide
   (all-defined-out)
   (all-from-out "mk-fo.rkt")
+  run-tests
 )
 
 ;;; (display "Enabling code coverage, might hurt performance \n")

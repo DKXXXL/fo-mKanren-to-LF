@@ -1,4 +1,4 @@
-#lang racket
+#lang errortrace racket
 (provide
   (struct-out var)
   initial-var
@@ -408,9 +408,7 @@
 (define (query-tha key) (query-x key state-type-tha))
 (define (query-thj key) (query-x key state-type-thj))
 
-(define (add-to-sta typekey t)
-
- (add-to-x state-type-sta-update typekey t))
+(define (add-to-sta typekey t) (add-to-x state-type-sta-update typekey t))
 (define (add-to-stj typekey t) (add-to-x state-type-stj-update typekey t))
 (define (add-to-tha typekey t) (add-to-x state-type-tha-update typekey t))
 (define (add-to-thj typekey t) (add-to-x state-type-thj-update typekey t))
@@ -1002,7 +1000,7 @@
       (do 
         [old-st <- get-st]
         [a:u=v  =  (fresh-param (t) t)]
-        [(cons new-st t:u=v) = (run-st (unify/state u v a:u=v) old-st)]
+        [(cons new-st t:u=v) = (run-st old-st (unify/state u v a:u=v))]
         ;;; what if new-st == failed-state?
         [newly-added         = 
           (and new-st
@@ -1073,7 +1071,7 @@
                   [new-st-stj = (state-type-stj new-st)]
                   [new-st-thj = (state-type-thj new-st)]
                   [l-new-eqs = (map (λ (p) (== (car p) (cdr p))) newsubs)]
-                  [n-l-new-eqs = (complement l-new-eqs)]
+                  [n-l-new-eqs = (map complement l-new-eqs)]
                   [r-equ     = (== u v)]
                   [n-r-equ   = (=/= u v)]
                   [about-rest = (foldl disj (Bottom)
@@ -1085,24 +1083,26 @@
                   ;;; we extract proof for l-new-eqs <-> r-equ
                   [l-params  = (map (λ (eq) (pfmap-ref new-st-sta eq)) l-new-eqs)]
                   [l-proofs  = (map (λ (eq) (pfmap-ref new-st-stj eq)) l-new-eqs)]
-                  [r-param   = (pfmap-ref new-st-tha r-equ)]
+                  ;;; [r-param   = (pfmap-ref new-st-tha r-equ)]
+                  [r-param   = a:u=v]
                   [r-proof    = (pfmap-ref new-st-thj r-equ)]
-                  [l<->r-type = (equiv (foldl conj l-new-eqs (Top)) r-equ)]
+                  [l<->r-type = (equiv (foldl conj (Top) l-new-eqs) r-equ)]
                   [l<->r      = (LFeqv-product l-params (list r-param) l-proofs (list r-proof))]
                   [n-l<->r-type = (equiv n-l-new-eqs n-r-equ)]
                   [l<->r->n-l<->r = (LFassert (l<->r-type . impl . n-l<->r-type))]
                   [n-l<->r    = (LFapply* l<->r->n-l<->r l<->r)]
-                  [n-l2<->r2  = (LFapply* (LFassert ((equiv n-l-new-eqs n-r-equ) . impl . (equiv (disj n-l-new-eqs about-rest) (disj n-r-equ about-rest)))) n-l<->r)]
+                  [disjs-n-l-new-eqs = (foldl disj (Bottom) n-l-new-eqs)]
+                  [n-l2<->r2  = (LFapply* (LFassert ((equiv n-l-new-eqs n-r-equ) . impl . (equiv (disj disjs-n-l-new-eqs about-rest) (disj n-r-equ about-rest)))) n-l<->r)]
                   ;;; now we modify state
                   [updating-sta-pair = (append newly-added rest)]
-                  [updating-sta-goal = (foldl disj (Bottom) (map (λ (t) (=/= (car t) (cdr t)))) updating-sta-pair)]
+                  [updating-sta-goal = (foldl disj (Bottom) (map (λ (t) (=/= (car t) (cdr t))) updating-sta-pair))]
                   [updating-tha-pair = list-u-v]
-                  [updating-tha-goal = (foldl disj (Bottom) (map (λ (t) (=/= (car t) (cdr t)))) updating-tha-pair)]
+                  [updating-tha-goal = (foldl disj (Bottom) (map (λ (t) (=/= (car t) (cdr t))) updating-tha-pair))]
                   [updated-st = (state-diseq-update old-st (lambda (x) (cons (append newly-added rest) x)))]
                   [_          <- (set-st updated-st)]
                   ;;; now we add tha, sta about updated-st 
-                  [sta-l          <- (fresh-param (term) (add-to-sta updating-sta-goal))]
-                  [tha-r          <- (fresh-param (term) (add-to-tha updating-tha-goal))]
+                  [sta-l          <- (fresh-param (term) (add-to-sta updating-sta-goal term))]
+                  [tha-r          <- (fresh-param (term) (add-to-tha updating-tha-goal term))]
                   [n-r     = (LFapply* (LFpair-pi-1 n-l2<->r2) sta-l)]
                   [n-l     = (LFapply* (LFpair-pi-2 n-l2<->r2) tha-r)]
                   [_    <- (add-to-stj target-type-for-stj n-l)]

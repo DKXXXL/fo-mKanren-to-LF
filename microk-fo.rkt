@@ -899,7 +899,7 @@
 
 ;;; Note: will change tha
 (define/contract (run-neg-unify a b st)
-  (any? set? state-type? . -> . (pair-of? state-type? proof-term?))
+  (any? any? state-type? . -> . (pair-of? state-type? proof-term?))
   (run-st st 
     (do
       [a:a=/=b <- (fresh-param (term) (add-to-tha (=/= a b) term))] 

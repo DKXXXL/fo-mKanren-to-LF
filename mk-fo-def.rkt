@@ -79,6 +79,7 @@
 )
 
 
+
 (struct Goal () 
   #:transparent)
 
@@ -274,13 +275,13 @@
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "(~a <=> ~a)" (equiv-g1 val) (equiv-g2 val)))]
-  #:guard (lambda (g1 g2 type-name)
-                    (cond
-                      [(andmap Goal? (list g1 g2)) 
-                       (values g1 g2)]
-                      [else (error type-name
-                                   "All should be Goal: ~e"
-                                   (list g1 g2))]))
+  ;;; #:guard (lambda (g1 g2 type-name)
+  ;;;                   (cond
+  ;;;                     [(andmap (listof Goal?) (list g1 g2)) 
+  ;;;                      (values g1 g2)]
+  ;;;                     [else (error type-name
+  ;;;                                  "All should be Goal: ~e"
+  ;;;                                  (list g1 g2))]))
 )
 
 ;;; ;;; the following goal
