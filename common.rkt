@@ -704,7 +704,11 @@
 ;;;   (let ((sub (unify/sub u v (state-sub st))))
 ;;;     (and sub (cons (state sub (state-trace st)) #f))))
 
-(define (wrap-state-stream st) (and st (cons st #f)))
+(define/contract (wrap-state-stream st) 
+    ((or/c state-type? false/c) . -> . Stream?)
+    (and st 
+         (state? st)
+         (cons st #f)))
 
 ;;; state x var x (set of/list of) typeinfo -> state
 (define/contract (state-typercd-cst-add st v type-info)
@@ -760,6 +764,7 @@
          . >> . acc))))
 
   (do
+    ;;; [_  = (debug-dump "\n unifying with: ~a ~a" u v)]
     [old-st     <- get-st]
     [t:u=v         <- (unify/st/proof u v a:u=v)]
     [unified-st <- get-st]
@@ -864,6 +869,7 @@
     (match tm
       [(cons a b) 
         (do
+          ;;; [_  = (debug-dump "\n walking! : ~a " tm)]
           [(cons a0 t:a0=a) <- (walk-struct-once/state a)]
           [(cons b0 t:b0=b) <- (walk-struct-once/state b)]
           [eqt = (LFeq-pair t:a0=a t:b0=b)]
@@ -882,14 +888,16 @@
          )
     (if (equal? tm- tm) tm (walk* tm- sub))))
 
-;;; monadic style
+;;; monadic style, return a term and a pf that two things are equal
 (define/contract (walk*/state tm)
   (any? . -> . (WithBackgroundOf? (=== state-type?)))
-  (do [tm- <- (walk-struct-once/state tm)]
+  (do [(cons tm- pf:tm-=tm) <- (walk-struct-once/state tm)]
       (<-end 
         (if (equal? tm- tm)
-          (pure-st tm)
-          (walk*/state tm-)))))
+          (pure-st (cons tm- pf:tm-=tm))
+          (do [(cons tm-- pf:tm--=tm-) <- (walk*/state tm-)]
+              [pf:tm--=tm = (LFeq-trans pf:tm--=tm- pf:tm-=tm)]
+              [<-return (cons tm-- pf:tm--=tm)]) ))))
 
 (define (reified-index index)
   (string->symbol
@@ -1059,8 +1067,9 @@
                           t:u0=v0))]
                   ;;; [to-bottom   =  (LFassert ((== u0 v0) . impl . (Bottom)))]
                   [new-st-thj     = (state-type-thj new-st)]
+                  [new-st-stj     = (state-type-stj new-st)]
                   [new-st-sta     = (state-type-sta new-st)]
-                  [bot            = (pfmap-ref new-st-thj (Bottom))]
+                  [bot            = (pfmap-ref new-st-stj (Bottom))]
                   [the-parameter  = (pfmap-ref new-st-sta (== u0 v0))]
                   [u0=v0->bot     = (LFassert ((== u0 v0) . impl . (Bottom)))]
                   ;;; TODO: check free var in u0=v0->bot is bounded by old-state-sta

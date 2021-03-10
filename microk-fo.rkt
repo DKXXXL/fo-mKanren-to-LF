@@ -1028,7 +1028,7 @@
     ((symbolo t1)  
         (match-let*
             ([stream (pause asumpt st (term-not-finite-type t1))]
-            [do-each-state
+             [do-each-state
               (λ (st) 
                 (run-st st 
                   (do 
