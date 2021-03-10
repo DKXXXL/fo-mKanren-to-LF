@@ -145,9 +145,9 @@
 
 (define (=== k) (λ (x) (equal? x k)))
 
-;;; 
-(define/contract (>>= fwb domap)
-  (WithBackground? (any? . -> . WithBackground?) . -> . WithBackground?)
+;;; dbginfo
+(define/contract (>>= fwb domap dbginfo)
+  (WithBackground? (any? . -> . WithBackground?) any? . -> . WithBackground?)
   (WithBackground
     (WithBackground-bgType fwb)
     (let*
@@ -157,12 +157,15 @@
             (if (isNone? bg)
               (cons bg #f)
               (match-let* 
-                  ([(cons bg1 fr1) (fwbdo bg)]
+                  ([(cons bg1 fr1) 
+                      (with-handlers 
+                        ([any? (λ (e) (printf "Error is invoked from do: ~s\n" dbginfo) (raise e))])
+                        (fwbdo bg))]
                    [(WithBackground _ swbdo) (domap fr1)]
                    [bg2+fr2 (swbdo bg1)])
                 bg2+fr2))))))
 
-(define (>> a b) (>>= a (λ (_) b)))
+(define (>> a b) (>>= a (λ (_) b) #f))
 
 ;;; Recall that
 ;;; get :: (WB state-type state-type)
@@ -181,30 +184,34 @@
 ;;; (do [<-return x]) = (pure-st x)
 ;;;     usually it is  
 
-(define-syntax (here stx)
-    #`(list (quote-line-number #,stx)))
+;;; (define-syntax (here stx)
+;;;     #`(list (quote-line-number #,stx)))
 
-(define-syntax stab-trace
-  (syntax-rules ()
-    ((_ number k)
-       ((λ (_ t) t) "INFO" k) )
-    ((_ k)
-       ((λ (_ __ t) t) "LINE" (here) k) )   ))
+;;; (define-syntax stab-trace
+;;;   (syntax-rules ()
+;;;     ((_ number k)
+;;;        ((λ (_ t) t) "INFO" k) )
+;;;     ((_ k)
+;;;        ((λ (_ __ t) t) "LINE" (here) k) )   ))
 
 (define-syntax do
   (syntax-rules (<- <-end <-return =)
     ((_ [ x = y ] sth ...) 
-      (stab-trace (match-let ([x y]) (do sth ...))))
+      (match-let ([x y]) (do sth ...)))
     ((_ [ x <- y ] sth ...) 
       (let* ([_ (assert-or-warn (WithBackground? y) "Type Error at :~s\n" #'y)])
-        (stab-trace (>>= y (match-lambda [x (do sth ...)]))) ) )
+         (>>= y (match-lambda [x (do sth ...)]) #'y)) ) 
     ((_ [ <-end y ]) 
       (let* ([_ (assert-or-warn (WithBackground? y) "Type Error at :~s\n" #'y)]) 
-        (stab-trace y)))
+        y))
     ((_ [ <-return y ]) 
-      (stab-trace (pure-st y)))
+      (pure-st y))
   ))
 
+;;;  (define-syntax (do stx)
+;;;     (syntax-case stx ()
+;;;       ((_ a ...)
+;;;        #`((λ (_ t) t) (quote-line-number #,stx) (do2 a ...)))))
 
 (define state-type-field-info 
     (make-hash 
