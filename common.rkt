@@ -740,7 +740,11 @@
     (for/fold 
       ([acc       (pure-st #f)])
       ([each-disj conj-disj-pair])
-      ((neg-unify*/state each-disj) . >> . acc)
+      (let* ([disj-goal-list (map (λ (t) (=/= (car t) (cdr t))) each-disj)]
+             [goal-type (foldl disj (Bottom) disj-goal-list)])
+        (do 
+          [each-disj-term <- (query-stj goal-type)]
+          [<-end ((neg-unify*/state each-disj each-disj-term) . >> . acc)]))
     ))
   (define/contract (typecst-recheck var-type-pair)
     (list? . -> . (WithBackgroundOf? (=== state-type?)))
@@ -750,7 +754,8 @@
       (match-let* 
         ([(cons v cst) each])
         ((if (set? cst)
-             (check-as-inf-type-disj/state v cst)
+             (do [pfterm <- (query-stj (type-constraint v cst))]
+                 [<-end (check-as-inf-type-disj/state v cst pfterm)])
              (pure-st '())) 
          . >> . acc))))
 
