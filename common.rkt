@@ -185,10 +185,10 @@
     ((_ [ x = y ] sth ...) 
       (match-let ([x y]) (do sth ...)))
     ((_ [ x <- y ] sth ...) 
-      (let* ([_ (assert-or-warn (WithBackground? y) "Error at :~s\n" #'y)])
+      (let* ([_ (assert-or-warn (WithBackground? y) "Type Error at :~s\n" #'y)])
         (>>= y (match-lambda [x (do sth ...)])) ) )
     ((_ [ <-end y ]) 
-      (let* ([_ (assert-or-warn (WithBackground? y) "Error at :~s\n" #'y)]) 
+      (let* ([_ (assert-or-warn (WithBackground? y) "Type Error at :~s\n" #'y)]) 
         y))
     ((_ [ <-return y ]) 
       (pure-st y))
@@ -497,6 +497,7 @@
   (syntax-rules ()
     ((_ st term) 
       (and st
+           (state? st)
            (state-pfterm-update st 
               (lambda (pft) (pft . <-pf/h-inc . term)))) )     
 
@@ -1002,7 +1003,11 @@
         [old-st <- get-st]
         [a:u=v  =  (fresh-param (t) t)]
         [(cons new-st t:u=v) = (run-st (unify/state u v a:u=v) old-st)]
-        [newly-added         = (extract-new (state-sub new-st) (state-sub old-st))]
+        ;;; what if new-st == failed-state?
+        [newly-added         = 
+          (and new-st
+               (state? new-st)
+               (extract-new (state-sub new-st) (state-sub old-st)))]
         [<-end 
           (match newly-added
             [#f  

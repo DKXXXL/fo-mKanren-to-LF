@@ -876,7 +876,7 @@
 ;;; following run will also add 
 ;;; Note: will change tha
 (define/contract (run-unify s t st)
-  (any? any? state-type? . -> . (pair-of? state-type? proof-term?))
+  (any? any? state-type? . -> . (pair-of? state-type? (or/c proof-term? false/c)))
   (run-st st 
     (do
       [a:s=t <- (fresh-param (term) (add-to-tha (== s t) term))] 
