@@ -1,4 +1,4 @@
-#lang racket
+#lang errortrace racket
 (provide
   (all-from-out "mk-fo-def.rkt")
   (all-from-out "common.rkt")
@@ -899,7 +899,7 @@
 
 ;;; Note: will change tha
 (define/contract (run-neg-unify a b st)
-  (any? any? state-type? . -> . (pair-of? state-type? proof-term?))
+  (any? any? state-type? . -> . (pair-of? state-type? (or/c proof-term? false/c)))
   (run-st st 
     (do
       [a:a=/=b <- (fresh-param (term) (add-to-tha (=/= a b) term))] 
@@ -1027,7 +1027,7 @@
 
     ((symbolo t1)  
         (match-let*
-            ([stream (pause st (term-not-finite-type t1))]
+            ([stream (pause asumpt st (term-not-finite-type t1))]
             [do-each-state
               (λ (st) 
                 (run-st st 
@@ -1040,7 +1040,7 @@
           (mapped-stream do-each-state stream)))
     ((not-symbolo t1) 
         (match-let*
-            ([stream (pause st (term-not-finite-type t1))]
+            ([stream (pause asumpt st (term-not-finite-type t1))]
             [do-each-state
               (λ (st) 
                 (run-st st 
@@ -1056,7 +1056,7 @@
 
     ((numbero t1) 
         (match-let*
-            ([stream (pause st (term-not-finite-type t1))]
+            ([stream (pause asumpt st (term-not-finite-type t1))]
             [do-each-state
               (λ (st) 
                 (run-st st 
@@ -1069,7 +1069,7 @@
           (mapped-stream do-each-state stream)))
     ((not-numbero t1)  
         (match-let*
-            ([stream (pause st (term-not-finite-type t1))]
+            ([stream (pause asumpt st (term-not-finite-type t1))]
             [do-each-state
               (λ (st) 
                 (run-st st 
@@ -1084,7 +1084,7 @@
             (mapped-stream do-each-state stream) ))) 
     ((stringo t1) 
         (match-let*
-            ([stream (pause st (term-not-finite-type t1))]
+            ([stream (pause asumpt st (term-not-finite-type t1))]
             [do-each-state
               (λ (st) 
                 (run-st st 
@@ -1098,7 +1098,7 @@
     
     ((not-stringo t1)  
         (match-let*
-            ([stream (pause st (term-not-finite-type t1))]
+            ([stream (pause asumpt st (term-not-finite-type t1))]
             [do-each-state
               (λ (st) 
                 (run-st st 
@@ -1115,7 +1115,7 @@
 
     ((type-constraint t1 types)
         (match-let*
-            ([stream (pause st (term-not-finite-type t1))]
+            ([stream (pause asumpt st (term-not-finite-type t1))]
             [do-each-state
               (λ (st) 
                 (run-st st 

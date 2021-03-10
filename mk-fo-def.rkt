@@ -615,7 +615,7 @@
     ((_ COND x ...) 
       (if COND
         #t
-        (begin (debug-dump-w/level 100 x ...) (/ 1 0)  )))))
+        (begin (debug-dump-w/level 100 x ...) (error "")  )))))
 
 (define-syntax assert
   (syntax-rules ()

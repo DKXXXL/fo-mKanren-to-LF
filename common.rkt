@@ -242,7 +242,8 @@
                 [a:t1=t = (LFeq-symm a:t=t1)]
                 [stj:t1=t = (LFeq-symm stj:t=t1)]
                 [(cons tend t:tend=t1) <- (walk/state t1)]
-                [stj:tend=t1 <- (query-stj (== tend t1))]
+                ;;; [stj:tend=t1 <- (query-stj (== tend t1))]
+                [stj:tend=t1 = t:tend=t1]
                 [a:tend=t   = (LFeq-trans stj:tend=t1 a:t1=t)]
                 [stj:tend=t = (LFeq-trans stj:tend=t1 stj:t1=t)]
                 [_ <- (add-to-stj (== tend t) stj:tend=t)]
@@ -282,7 +283,7 @@
 (define (extend-sub x t sub)
   (and (not (occurs? x t sub)) `((,x . ,t) . ,sub)))
 
-(define (extend-sub/state x t)
+(define (extend-sub/state x t tha:x=t)
   (any? any? . -> . (WithBackgroundOf? (=== state-type?)))
   (do 
     [st     <- get-st]
@@ -294,7 +295,11 @@
                   (pfmap-set sta newkey term))]
     (<-end 
       (if (occurs? x t sub)
-        failed-current-st
+        (do 
+          [tobottom = (LFapply (LFaxiom (newkey . impl . (Bottom))) tha:x=t)]
+          ;;; add tobottom to stj
+          [_ <- (add-to-stj (Bottom) tobottom)]
+          [<-end failed-current-st])
         (modify-st 
           (lambda (st) (state-type-sta-set 
                           (state-sub-set st newsub) newsta)))))
@@ -609,7 +614,7 @@
         [(and (var? u0) 
               (var? v0) 
               (var=? u0 v0))  
-            ;;; no sta has been added, thus sta, stj won't change
+            ;;; no sta have been added, thus sta, stj won't change
             ;;; but u=v will be added to thj
             (do 
               [t:u=v    = (t:u0=v0->t:u=v (LFeq-refl u0))]
@@ -619,30 +624,30 @@
               [<-return t:u=v]
               )]
         [(var? u0) 
-            ;;; (u0 == v0) has been added to sta, stj 
+            ;;; (u0 == v0) will be added to sta, stj 
             ;;; and u=v will be added to thj            
             (do
-              [_ <- (extend-sub/state u0 v0)] ;; now we have u0=v0 inside assumption
+              [t:u0=v0 = (t:u=v->t:u0=v0 a:u=v)]
+              [_ <- (extend-sub/state u0 v0 t:u0=v0)] ;; now we have u0=v0 inside assumption
               [st  <- get-st]
               [newsta = (state-type-sta st)]
               [a:u0=v0 = (pfmap-ref newsta (== u0 v0))]
               [t:u=v   = (t:u0=v0->t:u=v a:u0=v0)]
-              [t:u0=v0 = (t:u=v->t:u0=v0 a:u=v)]
               [_ <- (add-to-stj (== u0 v0) t:u0=v0)]
               [_ <- (add-to-thj (== u v)   t:u=v)]
               [<-return t:u=v])]
         [(var? v0)     
-            ;;; (v0 == u0) has been added to sta, stj 
+            ;;; (v0 == u0) will be added to sta, stj 
             ;;; and u=v will be added to thj        
             (do
-              [_ <- (extend-sub/state v0 u0)] ;; now we have u0=v0 inside assumption
+              [t:u0=v0 = (t:u=v->t:u0=v0 a:u=v)]
+              [t:v0=u0 = (LFeq-symm t:u0=v0)]
+              [_ <- (extend-sub/state v0 u0 t:v0=u0)] ;; now we have u0=v0 inside assumption
               [st  <- get-st]
               [newsta = (state-type-sta st)]
               [a:v0=u0 = (pfmap-ref newsta (== v0 u0))]
               [a:u0=v0 = (LFeq-symm a:v0=u0)]
               [t:u=v   = (t:u0=v0->t:u=v a:u0=v0)]
-              [t:u0=v0 = (t:u=v->t:u0=v0 a:u=v)]
-              [t:v0=u0 = (LFeq-symm t:u0=v0)]
               [_ <- (add-to-stj (== v0 u0) t:v0=u0)]
               [_ <- (add-to-thj (== u v)   t:u=v)]
               [<-return t:u=v])]
@@ -1013,7 +1018,11 @@
         ([(cons u v) each-u-v-pair])
         (disj (=/= u v) acc-goal))))
   (match list-u-v
-    ['() #f]
+    ['() 
+      (do
+        [_ <- (add-to-stj (Bottom) a:Vu=/=v)] 
+        [<-end failed-current-st]
+      )] ;; need bottom into stj
     [(cons (cons u v) rest)
       (do 
         [old-st <- get-st]
