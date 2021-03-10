@@ -68,6 +68,7 @@
 (require struct-update)
 (require racket/contract)
 (require racket/struct)
+(require syntax/location)
 (require errortrace)
 (require "proof-term.rkt")
 (require "mk-fo-def.rkt")
@@ -180,18 +181,28 @@
 ;;; (do [<-return x]) = (pure-st x)
 ;;;     usually it is  
 
+(define-syntax (here stx)
+    #`(list (quote-line-number #,stx)))
+
+(define-syntax stab-trace
+  (syntax-rules ()
+    ((_ number k)
+       ((λ (_ t) t) "INFO" k) )
+    ((_ k)
+       ((λ (_ __ t) t) "LINE" (here) k) )   ))
+
 (define-syntax do
   (syntax-rules (<- <-end <-return =)
     ((_ [ x = y ] sth ...) 
-      (match-let ([x y]) (do sth ...)))
+      (stab-trace (match-let ([x y]) (do sth ...))))
     ((_ [ x <- y ] sth ...) 
       (let* ([_ (assert-or-warn (WithBackground? y) "Type Error at :~s\n" #'y)])
-        (>>= y (match-lambda [x (do sth ...)])) ) )
+        (stab-trace (>>= y (match-lambda [x (do sth ...)]))) ) )
     ((_ [ <-end y ]) 
       (let* ([_ (assert-or-warn (WithBackground? y) "Type Error at :~s\n" #'y)]) 
-        y))
+        (stab-trace y)))
     ((_ [ <-return y ]) 
-      (pure-st y))
+      (stab-trace (pure-st y)))
   ))
 
 
