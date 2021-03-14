@@ -515,7 +515,7 @@
       [_ (rec-parent g)]
     )
   )
-  ;;; RENAME: g-visitor
+
   (define g-visitor 
     (compose-maps (list counter goal-term-base-map pair-base-map state-base-endo-functor identity-endo-functor))
   )
@@ -540,8 +540,7 @@
                        (values assmpt s g)]
                       [else (error type-name)]))
 )
-;;; RENAME: mplus-s1 => s1
-;;; RENAME: remove all unnecessary prefix for the following
+
 (struct mplus stream-struct (s1 s2) 
   #:transparent
   #:guard (lambda (s1 s2 type-name)
@@ -683,13 +682,13 @@
 ;;; used for (to-dnf stream):
 ;;;   since a state has semantic of disjunction
 ;;;     we transform it into DNF and we should be able to index each disjunct component
-;;; RENAME: get-state-DNF-address-range 
+
 (define (get-state-DNF-range st)
   (define conjs (state-diseq st))
   (map length conjs)
 )
 
-;;; RENAME: get-state-DNF-initial-address 
+ 
 (define (get-state-DNF-initial-index st)
   (define conjs (state-diseq st))
   (map (lambda (x) 0) conjs)
@@ -767,7 +766,6 @@
 ;;;   g <=> (let (a,b) = (split-dec+nondec g) in (conj a b))
 ;;;   where a must be decidable component
 ;;; {dec} + {non-dec}
-;;; RENAME: split-dec+nondec
 (define/contract (split-dec+nondec g)
   (Goal? . -> . pair?)
   (define rec split-dec+nondec)
@@ -808,7 +806,6 @@
 
 ;;; Use syntactical-simplification
 ;;;   right after decidable component extraction
-;;; RENAME: simplify-dec+nondec
 (define/contract (simplify-dec+nondec g)
   (Goal? . -> . pair?)
   (if (decidable-goal? g)
@@ -896,24 +893,6 @@
   
 )
 
-;;; return a proof-term for a given sum-type
-;;;   actually a elimination for (disj A B)
-;;; (disj A B) x (A -> C) x (B -> C)  -> C
-(define/contract (LFcase-analysis sumType retType sum-term left-case right-case)
-  (disj? Goal? proof-term? proof-term? proof-term? . -> . proof-term?)
-  (match-let* 
-    ([(disj A B) sumType]
-     [C retType]
-     [larrow (cimpl A C)]
-     [rarrow (cimpl B C)]
-     [case-type (cimpl (conj* sumType larrow rarrow) C)]
-     [case-term (LFaxiom case-type)]
-     [arguments (LFpair sum-term (LFpair left-case right-case))]
-    )
-    (LFapply case-term arguments)
-  )
-  
-)
 
 
 ;;; run a goal with a given state
@@ -1202,16 +1181,6 @@
   
 )
 
-;;; Try to prove g is unsatisfiable under st
-;;;   that is proving (cimpl g (Bottom)) semantically
-;;;     whose proof-term will also be put into st
-;;;   TODO: later we will prove this part into elaborator of vanilla miniKanren
-;;;     and only allow this works on quantifier-free goals
-(define/contract (prove-goal-unsat assmpt st g)
-  (assumption-base? ?state? Goal? . -> . ?state?)
-  ;;; TODO: to justify 
-  st 
-)
 
 ;;; run a goal with a given state
 ;;; note that when st == #f, the returned stream will always be #f
@@ -1220,8 +1189,6 @@
 (define/contract (sem-solving assmpt st g)
   (assumption-base? ?state? Goal? . -> . Stream?)
   ;;; the following used when primitive goal is to fill in the
-  (define (prim-goal-filled-st st g)
-    st)
   (and st ;;; always circuit the st
     (match g
     ((disj g1 g2)
@@ -1284,27 +1251,27 @@
     ))
     ((relate thunk descript)
       (pause assmpt st (thunk)))
-    ((== t1 t2) (unify t1 t2 (prim-goal-filled-st st g) ))
-    ((=/= t1 t2) (neg-unify t1 t2 (prim-goal-filled-st st g) ))
-    ((symbolo t1)  (wrap-state-stream (check-as-inf-type symbol? t1 (prim-goal-filled-st st g))))
+    ((== t1 t2) (unify t1 t2 st))
+    ((=/= t1 t2) (neg-unify t1 t2 st))
+    ((symbolo t1)  (wrap-state-stream (check-as-inf-type symbol? t1 st)))
     ;; TODO (greg): factor out predicates
     ((not-symbolo t1) 
       (mplus 
-        (term-finite-type assmpt t1 (prim-goal-filled-st st g))
-        (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label symbol?) t1 (prim-goal-filled-st st g))))) 
-    ((numbero t1) (wrap-state-stream (check-as-inf-type number? t1 (prim-goal-filled-st st g))))
+        (term-finite-type assmpt t1 st)
+        (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label symbol?) t1 st)))) 
+    ((numbero t1) (wrap-state-stream (check-as-inf-type number? t1 st)))
     ((not-numbero t1)  
       (mplus 
-        (term-finite-type assmpt t1 (prim-goal-filled-st st g))
-        (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label number?) t1 (prim-goal-filled-st st g))))) 
-    ((stringo t1) (wrap-state-stream (check-as-inf-type string? t1 (prim-goal-filled-st st g))))
+        (term-finite-type assmpt t1 st)
+        (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label number?) t1 st)))) 
+    ((stringo t1) (wrap-state-stream (check-as-inf-type string? t1 st)))
     ((not-stringo t1)  
       (mplus 
-        (term-finite-type assmpt t1 (prim-goal-filled-st st g))
-        (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label string?) t1 (prim-goal-filled-st st g)))))
+        (term-finite-type assmpt t1 st)
+        (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label string?) t1 st))))
 
     ((type-constraint t types)
-      (wrap-state-stream (check-as-inf-type-disj types t (prim-goal-filled-st st g))))
+      (wrap-state-stream (check-as-inf-type-disj types t st)))
     ((ex v gn) 
       ;;; TODO: make scope a ordered set (or just a list)
       (let* (
@@ -1363,7 +1330,7 @@
                       ([k (debug-dump "\n one solution: ~a" st)]
                        [from-bottom-ty (cimpl (Bottom) goal)]
                        [pf-term-to-fill-st st]
-                       [st-terminating (prove-goal-unsat assmpt pf-term-to-fill-st domain)]
+                       [st-terminating st]
                        [w/scope (state-scope st-terminating)]
                        [res (clear-about st-terminating (list->set (state-scope st-terminating)) var)]
                       ;;;  [q (mature res)]
