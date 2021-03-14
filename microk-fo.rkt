@@ -697,27 +697,25 @@
 
 ;;; return #f if there is no next
 ;;; precondition: length l == length range
-;;; RENAME: address++
-(define (index-incremenent-by-one l range)
+(define (dnf-address++ l range)
   (match (cons l range)
     [(cons '() '()) #f]
     [(cons (cons a s) (cons r t))
       (if (< (+ 1 a) r)
         (cons (+ 1 a) s)
-        (let* ([up-level (index-incremenent-by-one s t)])
+        (let* ([up-level (dnf-address++ s t)])
           (and up-level
             (cons 0 up-level))))]
   )
 )
 
-;;; RENAME: index => address for all the following
-(define (get-state-DNF-next-index st index)
+(define (get-state-DNF-next-address st address)
   (define range (get-state-DNF-range st))
-  (index-incremenent-by-one index range))
+  (dnf-address++ address range))
 
-(define (get-state-DNF-by-index st index)
+(define (get-state-DNF-by-address st address)
   (define conjs (state-diseq st))
-  (define indexed-conjs (map (lambda (disjs pos) (list (list-ref disjs pos))) conjs index))
+  (define indexed-conjs (map (lambda (disjs pos) (list (list-ref disjs pos))) conjs address))
   (state-diseq-set st indexed-conjs)
 )
 
@@ -766,13 +764,13 @@
 
 ;;; Goal? -> Goal? x Goal? 
 ;;; specification: 
-;;;   g <=> (let (a,b) = (dec+non-dec g) in (conj a b))
+;;;   g <=> (let (a,b) = (split-dec+nondec g) in (conj a b))
 ;;;   where a must be decidable component
 ;;; {dec} + {non-dec}
 ;;; RENAME: split-dec+nondec
-(define/contract (dec+non-dec g)
+(define/contract (split-dec+nondec g)
   (Goal? . -> . pair?)
-  (define rec dec+non-dec)
+  (define rec split-dec+nondec)
 
   (match g
     [(conj a b)
@@ -811,11 +809,11 @@
 ;;; Use syntactical-simplification
 ;;;   right after decidable component extraction
 ;;; RENAME: simplify-dec+nondec
-(define/contract (dec+non-dec-simpl g)
+(define/contract (simplify-dec+nondec g)
   (Goal? . -> . pair?)
   (if (decidable-goal? g)
       `(,g . ,(Top))
-      (match-let* ([(cons a b) (dec+non-dec g)])
+      (match-let* ([(cons a b) (split-dec+nondec g)])
         `(,(syntactical-simplify a) . ,(syntactical-simplify b)))
   )   
 )
@@ -1264,7 +1262,7 @@
                    bot->g2-term bot1)
       ;;; TODO: rewrite the following into ANF-style (the push-let form)
       (match-let* 
-            ([(cons g1-dec g1-ndec) (dec+non-dec-simpl g1)]
+            ([(cons g1-dec g1-ndec) (simplify-dec+nondec g1)]
              [Axiom-DEC+NDEC-ty (cimpl g1 (conj g1-dec g1-ndec))]
              [Axiom-Bottom-g2-ty (cimpl (Bottom) g2)]
              [~g1-dec-ty (complement g1-dec)]
@@ -1414,8 +1412,8 @@
     ((to-dnf st mark)
       ;;; mark is the index
       (and mark
-          (let ([ret (get-state-DNF-by-index st mark)]
-                [next-mark (get-state-DNF-next-index st mark)])
+          (let ([ret (get-state-DNF-by-address st mark)]
+                [next-mark (get-state-DNF-next-address st mark)])
             (cons ret (to-dnf st next-mark)))))
 
     ((mapped-stream f stream)
