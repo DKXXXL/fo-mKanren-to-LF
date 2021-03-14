@@ -33,8 +33,8 @@
   mature?
   ;;; walk*/goal
 
-  there-is-var-in
-  there-is-var-not-in
+  vars-member?
+  vars-missing?
   goal-vars
   
 
@@ -300,22 +300,22 @@
 )
 
 ;;; TODO: try to make assumption base smaller
-(define/contract (cons-asumpt index prop org-asumpt)
+(define/contract (cons-assmpt index prop org-assmpt)
   (any? any? assumption-base? . -> . assumption-base?)
-  (cons (cons index prop) org-asumpt)  
+  (cons (cons index prop) org-assmpt)  
 )
 
 
 ;;; return a list of goals from assumption
-(define/contract (all-assumption-goals asumpt)
+(define/contract (all-assumption-goals assmpt)
   (assumption-base? . -> . list?)
-  (map cdr asumpt)
+  (map cdr assmpt)
 )
 
 ;;; return a list of terms from assumption
-(define/contract (all-assumption-terms asumpt)
+(define/contract (all-assumption-terms assmpt)
   (assumption-base? . -> . list?)
-  (map car asumpt)
+  (map car assmpt)
 )
 
 ;;; The above are interfaces for assumption-base
@@ -349,7 +349,7 @@
 ;;;      (goal -> goal) -> (goal -> goal) -> goal -> goal
 ;;;   named as functor but actually just a homomorphism --
 ;;;     respects all the Goal? structure that is not only working on Goal?
-;;; RENAME: goal-term-map
+
 (define (goal-term-base-map rec-parent rec g)
   ;;; (define rec extended-f)
   (match g
@@ -480,16 +480,14 @@
 ;;;   var existence anywhere
 ;;;   in a given pair-goal
 ;;;     
-;;; RENAME: vars-member?
-(define/contract (there-is-var-in vars pair-goal)
+(define/contract (vars-member? vars pair-goal)
   (set? any? . -> . boolean?)
   (define all-fvs (goal-vars pair-goal))
   (not (set-empty? (set-intersect vars all-fvs)))
 )
 
 
-;;; RENAME: vars-missing?
-(define/contract (there-is-var-not-in vars pair-goal)
+(define/contract (vars-missing? vars pair-goal)
   (set? any? . -> . boolean?)
   (define all-fvs (goal-vars pair-goal))
   (set-subtract! all-fvs vars)
@@ -509,9 +507,6 @@
 ;;; currently implemented with side-effect,
 ;;;   it is another kind of fold but I am bad at recursion scheme
 ;;;   basically return all free-variables appearing inside g
-;;; RENAME: goal-freevars, 
-;;; RENAME: goal-vars (if doesn't respect)
-;;; RENAME: o/w => _
 (define (goal-vars g)
   (define fvs (mutable-set))
   (define (counter rec-parent rec-root g)
@@ -521,11 +516,11 @@
     )
   )
   ;;; RENAME: g-visitor
-  (define result-f 
+  (define g-visitor 
     (compose-maps (list counter goal-term-base-map pair-base-map state-base-endo-functor identity-endo-functor))
   )
 
-  (result-f g)
+  (g-visitor g)
   fvs
 )
 
@@ -535,31 +530,28 @@
 ;;; stream-struct is the parent of all streams
 (struct stream-struct () #:prefab)
 
-;;; RENAME: asumpt => assmpt
-;;; RENAME: bind-s => s
-;;; RENAME: bind-g => g
-(struct bind  stream-struct (asumpt s g)   
+(struct bind  stream-struct (assmpt s g)   
   #:transparent
-  #:guard (lambda (asumpt s g type-name)
+  #:guard (lambda (assmpt s g type-name)
                     (cond
-                      [(and (assumption-base? asumpt) 
+                      [(and (assumption-base? assmpt) 
                             (Stream? s) 
                             (Goal? g))
-                       (values asumpt s g)]
+                       (values assmpt s g)]
                       [else (error type-name)]))
 )
 ;;; RENAME: mplus-s1 => s1
 ;;; RENAME: remove all unnecessary prefix for the following
-(struct mplus stream-struct (mplus-s1 mplus-s2) 
+(struct mplus stream-struct (s1 s2) 
   #:transparent
-  #:guard (lambda (mplus-s1 mplus-s2 type-name)
+  #:guard (lambda (s1 s2 type-name)
                     (cond
-                      [(and (Stream? mplus-s1) 
-                            (Stream? mplus-s2))
-                       (values mplus-s1 mplus-s2)]
+                      [(and (Stream? s1) 
+                            (Stream? s2))
+                       (values s1 s2)]
                       [else (error type-name
                               "Should both be Stream: ~e"
-                              (list mplus-s1 mplus-s2) )]))
+                              (list s1 s2) )]))
 )
 
 (define-syntax mplus*
@@ -572,7 +564,7 @@
 ;;; it has the same specification as (start st g)
 ;;; (pause st g) has same specification as (start st g)
 
-(struct pause stream-struct (asumpt pause-state pause-goal) #:prefab)
+(struct pause stream-struct (assmpt pause-state pause-goal) #:prefab)
 
 
 ;;; f :: state -> stream of states
@@ -593,9 +585,9 @@
 
 
 ;;; a stream of syntactical solving
-;;; RENAME: asumpt => assmpt
-;;; RENAME: org-asumpt => init-assmpt
-(struct syn-solve stream-struct (asumpt org-asumpt st g) #:prefab)
+;;; RENAME: assmpt => assmpt
+;;; RENAME: org-assmpt => init-assmpt
+(struct syn-solve stream-struct (assmpt org-assmpt st g) #:prefab)
 
 
 ;;; this will force the v in st to be a stream of ground term
@@ -836,10 +828,7 @@
 ;;;   all the possibe results of first-attempt-s
 ;;;   will be complemented and intersect with the domain of the bind-g
 ;;;   bind-g will have to be a forall goal
-;;;  RENAME: dv => domain-var
-;;;  RENAME: first-attempt-s => state
-;;;  RENAME: s => state
-(struct bind-forall  stream-struct (asumpt scope state domain-var g)          #:prefab)
+(struct bind-forall  stream-struct (assmpt scope state domain-var g)          #:prefab)
 
 ;;; if a stream is WHNF(?)  
 (define/contract (mature? s)
@@ -874,40 +863,40 @@
 ;;;         instead we will have (a =/= y.1) \/ (b =/= y.2) together with y = (y.1, y.2)
 ;;;           note: y.1, y.2 are both fresh variables (instead of tproj) 
 ;;;       of course together with the stream y is not even a pair
-(define/contract (TO-NON-Asymmetric asumpt stream)
+(define/contract (TO-NON-Asymmetric assmpt stream)
   (assumption-base? Stream? . -> . Stream?)
   ;;; (debug-dump "TO-NON-Asymmetric computing \n")
-  (mapped-stream (λ (st) (remove-assymetry-in-diseq asumpt st)) stream)
+  (mapped-stream (λ (st) (remove-assymetry-in-diseq assmpt st)) stream)
 )
 
 ;;; term-finite-type : term x state -> stream
 ;;;  this will assert t is either #t, #f, or '()
 ;;;   NOTE: this procedure won't handle proof-term correctly
 ;;;     as we know pause will always fill in one proof-term
-(define/contract (term-finite-type asumpt t st)
+(define/contract (term-finite-type assmpt t st)
   (assumption-base? any? ?state? . -> . Stream?)
-  (pause asumpt st (disj* (== t '()) (== t #t) (== t #f)))
+  (pause assmpt st (disj* (== t '()) (== t #t) (== t #f)))
 )
 
 ;;; run a goal with a given state
 ;;;   note that when st == #f, the returned stream will always be #f
 ;;; Specificaion: 
 ;;;   the partial proof term of st will be applied with the proof-term of g
-;;;   and if asumpt == '(), then we will only invoke semantic computation
-(define/contract (start asumpt st g)
+;;;   and if assmpt == '(), then we will only invoke semantic computation
+(define/contract (start assmpt st g)
   (assumption-base? ?state? Goal? . -> . Stream?)
 
   ;;; the following is a heuristic 
   ;;;     on which case syntactical solving will happen
   (define heuristic-to-syn-solve
     (and (or (relate? g) (Bottom? g)) 
-         (not (empty-assumption-base? asumpt))))
+         (not (empty-assumption-base? assmpt))))
   
   (if heuristic-to-syn-solve
     (mplus 
-      (syn-solve asumpt asumpt st g)
-      (sem-solving asumpt st g))
-    (sem-solving asumpt st g)  
+      (syn-solve assmpt assmpt st g)
+      (sem-solving assmpt st g))
+    (sem-solving assmpt st g)  
   )
   
 )
@@ -934,68 +923,68 @@
 
 ;;; run a goal with a given state
 ;;;     except we will only do syntactical solving on the given goal
-;;;   using given "asumpt"
+;;;   using given "assmpt"
 ;;; 
-;;;  1. when asumpt is empty, we will unfold one level of relation org-asumpt
-;;;       and then do "pause/start" (cimpl org-asumpt' g)
-;;;       so that a new decidable component of org-asumpt' can be extracted/analyzed/falsified
-;;;  2. if any asumpt is actually used, we will shift the current proving target 'g'
+;;;  1. when assmpt is empty, we will unfold one level of relation org-assmpt
+;;;       and then do "pause/start" (cimpl org-assmpt' g)
+;;;       so that a new decidable component of org-assmpt' can be extracted/analyzed/falsified
+;;;  2. if any assmpt is actually used, we will shift the current proving target 'g'
 ;;;       and thus invoke a new "pause/start" (so that new possible sem-solving can be proceeded)
-(define/contract (syn-solving asumpt org-asumpt st g)
+(define/contract (syn-solving assmpt org-assmpt st g)
   (assumption-base? assumption-base? ?state? Goal? . -> . Stream?)
-  (debug-dump "\n syn-solving asumpt: ~a" asumpt)
+  (debug-dump "\n syn-solving assmpt: ~a" assmpt)
   (debug-dump "\n syn-solving goal: ~a" g)
   ;;; first we look at top-level assumption to see if unification can succeed
   ;;; then we need to deconstruct the (top)-assumption base
   ;;;   to syntactical pattern match on all the sub-assumption
-  ;;; TODO: here destruction on asumption 
-  ;;;       doesn't integrate the sub-asumpt into the state... some information is loss
+  ;;; TODO: here destruction on assmption 
+  ;;;       doesn't integrate the sub-assmpt into the state... some information is loss
   ;;;       so currently paying the price of duplicate computation, 
   ;;;         we will keep calling sem-solving on cimpl which is the 
   ;;;    for example we have assumption list (a b (c \/ k) d e) to goal g
   ;;;      when we are dealing with the case c \/ k, we will at the end invoke  (c a b (d1 /\ d2 /\ ... (dj \/ dk) ..) e) on g
   ;;;           (k a b d e) on g, will duplicate the computation for the case (a b) on g
   ;;; TODO (greg): maybe we can delay this deconstruction to avoid duplicating computation
-  (define/contract (traversal-on-asumpt term-name top-asumpt remain-asumpt)
+  (define/contract (traversal-on-assmpt term-name top-assmpt remain-assmpt)
     (any? Goal? assumption-base? . -> . Stream?)
-    (define top-name-asumpt (cons term-name top-asumpt))
-    (match top-asumpt
+    (define top-name-assmpt (cons term-name top-assmpt))
+    (match top-assmpt
       [(conj a b) 
         (let* (
           [a-name (LFpair-pi-1 term-name)]
           [b-name (LFpair-pi-2 term-name)]
-          [new-rem (cons-asumpt a-name a
-                     (cons-asumpt b-name b remain-asumpt))]
+          [new-rem (cons-assmpt a-name a
+                     (cons-assmpt b-name b remain-assmpt))]
           )
-        (syn-solve new-rem org-asumpt st g)
+        (syn-solve new-rem org-assmpt st g)
         )]
       [(disj a b)
         ;;; TODO: remove duplicate computation. 
-        ;;;   (syn-solve on g with org-asumpt)
+        ;;;   (syn-solve on g with org-assmpt)
         ;;;   w/-disj will calculate some parts of the above stream again
-        ;;;     as we already half way through org-asumpt
-        (fresh-param (lhs rhs split lhs-asumpt rhs-asumpt)
+        ;;;     as we already half way through org-assmpt
+        (fresh-param (lhs rhs split lhs-assmpt rhs-assmpt)
           (let* (
               [split-goal (conj (cimpl a g) (cimpl b g))]
               [st-pf-filled st]
-              [reduced-asumpt (filter (lambda (x) (not (equal? top-name-asumpt x))) org-asumpt)]
-              [w/-disj  (pause reduced-asumpt st-pf-filled split-goal)]
-              [w/o-disj (syn-solve remain-asumpt org-asumpt st g)]    
+              [reduced-assmpt (filter (lambda (x) (not (equal? top-name-assmpt x))) org-assmpt)]
+              [w/-disj  (pause reduced-assmpt st-pf-filled split-goal)]
+              [w/o-disj (syn-solve remain-assmpt org-assmpt st g)]    
               )
             (mplus w/-disj w/o-disj)))]
       [(cimpl a b)
           (fresh-param (applied argument)
             (let* (
                 [st-pf-filled  st]
-                [reduced-asumpt (filter (lambda (x) (not (equal? top-name-asumpt x))) org-asumpt)]
-                [new-asumpt (cons-asumpt applied b reduced-asumpt)]
-                [k (debug-dump "\n syn-solving: cimpl: new asumpt: ~a" new-asumpt)]
+                [reduced-assmpt (filter (lambda (x) (not (equal? top-name-assmpt x))) org-assmpt)]
+                [new-assmpt (cons-assmpt applied b reduced-assmpt)]
+                [k (debug-dump "\n syn-solving: cimpl: new assmpt: ~a" new-assmpt)]
                 [w/-cimpl
                   (mapped-stream
-                    (λ (st) (pause org-asumpt st a))
-                    (pause new-asumpt st-pf-filled g))]
+                    (λ (st) (pause org-assmpt st a))
+                    (pause new-assmpt st-pf-filled g))]
                 [w/o-cimpl
-                  (syn-solve remain-asumpt org-asumpt st-pf-filled g)])
+                  (syn-solve remain-assmpt org-assmpt st-pf-filled g)])
               (mplus w/-cimpl w/o-cimpl)
             ))]
       [(ex v t)
@@ -1010,14 +999,14 @@
                 [st-pf-filled st]
             ;;; remove that existential assumption as well
             ;;; TODO: apparently there are some duplicate computation, 
-            ;;;   with these unremoved assumption before top asumpt
+            ;;;   with these unremoved assumption before top assmpt
             ;;;     (because the new subgoal-ty barely changed)
-                [reduced-asumpt (filter (λ (a) (not (equal? top-name-asumpt a))) org-asumpt)]
-                [k (debug-dump "\n syn-solving: reduced asumpt: ~a" reduced-asumpt)]
+                [reduced-assmpt (filter (λ (a) (not (equal? top-name-assmpt a))) org-assmpt)]
+                [k (debug-dump "\n syn-solving: reduced assmpt: ~a" reduced-assmpt)]
                 )
               (mplus 
-                (syn-solve remain-asumpt org-asumpt st g)
-                (pause reduced-asumpt st-pf-filled subgoal-ty))))]
+                (syn-solve remain-assmpt org-assmpt st g)
+                (pause reduced-assmpt st-pf-filled subgoal-ty))))]
       [(forall v domain t)
             (fresh-param (applied-term dp2)
             (let* (
@@ -1029,12 +1018,12 @@
                 ;;;     with only one variable
                 ;;;       the second instantiation will happen when our
                 ;;;     proving goal is shifted from g
-                [new-asumpt (cons-asumpt applied-term applied-type remain-asumpt)]
+                [new-assmpt (cons-assmpt applied-term applied-type remain-assmpt)]
                     )
                
-                (syn-solve new-asumpt org-asumpt st-pf-filled g)) )]
+                (syn-solve new-assmpt org-assmpt st-pf-filled g)) )]
       ;;; atomic prop! just ignore them
-      [o/w (syn-solve remain-asumpt org-asumpt st g)]
+      [o/w (syn-solve remain-assmpt org-assmpt st g)]
     )
   )
 
@@ -1128,22 +1117,22 @@
 ;;; g is disj
 
 
-  (if (empty-assumption-base? asumpt)
-    (and (ormap has-relate (all-assumption-goals org-asumpt)) 
-         (unfold-assumption-solve org-asumpt st g)) 
+  (if (empty-assumption-base? assmpt)
+    (and (ormap has-relate (all-assumption-goals org-assmpt)) 
+         (unfold-assumption-solve org-assmpt st g)) 
     ;; TODO: change to re-invokable stream
     ;;; currently we expand the assumption to extract more information
     (match-let* 
-        ([(cons (cons term-name ag) remain-asumpt) 
-            (iter-assumption-base asumpt)]
+        ([(cons (cons term-name ag) remain-assmpt) 
+            (iter-assumption-base assmpt)]
          [if-top-level-match (unify/goal ag g st)] ;;; type: Stream?
-         [k (debug-dump "\n current asumpt: ~a, matching ~a" ag if-top-level-match)]
+         [k (debug-dump "\n current assmpt: ~a, matching ~a" ag if-top-level-match)]
          [if-top-level-match-filled if-top-level-match];;; fill the current proof term
         )
       (if if-top-level-match
           (mplus if-top-level-match-filled
-                (traversal-on-asumpt term-name ag remain-asumpt))
-          (traversal-on-asumpt term-name ag remain-asumpt))
+                (traversal-on-assmpt term-name ag remain-assmpt))
+          (traversal-on-assmpt term-name ag remain-assmpt))
     )
   )
 )
@@ -1184,33 +1173,33 @@
 
 
 
-;;; asumpt x state x Goal -> Stream
+;;; assmpt x state x Goal -> Stream
 ;;;  it will first collapse/conj all the assumptions into one assumption
 ;;;   and then use unfold-one-level-relate on the one assumption
 ;;;   
 ;;;  this is different from others in that it is stepping assumption
-;;;  precondition: asumpt != empty, (has-relate asumpt)
-(define/contract (unfold-assumption-solve asumpt st goal)
+;;;  precondition: assmpt != empty, (has-relate assmpt)
+(define/contract (unfold-assumption-solve assmpt st goal)
   (assumption-base? ?state? Goal? . -> . Stream?)
   ;;; (define/contract (push-axiom st ty)
   ;;;   (?state? Goal? . -> . pair?)
   ;;;   (push-lflet st (LFaxiom ty) : ty))
   
-  (define conj-assumpt-ty (foldl conj (Top) (all-assumption-goals asumpt)))
-  (define conj-assumpt-term (foldl LFpair (LFaxiom (Top)) (all-assumption-terms asumpt)))
+  (define conj-assumpt-ty (foldl conj (Top) (all-assumption-goals assmpt)))
+  (define conj-assumpt-term (foldl LFpair (LFaxiom (Top)) (all-assumption-terms assmpt)))
   
   (define unfold-conj-assumpt-ty (unfold-one-level-relate conj-assumpt-ty))
-  (define s-unfold-conj-asumpt-ty (syntactical-simplify unfold-conj-assumpt-ty))
+  (define s-unfold-conj-assmpt-ty (syntactical-simplify unfold-conj-assumpt-ty))
 
-  (define unfolded-goal (cimpl s-unfold-conj-asumpt-ty goal)) 
+  (define unfolded-goal (cimpl s-unfold-conj-assmpt-ty goal)) 
   ;;; use cimpl here to allow newly unfolded assumption processed by sem-solving
   ;;; (match-let*
-  ;;;    ([(cons st all-asumpt-term) (push-lflet st conj-assumpt-term : conj-assumpt-ty)]
+  ;;;    ([(cons st all-assmpt-term) (push-lflet st conj-assumpt-term : conj-assumpt-ty)]
   ;;;     [(cons st axiom-unfold)    (push-axiom st (cimpl conj-assumpt-ty unfold-conj-assumpt-ty))]
-  ;;;     [(cons st axiom-simplify)  (push-axiom st (cimpl unfold-conj-assumpt-ty s-unfold-conj-asumpt-ty))]
+  ;;;     [(cons st axiom-simplify)  (push-axiom st (cimpl unfold-conj-assumpt-ty s-unfold-conj-assmpt-ty))]
   ;;;     [(cons st s-unfold-conj-term) 
   ;;;           (push-lflet st 
-  ;;;             (LFapply axiom-simplify (LFapply axiom-unfold all-asumpt-term)) : s-unfold-conj-asumpt-ty)]
+  ;;;             (LFapply axiom-simplify (LFapply axiom-unfold all-assmpt-term)) : s-unfold-conj-assmpt-ty)]
   ;;;     [final-st st]
   ;;;     )
     ;;; every might-be-useful assumption is already in the unfolded goal
@@ -1223,7 +1212,7 @@
 ;;;     whose proof-term will also be put into st
 ;;;   TODO: later we will prove this part into elaborator of vanilla miniKanren
 ;;;     and only allow this works on quantifier-free goals
-(define/contract (prove-goal-unsat asumpt st g)
+(define/contract (prove-goal-unsat assmpt st g)
   (assumption-base? ?state? Goal? . -> . ?state?)
   ;;; TODO: to justify 
   st 
@@ -1233,7 +1222,7 @@
 ;;; note that when st == #f, the returned stream will always be #f
 ;;; Specificaion: 
 ;;;   the partial proof term of st will be applied with the proof-term of g
-(define/contract (sem-solving asumpt st g)
+(define/contract (sem-solving assmpt st g)
   (assumption-base? ?state? Goal? . -> . Stream?)
   ;;; the following used when primitive goal is to fill in the
   (define (prim-goal-filled-st st g)
@@ -1241,28 +1230,28 @@
   (and st ;;; always circuit the st
     (match g
     ((disj g1 g2)
-     (step (mplus (pause asumpt st g1)
-                  (pause asumpt st g2))))
+     (step (mplus (pause assmpt st g1)
+                  (pause assmpt st g2))))
     ((conj g1 g2)
     ;;; will add g1 into assumption when solving g2
     ;;;   different from cimpl that state will be impacted after solving g1
      (fresh-param (left-v)
        (let* ([st-pf-filled  st]
               ;;; Note: Also a stupid heurstic
-              ;;; Warning!!!: later we will use cons-asumpt to sieve
+              ;;; Warning!!!: later we will use cons-assmpt to sieve
               ;;;   the valid assumption into assumption base
               ;;;   instead of this incomplete relate check
-              ;;;       Trivial assumption doesn't need to be added into asumpt
+              ;;;       Trivial assumption doesn't need to be added into assmpt
               ;;; TODO: to make things more informed 
-              ;;; [new-asumpt (if (relate? g1) (cons-asumpt left-v g1 asumpt) asumpt)]
-              [new-asumpt asumpt]
+              ;;; [new-assmpt (if (relate? g1) (cons-assmpt left-v g1 assmpt) assmpt)]
+              [new-assmpt assmpt]
             )
-       (step (bind new-asumpt (pause asumpt st-pf-filled g1) g2)))))
+       (step (bind new-assmpt (pause assmpt st-pf-filled g1) g2)))))
     ;;; the real syntactical solving for cimpl
     ((cimpl-syn g1 g2)
       (fresh-param (name-g1)
         (let* ([st-to-fill st])
-          (pause (cons-asumpt name-g1 g1 asumpt) st-to-fill g2))
+          (pause (cons-assmpt name-g1 g1 assmpt) st-to-fill g2))
       ))
     ((cimpl g1 g2) 
       ;;; semantic solving of implication is 
@@ -1291,32 +1280,32 @@
              [st-g1ndec-g2 st-to-fill]
             )
         (mplus*
-          (pause asumpt st-~g1-dec ~g1-dec-ty)
+          (pause assmpt st-~g1-dec ~g1-dec-ty)
           ;;; A -> bot /\ A
-          (pause asumpt st-~g1ndec (conj g1-dec (cimpl-syn g1-ndec (Bottom)))) 
+          (pause assmpt st-~g1ndec (conj g1-dec (cimpl-syn g1-ndec (Bottom)))) 
           ;;; and syntactical falsifying 
-          (pause asumpt st-g1ndec-g2 (conj g1-dec (cimpl-syn g1-ndec g2)))))
+          (pause assmpt st-g1ndec-g2 (conj g1-dec (cimpl-syn g1-ndec g2)))))
           ;;; and syntactical solving
     ))
     ((relate thunk descript)
-      (pause asumpt st (thunk)))
+      (pause assmpt st (thunk)))
     ((== t1 t2) (unify t1 t2 (prim-goal-filled-st st g) ))
     ((=/= t1 t2) (neg-unify t1 t2 (prim-goal-filled-st st g) ))
     ((symbolo t1)  (wrap-state-stream (check-as-inf-type symbol? t1 (prim-goal-filled-st st g))))
     ;; TODO (greg): factor out predicates
     ((not-symbolo t1) 
       (mplus 
-        (term-finite-type asumpt t1 (prim-goal-filled-st st g))
+        (term-finite-type assmpt t1 (prim-goal-filled-st st g))
         (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label symbol?) t1 (prim-goal-filled-st st g))))) 
     ((numbero t1) (wrap-state-stream (check-as-inf-type number? t1 (prim-goal-filled-st st g))))
     ((not-numbero t1)  
       (mplus 
-        (term-finite-type asumpt t1 (prim-goal-filled-st st g))
+        (term-finite-type assmpt t1 (prim-goal-filled-st st g))
         (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label number?) t1 (prim-goal-filled-st st g))))) 
     ((stringo t1) (wrap-state-stream (check-as-inf-type string? t1 (prim-goal-filled-st st g))))
     ((not-stringo t1)  
       (mplus 
-        (term-finite-type asumpt t1 (prim-goal-filled-st st g))
+        (term-finite-type assmpt t1 (prim-goal-filled-st st g))
         (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label string?) t1 (prim-goal-filled-st st g)))))
 
     ((type-constraint t types)
@@ -1333,7 +1322,7 @@
           [scoped-st (state-scope-update st (lambda (scope) (set-add scope v)))]
           ;;; then we compose new proof-term hole
           [body-to-fill-scoped-st scoped-st]
-          [solving-gn (pause asumpt body-to-fill-scoped-st gn)]
+          [solving-gn (pause assmpt body-to-fill-scoped-st gn)]
 
           ;;; we pop added scope information
           ;;;  and then make sure v become ground term (by using force-v-ground)
@@ -1367,7 +1356,7 @@
       ;;;  the first step is actually trying prove bottom from domain or otherwise
       ;;; TODO: add syntactical solving (i.e. put domain_ into the assumption but never solve it)
       ;;;         as now we know domain is always decidable so we just need to solve it (to add into state)
-      (let* [(domain_ (simplify-domain-wrt asumpt st domain var))  
+      (let* [(domain_ (simplify-domain-wrt assmpt st domain var))  
              (k (begin (debug-dump "\n ~a : domain_ : ~a " var domain_)))] 
 
         (match domain_
@@ -1379,7 +1368,7 @@
                       ([k (debug-dump "\n one solution: ~a" st)]
                        [from-bottom-ty (cimpl (Bottom) goal)]
                        [pf-term-to-fill-st st]
-                       [st-terminating (prove-goal-unsat asumpt pf-term-to-fill-st domain)]
+                       [st-terminating (prove-goal-unsat assmpt pf-term-to-fill-st domain)]
                        [w/scope (state-scope st-terminating)]
                        [res (clear-about st-terminating (list->set (state-scope st-terminating)) var)]
                       ;;;  [q (mature res)]
@@ -1389,11 +1378,11 @@
                       ) ]
           [_ 
             (let* ([ignore-one-hole-st st])
-              (bind-forall  asumpt
+              (bind-forall  assmpt
                             (set-add (state-scope st) var)
                             ;;; NOTE: the following "(ex var ..)" ex var is non-trivial and not removable.
                             ;;;     which is explicitly handling the scoped var
-                            (TO-DNF (TO-NON-Asymmetric asumpt (pause asumpt ignore-one-hole-st (ex var (conj domain_ goal)))) )
+                            (TO-DNF (TO-NON-Asymmetric assmpt (pause assmpt ignore-one-hole-st (ex var (conj domain_ goal)))) )
                             var 
                             (forall var domain_ goal)))]
         )
@@ -1416,13 +1405,13 @@
               (cons (car s1)
                     (mplus s2 (cdr s1))))
              (else (mplus s2 s1)))))
-    ((bind asumpt s g)
+    ((bind assmpt s g)
      (let ((s (if (mature? s) s (step s))))
        (cond ((not s) #f)
              ((pair? s)
-              (step (mplus (pause asumpt (car s) g)
-                           (bind asumpt (cdr s) g))))
-             (else (bind asumpt s g)))))
+              (step (mplus (pause assmpt (car s) g)
+                           (bind assmpt (cdr s) g))))
+             (else (bind assmpt s g)))))
     ((syn-solve asm org-asm st g)
      (syn-solving asm org-asm st g))
     ((to-dnf st mark)
@@ -1446,7 +1435,7 @@
     ;;; bind-forall is a bit complicated
     ;;;   it will first need to collect all possible solution of
     ;;;   s, and complement it, and intersect with 
-    ((bind-forall asumpt current-vars s v (forall v domain goal))
+    ((bind-forall assmpt current-vars s v (forall v domain goal))
      (let ((s (if (mature? s) s (step s))))
        (cond 
         ;;; unsatisfiable, then the whole is unsatisfiable
@@ -1504,13 +1493,13 @@
               ;;; forall x (== x 3) (== x 3)
               ;;;   forall x (conj (== x 3) (=/= x 3)) (== x 3)
               ;;;  forall x () (symbolo x) /\ (not-symbolo x)
-              (step (mplus (pause asumpt shrinked-pf-filled-st (forall v (conj relative-complemented-goal domain) goal))
-                           (bind-forall asumpt current-vars (cdr s) v (forall v domain goal)))))) ;;; other possible requirements search
+              (step (mplus (pause assmpt shrinked-pf-filled-st (forall v (conj relative-complemented-goal domain) goal))
+                           (bind-forall assmpt current-vars (cdr s) v (forall v domain goal)))))) ;;; other possible requirements search
 
-        (else (bind-forall asumpt current-vars s v (forall v domain goal))))
+        (else (bind-forall assmpt current-vars s v (forall v domain goal))))
 
              ))
-    ((pause asumpt st g) (start asumpt st g))
+    ((pause assmpt st g) (start assmpt st g))
     (_            s)))
 
 
@@ -1556,7 +1545,7 @@
 ;;;   otherwise return False
 ;;; simplify-domain-wrt : state x goal x var -> goal
 ;;; basically use vanilla miniKanren to check unsatisfiability
-(define/contract (simplify-domain-wrt asumpt st goal var)
+(define/contract (simplify-domain-wrt assmpt st goal var)
   (assumption-base? ?state? decidable-goal? any? . -> . Goal?)
   ;;; just run miniKanren!
   (define (first-non-empty-mature stream)
@@ -1732,7 +1721,7 @@
 ;;; given the st, we will break down a bunch of v's domain by the domain axiom
 ;;;  return an equivalent stream of states s.t. v is pair in one state and not pair in the others
 ;;; TODO: currently ignore proof-term
-(define/contract (pair-or-not-pair-by-axiom asumpt vs st)
+(define/contract (pair-or-not-pair-by-axiom assmpt vs st)
   (assumption-base? any? ?state? . -> . Stream?)
   (define (decides-pair-goal v) 
     (disj* 
@@ -1746,19 +1735,19 @@
   (define conj-axioms
     (foldl conj (Top) axioms-on-each))
   
-  (pause asumpt st (conj conj-axioms (== 1 1)))
+  (pause assmpt st (conj conj-axioms (== 1 1)))
 )
 
 ;;; return an equivalent stream of state, given a state
 ;;;  but in each state, there is no assymetric disequality
 ;;;     i.e. (var s) =/= (cons ...)
 ;;;   This is usually where unhalting happening 
-(define (remove-assymetry-in-diseq asumpt st)
+(define (remove-assymetry-in-diseq assmpt st)
   (define asymmetric-vars (record-vars-on-asymmetry-in-diseq st))
   ;;; (debug-dump "\n assymetric-st:  ~a \n asymmetric-vars: ~a" st asymmetric-vars)
   (if (equal? (length asymmetric-vars) 0)
     (wrap-state-stream st)
-    (mapped-stream (lambda (st) (remove-assymetry-in-diseq asumpt st)) (pair-or-not-pair-by-axiom asumpt asymmetric-vars st))))
+    (mapped-stream (lambda (st) (remove-assymetry-in-diseq assmpt st)) (pair-or-not-pair-by-axiom assmpt asymmetric-vars st))))
 
 
 ;;;  Recall the definition of tproj:
@@ -1911,10 +1900,10 @@
     (define lhs (car eq))
     (define rhs (cdr eq))
     (define lhs-has-mentioned-var
-      (there-is-var-in mentioned-vars lhs))
+      (vars-member? mentioned-vars lhs))
 
     (define rhs-has-unmentioned-var
-      (there-is-var-not-in mentioned-vars rhs))
+      (vars-missing? mentioned-vars rhs))
 
     (if (and lhs-has-mentioned-var rhs-has-unmentioned-var)
       (cons rhs lhs) ;; doing swap
@@ -1929,7 +1918,7 @@
       st
       (match (swap-if-rhs-unmentioned (car eqs))
         [(cons lhs rhs)
-          #:when (there-is-var-not-in mentioned-vars lhs) 
+          #:when (vars-missing? mentioned-vars lhs) 
           ; when there is unmentioned var, thus equation needs removed
           ;;;  this should handle [(a == b, b == c), remove b] -> (a == c)
           (match-let* 
@@ -1970,10 +1959,10 @@
   (set? state? . -> . state?)
   (let* ([domain-enforced-st st]
          [diseqs (state-diseq domain-enforced-st)]
-         [new-diseq (filter (lambda (p) (not (there-is-var-not-in mentioned-vars p))) diseqs)] 
+         [new-diseq (filter (lambda (p) (not (vars-missing? mentioned-vars p))) diseqs)] 
          ;; diseqs must be list of singleton list of thing
          [type-rcd-lst (hash->list (state-typercd domain-enforced-st))]
-         [new-typercd-lst (filter (lambda (v) (not (there-is-var-not-in mentioned-vars v))) type-rcd-lst)]
+         [new-typercd-lst (filter (lambda (v) (not (vars-missing? mentioned-vars v))) type-rcd-lst)]
          [new-typercd (make-hash new-typercd-lst)])
     (state-diseq-set 
       (state-typercd-set domain-enforced-st new-typercd)
@@ -2145,8 +2134,8 @@
   (define unmentioned-removed-st (unmentioned-totally-removed mentioned-vars domain-enforced-st))
   ;;; Step 3 done
   (define atomics-of-states (conj-state->list-of-goals unmentioned-removed-st))
-  (define atomics-of-var-related (filter (lambda (x) (there-is-var-in (set varx) x)) atomics-of-states))
-  (define atomics-of-var-unrelated (filter (lambda (x) (not (there-is-var-in (set varx) x))) atomics-of-states) )
+  (define atomics-of-var-related (filter (lambda (x) (vars-member? (set varx) x)) atomics-of-states))
+  (define atomics-of-var-unrelated (filter (lambda (x) (not (vars-member? (set varx) x))) atomics-of-states) )
   (define complemented-atomics-of-var-related 
     (map complement atomics-of-var-related))
   ;;;  Note: this following re-application of domain-enforcement is necessary
