@@ -40,8 +40,6 @@
   assert-or-warn
   assert
   valid-type-constraints-check
-  <-pfg
-  push-lflet
   )
 
 ;;; bear with it now.... let me search if there is
@@ -237,33 +235,33 @@
 ;;;   typercd : a dictionary index -> set of type-encoding 
 ;;;     "as disjunction of possible types"
 ;;;   
-(struct state (sub scope pfterm diseq typercd) #:prefab)
-(define empty-state (state empty-sub (list initial-var) single-hole '() (hash)))
+(struct state (sub scope diseq typercd) #:prefab)
+(define empty-state (state empty-sub (list initial-var) '() (hash)))
 (define-struct-updaters state)
 
 ;;; lift <-pf/h-inc into state
-(define-syntax <-pfg
-  (syntax-rules ()
-    ((_ st term) 
-      (and st
-           (state-pfterm-update st 
-              (lambda (pft) (pft . <-pf/h-inc . term)))) )     
+;;; (define-syntax <-pfg
+;;;   (syntax-rules ()
+;;;     ((_ st term) 
+;;;       (and st
+;;;            (state-pfterm-update st 
+;;;               (lambda (pft) (pft . <-pf/h-inc . term)))) )     
 
-    ((_ st (hole holes ...) body) 
-      (and st
-           (state-pfterm-update st 
-              (lambda (pft) (pft . <-pf/h-inc . (hole holes ...) body)))) )
-  ))
+;;;     ((_ st (hole holes ...) body) 
+;;;       (and st
+;;;            (state-pfterm-update st 
+;;;               (lambda (pft) (pft . <-pf/h-inc . (hole holes ...) body)))) )
+;;;   ))
 
 
-;;; ANF-style push-let
-(define-syntax push-lflet
-  (syntax-rules (:)
-    ((_ st term : Type) 
-      (fresh-param (new)
-        (let
-          ([new-st (st . <-pfg . (_) (lf-let* ([new term : Type]) _))])
-          `(,new-st . ,new))))))
+;;; ;;; ANF-style push-let
+;;; (define-syntax push-lflet
+;;;   (syntax-rules (:)
+;;;     ((_ st term : Type) 
+;;;       (fresh-param (new)
+;;;         (let
+;;;           ([new-st (st . <-pfg . (_) (lf-let* ([new term : Type]) _))])
+;;;           `(,new-st . ,new))))))
 
 ;;; we consider #f is the failed state, also one of the state
 (define (?state? obj) (or (equal? obj #f) (state? obj)))

@@ -375,8 +375,8 @@
 ;;; homomorphism on state
 (define (state-base-endo-functor prev-f rec g)
   (match g
-    [(state a scope pfterm d t)
-      (state (rec a) scope pfterm (rec d) (rec t))]
+    [(state a scope d t)
+      (state (rec a) scope (rec d) (rec t))]
     [_ (prev-f g)]
   )
 )
@@ -688,7 +688,7 @@
   ))
   (match solution
     [(? ?state?) (wrap-state-stream solution)]
-    [(? Goal?) (pause '() (st . <-pfg . (ignore _) _) solution)] 
+    [(? Goal?) (pause '() st solution)] 
     ;; TODO: Really without assumption? 
     [(? Stream?) solution]
   )
@@ -980,13 +980,7 @@
         (fresh-param (lhs rhs split lhs-asumpt rhs-asumpt)
           (let* (
               [split-goal (conj (cimpl a g) (cimpl b g))]
-              [st-pf-filled 
-                (st . <-pfg . (_) 
-                  (lf-let* 
-                      ([split _ : split-goal]
-                       [lhs (LFpair-pi-1 split) : (cimpl a g)]
-                       [rhs (LFpair-pi-2 split) : (cimpl b g)])
-                    (LFcase-analysis top-asumpt g term-name lhs rhs)))]
+              [st-pf-filled st]
               [reduced-asumpt (filter (lambda (x) (not (equal? top-name-asumpt x))) org-asumpt)]
               [w/-disj  (pause reduced-asumpt st-pf-filled split-goal)]
               [w/o-disj (syn-solve remain-asumpt org-asumpt st g)]    
@@ -995,12 +989,7 @@
       [(cimpl a b)
           (fresh-param (applied argument)
             (let* (
-                [st-pf-filled 
-                  (st . <-pfg . (_1 _2) 
-                    (lf-let* 
-                        ([argument _2 : a]
-                         [applied (LFapply term-name argument) : b])
-                      _1))]
+                [st-pf-filled  st]
                 [reduced-asumpt (filter (lambda (x) (not (equal? top-name-asumpt x))) org-asumpt)]
                 [new-asumpt (cons-asumpt applied b reduced-asumpt)]
                 [k (debug-dump "\n syn-solving: cimpl: new asumpt: ~a" new-asumpt)]
@@ -1021,13 +1010,7 @@
                 [axiom-decons-ty
                   (subgoal-ty . cimpl . 
                    ((ex v t) . cimpl . g))]
-                [st-pf-filled 
-                  (st . <-pfg . (_1) 
-                    (lf-let* 
-                        ;;; TODO: axiom-deconstructor is actually provable
-                        ([axiom-deconstructor (LFaxiom axiom-decons-ty) : axiom-decons-ty]
-                         [subgoal _1 : subgoal-ty])
-                      (LFapply (LFapply axiom-deconstructor subgoal-ty) term-name)))]
+                [st-pf-filled st]
             ;;; remove that existential assumption as well
             ;;; TODO: apparently there are some duplicate computation, 
             ;;;   with these unremoved assumption before top asumpt
@@ -1044,22 +1027,15 @@
                 [VT (fresh-var VT)]
                 [forall-internal (cimpl domain t)]
                 [applied-type (forall-internal . subst . [VT // v])]
-                [st-pf-filled 
-                  (st . <-pfg . (_1 _2)   
-                    (lf-let* 
-                        ([applied-term (LFapply term-name _2) 
-                            : (forall-internal . subst . [_2 // v])])
-                      _1))]
+                [st-pf-filled st]
                 ;;; Note: even though we seem to only allow for-all to be instantiated
                 ;;;     with only one variable
                 ;;;       the second instantiation will happen when our
                 ;;;     proving goal is shifted from g
                 [new-asumpt (cons-asumpt applied-term applied-type remain-asumpt)]
                     )
-              (mapped-stream
-                ;; fill in the second hole
-                (λ (st) (wrap-state-stream (st . <-pfg . (walk* v (state-sub st))))) 
-                (syn-solve new-asumpt org-asumpt st-pf-filled g)) ))]
+               
+                (syn-solve new-asumpt org-asumpt st-pf-filled g)) )]
       ;;; atomic prop! just ignore them
       [o/w (syn-solve remain-asumpt org-asumpt st g)]
     )
@@ -1165,10 +1141,7 @@
             (iter-assumption-base asumpt)]
          [if-top-level-match (unify/goal ag g st)] ;;; type: Stream?
          [k (debug-dump "\n current asumpt: ~a, matching ~a" ag if-top-level-match)]
-         [if-top-level-match-filled 
-          (mapped-stream 
-            (lambda (st) (wrap-state-stream (st . <-pfg . (LFproof term-name ag))))
-            if-top-level-match)];;; fill the current proof term
+         [if-top-level-match-filled if-top-level-match];;; fill the current proof term
         )
       (if if-top-level-match
           (mplus if-top-level-match-filled
@@ -1222,9 +1195,9 @@
 ;;;  precondition: asumpt != empty, (has-relate asumpt)
 (define/contract (unfold-assumption-solve asumpt st goal)
   (assumption-base? ?state? Goal? . -> . Stream?)
-  (define/contract (push-axiom st ty)
-    (?state? Goal? . -> . pair?)
-    (push-lflet st (LFaxiom ty) : ty))
+  ;;; (define/contract (push-axiom st ty)
+  ;;;   (?state? Goal? . -> . pair?)
+  ;;;   (push-lflet st (LFaxiom ty) : ty))
   
   (define conj-assumpt-ty (foldl conj (Top) (all-assumption-goals asumpt)))
   (define conj-assumpt-term (foldl LFpair (LFaxiom (Top)) (all-assumption-terms asumpt)))
@@ -1234,21 +1207,18 @@
 
   (define unfolded-goal (cimpl s-unfold-conj-asumpt-ty goal)) 
   ;;; use cimpl here to allow newly unfolded assumption processed by sem-solving
-  (match-let*
-     ([(cons st all-asumpt-term) (push-lflet st conj-assumpt-term : conj-assumpt-ty)]
-      [(cons st axiom-unfold)    (push-axiom st (cimpl conj-assumpt-ty unfold-conj-assumpt-ty))]
-      [(cons st axiom-simplify)  (push-axiom st (cimpl unfold-conj-assumpt-ty s-unfold-conj-asumpt-ty))]
-      [(cons st s-unfold-conj-term) 
-            (push-lflet st 
-              (LFapply axiom-simplify (LFapply axiom-unfold all-asumpt-term)) : s-unfold-conj-asumpt-ty)]
-      [final-st (st . <-pfg . (_) 
-        (fresh-param (unfolded-goal-term)
-          (lf-let* ([unfolded-goal-term _ : unfolded-goal])
-            (LFapply unfolded-goal-term s-unfold-conj-term))))]
-      )
+  ;;; (match-let*
+  ;;;    ([(cons st all-asumpt-term) (push-lflet st conj-assumpt-term : conj-assumpt-ty)]
+  ;;;     [(cons st axiom-unfold)    (push-axiom st (cimpl conj-assumpt-ty unfold-conj-assumpt-ty))]
+  ;;;     [(cons st axiom-simplify)  (push-axiom st (cimpl unfold-conj-assumpt-ty s-unfold-conj-asumpt-ty))]
+  ;;;     [(cons st s-unfold-conj-term) 
+  ;;;           (push-lflet st 
+  ;;;             (LFapply axiom-simplify (LFapply axiom-unfold all-asumpt-term)) : s-unfold-conj-asumpt-ty)]
+  ;;;     [final-st st]
+  ;;;     )
     ;;; every might-be-useful assumption is already in the unfolded goal
-    (pause empty-assumption-base final-st unfolded-goal)
-  )
+  (pause empty-assumption-base st unfolded-goal)
+  
 )
 
 ;;; Try to prove g is unsatisfiable under st
@@ -1259,7 +1229,7 @@
 (define/contract (prove-goal-unsat asumpt st g)
   (assumption-base? ?state? Goal? . -> . ?state?)
   ;;; TODO: to justify 
-  (st . <-pfg . (LFaxiom (cimpl g (Bottom)))) 
+  st 
 )
 
 ;;; run a goal with a given state
@@ -1270,21 +1240,17 @@
   (assumption-base? ?state? Goal? . -> . Stream?)
   ;;; the following used when primitive goal is to fill in the
   (define (prim-goal-filled-st st g)
-    (st . <-pfg . (LFprim-rel g)))
+    st)
   (and st ;;; always circuit the st
     (match g
     ((disj g1 g2)
-     (step (mplus (pause asumpt [st . <-pfg . (_) (LFinjl _ g)] g1)
-                  (pause asumpt [st . <-pfg . (_) (LFinjr _ g)] g2))))
+     (step (mplus (pause asumpt st g1)
+                  (pause asumpt st g2))))
     ((conj g1 g2)
     ;;; will add g1 into assumption when solving g2
     ;;;   different from cimpl that state will be impacted after solving g1
      (fresh-param (left-v)
-       (let* ([st-pf-filled 
-              (st . <-pfg . 
-                (_1 _2) 
-                    (lf-let* ([left-v _1 : g1])
-                      (LFpair left-v _2)))]
+       (let* ([st-pf-filled  st]
               ;;; Note: Also a stupid heurstic
               ;;; Warning!!!: later we will use cons-asumpt to sieve
               ;;;   the valid assumption into assumption base
@@ -1298,7 +1264,7 @@
     ;;; the real syntactical solving for cimpl
     ((cimpl-syn g1 g2)
       (fresh-param (name-g1)
-        (let* ([st-to-fill (st . <-pfg . (_) (LFlambda name-g1 g1 _))])
+        (let* ([st-to-fill st])
           (pause (cons-asumpt name-g1 g1 asumpt) st-to-fill g2))
       ))
     ((cimpl g1 g2) 
@@ -1322,42 +1288,10 @@
              [~g1-dec->g1-dec->bot (cimpl ~g1-dec-ty (cimpl g1-dec (Bottom)))]
              [~g1ndec (cimpl-syn g1-ndec (Bottom))]
              [g1ndec-g2 (cimpl-syn g1-ndec g2)]
-             [st-to-fill 
-                (st . <-pfg . (_) 
-                  (LFlambda name-g1 g1 
-                    (lf-let* 
-                        ([adnd (LFaxiom Axiom-DEC+NDEC-ty) : Axiom-DEC+NDEC-ty]
-                         [adnd-conj (LFapply adnd name-g1) : (conj g1-dec g1-ndec)]
-                         [g1-dec-term (LFpair-pi-1 adnd) : g1-dec]
-                         [g2-dec-term (LFpair-pi-2 adnd) : g1-ndec]
-                         [bot->g2-term (LFaxiom Axiom-Bottom-g2-ty) : Axiom-Bottom-g2-ty])
-                      _)
-                  ))]
-             [st-~g1-dec 
-                (st-to-fill . <-pfg . (_)
-                  (lf-let* 
-                      ([~g1-dec-term _ : ~g1-dec-ty]
-                       [~g1-dec->g1-dec->bot-term (LFaxiom ~g1-dec->g1-dec->bot) : ~g1-dec->g1-dec->bot]
-                       [bot1 (LFapply (LFapply ~g1-dec->g1-dec->bot-term ~g1-dec-term) g1-dec-term) : (Bottom)])
-                    (LFapply bot->g2-term bot1)))]
-             [st-~g1ndec
-                (st-to-fill . <-pfg . (_)
-                  (lf-let* 
-                      ([g1-dec-conj-~g1-ndec-term _ 
-                            : (conj g1-dec ~g1ndec)]
-                       [~g1-ndec-term (LFpair-pi-2 g1-dec-conj-~g1-ndec-term) 
-                            : ~g1ndec]
-                       [bot2 (LFapply ~g1-ndec-term g1-ndec-term)
-                            : (Bottom)])
-                    (LFapply bot->g2-term bot2)))]
-             [st-g1ndec-g2
-                (st-to-fill . <-pfg . (_)
-                  (lf-let* 
-                      ([g1-dec-conj-g1-ndec-g2-term _ 
-                            : (conj g1-dec g1ndec-g2)]
-                       [g1-ndec-g2-term (LFpair-pi-2 g1-dec-conj-g1-ndec-g2-term) 
-                            : g1ndec-g2])
-                    (LFapply g1-ndec-g2-term g1-ndec-term)))]
+             [st-to-fill st]
+             [st-~g1-dec st-to-fill]
+             [st-~g1ndec st]
+             [st-g1ndec-g2 st-to-fill]
             )
         (mplus*
           (pause asumpt st-~g1-dec ~g1-dec-ty)
@@ -1368,24 +1302,24 @@
           ;;; and syntactical solving
     ))
     ((relate thunk descript)
-      (pause asumpt [st . <-pfg . (_) (LFpack _ descript)] (thunk)))
+      (pause asumpt st (thunk)))
     ((== t1 t2) (unify t1 t2 (prim-goal-filled-st st g) ))
     ((=/= t1 t2) (neg-unify t1 t2 (prim-goal-filled-st st g) ))
     ((symbolo t1)  (wrap-state-stream (check-as-inf-type symbol? t1 (prim-goal-filled-st st g))))
     ;; TODO (greg): factor out predicates
     ((not-symbolo t1) 
       (mplus 
-        (term-finite-type asumpt t1 (prim-goal-filled-st (st . <-pfg . (_ ignore) _) g))
+        (term-finite-type asumpt t1 (prim-goal-filled-st st g))
         (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label symbol?) t1 (prim-goal-filled-st st g))))) 
     ((numbero t1) (wrap-state-stream (check-as-inf-type number? t1 (prim-goal-filled-st st g))))
     ((not-numbero t1)  
       (mplus 
-        (term-finite-type asumpt t1 (prim-goal-filled-st (st . <-pfg . (_ ignore) _) g))
+        (term-finite-type asumpt t1 (prim-goal-filled-st st g))
         (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label number?) t1 (prim-goal-filled-st st g))))) 
     ((stringo t1) (wrap-state-stream (check-as-inf-type string? t1 (prim-goal-filled-st st g))))
     ((not-stringo t1)  
       (mplus 
-        (term-finite-type asumpt t1 (prim-goal-filled-st (st . <-pfg . (_ ignore) _) g))
+        (term-finite-type asumpt t1 (prim-goal-filled-st st g))
         (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label string?) t1 (prim-goal-filled-st st g)))))
 
     ((type-constraint t types)
@@ -1401,7 +1335,7 @@
               (wrap-state-stream (state-scope-update st (lambda (scope) (set-remove scope v)) )))]
           [scoped-st (state-scope-update st (lambda (scope) (set-add scope v)))]
           ;;; then we compose new proof-term hole
-          [body-to-fill-scoped-st (scoped-st . <-pfg . (_1) (LFsigma v _1 g))]
+          [body-to-fill-scoped-st scoped-st]
           [solving-gn (pause asumpt body-to-fill-scoped-st gn)]
 
           ;;; we pop added scope information
@@ -1447,17 +1381,7 @@
           [(Bottom) (let* 
                       ([k (debug-dump "\n one solution: ~a" st)]
                        [from-bottom-ty (cimpl (Bottom) goal)]
-                       [pf-term-to-fill-st 
-                          (st . <-pfg . 
-                            (_)
-                            (fresh-param (v domain-term to-bottom from-bottom)
-                              (lf-let* 
-                                  ([to-bottom _ : (cimpl domain (Bottom))]
-                                   [from-bottom (LFaxiom from-bottom-ty) : from-bottom-ty])
-                                (LFlambda v (LispU)
-                                  (LFlambda domain-term domain
-                                    (LFapply from-bottom (LFapply to-bottom domain-term))
-                                  ))) ))]
+                       [pf-term-to-fill-st st]
                        [st-terminating (prove-goal-unsat asumpt pf-term-to-fill-st domain)]
                        [w/scope (state-scope st-terminating)]
                        [res (clear-about st-terminating (list->set (state-scope st-terminating)) var)]
@@ -1467,7 +1391,7 @@
                       res 
                       ) ]
           [_ 
-            (let* ([ignore-one-hole-st (st . <-pfg . (_1 _2) _2)])
+            (let* ([ignore-one-hole-st st])
               (bind-forall  asumpt
                             (set-add (state-scope st) var)
                             ;;; NOTE: the following "(ex var ..)" ex var is non-trivial and not removable.
@@ -1478,7 +1402,7 @@
         )
       )
     )
-    ((Top) (wrap-state-stream [st . <-pfg . (LFprim-rel (Top))]))
+    ((Top) (wrap-state-stream st))
     ((Bottom) (wrap-state-stream #f))
     ))
 )
@@ -1578,17 +1502,7 @@
                       (solved-case-ty
                         . cimpl . (unsolved-case-ty
                         . cimpl . (forall v domain goal)))]
-                    [shrinked-pf-filled-st 
-                      (valid-shrinked-state . <-pfg . 
-                        (_)
-                        (fresh-param (solved-case unsolved-case case-axiom result)
-                          (lf-let* 
-                              ([solved-case (LFaxiom solved-case-ty) : solved-case-ty] ; TODO: need justification
-                               [unsolved-case _ : unsolved-case-ty]
-                               [case-axiom (LFaxiom case-axiom-ty) : case-axiom-ty] ; TODO: need justification
-                               [result (LFapply (LFapply case-axiom solved-case) unsolved-case) : (forall v domain goal)])
-                            result)))
-                    ]
+                    [shrinked-pf-filled-st  valid-shrinked-state]
                     )
               ;;; forall x (== x 3) (== x 3)
               ;;;   forall x (conj (== x 3) (=/= x 3)) (== x 3)
@@ -1655,7 +1569,7 @@
       [v v]))
   ;;; Note: following we only allowed semantic solving,
   ;;;     as we don't allow cimpl/quantifier/customized relation in domain bound
-  (if (first-non-empty-mature (pause empty-assumption-base (st . <-pfg . (ignore _) _) goal)) (syntactical-simplify goal) (Bottom))
+  (if (first-non-empty-mature (pause empty-assumption-base st goal)) (syntactical-simplify goal) (Bottom))
   
   )
 
@@ -1716,7 +1630,7 @@
       ;;; other extended construct -- like state
       ;;;  very untyped...
       ;;;  (a = a) (type-constrant a (number?))
-      [(state a scope pfterm d e) 
+      [(state a scope d e) 
         (let* ([new-sub-possible-with-cycle (rec a)] 
                [new-sub (filter (lambda (x) (not (equal? (car x) (cdr x)))) new-sub-possible-with-cycle)]
                 ;;; TODO: we will only remove (a = a) and 
@@ -1726,7 +1640,7 @@
                 (map (lambda (x) (cons (car x) (walk* (cdr x) new-sub))) old-hash-list)]
                [new-mapping (make-hash new-hash-list)]
                [rec (lambda (any) (literal-replace* new-mapping any)) ])
-          (state new-sub scope pfterm (rec d) (rec e)))]
+          (state new-sub scope (rec d) (rec e)))]
       ;;; or type constraint information,
       ;;;  we only need to deal with type information
 
@@ -1835,7 +1749,7 @@
   (define conj-axioms
     (foldl conj (Top) axioms-on-each))
   
-  (pause asumpt (st . <-pfg . (ignore _) _) (conj conj-axioms (== 1 1)))
+  (pause asumpt st (conj conj-axioms (== 1 1)))
 )
 
 ;;; return an equivalent stream of state, given a state
