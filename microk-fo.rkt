@@ -300,9 +300,9 @@
 )
 
 ;;; TODO: try to make assumption base smaller
-(define/contract (cons-assmpt index prop org-assmpt)
+(define/contract (cons-assmpt index prop init-assmpt)
   (any? any? assumption-base? . -> . assumption-base?)
-  (cons (cons index prop) org-assmpt)  
+  (cons (cons index prop) init-assmpt)  
 )
 
 
@@ -564,7 +564,7 @@
 ;;; it has the same specification as (start st g)
 ;;; (pause st g) has same specification as (start st g)
 
-(struct pause stream-struct (assmpt pause-state pause-goal) #:prefab)
+(struct pause stream-struct (assmpt state goal) #:prefab)
 
 
 ;;; f :: state -> stream of states
@@ -579,15 +579,12 @@
 ;;;     the disj component
 ;;; finally a stream of state where only conjunction is inside each state
 ;;;  a /\ (b \/ c) /\ (d \/ e) 
-;;;  1 -> a /\ c /\ e; 2 -> a /\ b /\ e ... 
-;;;   RENAME: mark => address
-(struct to-dnf stream-struct (state mark) #:prefab)
+;;;  1 -> a /\ c /\ e; 2 -> a /\ b /\ e ...
+(struct to-dnf stream-struct (state address) #:prefab)
 
 
 ;;; a stream of syntactical solving
-;;; RENAME: assmpt => assmpt
-;;; RENAME: org-assmpt => init-assmpt
-(struct syn-solve stream-struct (assmpt org-assmpt st g) #:prefab)
+(struct syn-solve stream-struct (assmpt init-assmpt st g) #:prefab)
 
 
 ;;; this will force the v in st to be a stream of ground term
@@ -925,12 +922,12 @@
 ;;;     except we will only do syntactical solving on the given goal
 ;;;   using given "assmpt"
 ;;; 
-;;;  1. when assmpt is empty, we will unfold one level of relation org-assmpt
-;;;       and then do "pause/start" (cimpl org-assmpt' g)
-;;;       so that a new decidable component of org-assmpt' can be extracted/analyzed/falsified
+;;;  1. when assmpt is empty, we will unfold one level of relation init-assmpt
+;;;       and then do "pause/start" (cimpl init-assmpt' g)
+;;;       so that a new decidable component of init-assmpt' can be extracted/analyzed/falsified
 ;;;  2. if any assmpt is actually used, we will shift the current proving target 'g'
 ;;;       and thus invoke a new "pause/start" (so that new possible sem-solving can be proceeded)
-(define/contract (syn-solving assmpt org-assmpt st g)
+(define/contract (syn-solving assmpt init-assmpt st g)
   (assumption-base? assumption-base? ?state? Goal? . -> . Stream?)
   (debug-dump "\n syn-solving assmpt: ~a" assmpt)
   (debug-dump "\n syn-solving goal: ~a" g)
@@ -956,35 +953,35 @@
           [new-rem (cons-assmpt a-name a
                      (cons-assmpt b-name b remain-assmpt))]
           )
-        (syn-solve new-rem org-assmpt st g)
+        (syn-solve new-rem init-assmpt st g)
         )]
       [(disj a b)
         ;;; TODO: remove duplicate computation. 
-        ;;;   (syn-solve on g with org-assmpt)
+        ;;;   (syn-solve on g with init-assmpt)
         ;;;   w/-disj will calculate some parts of the above stream again
-        ;;;     as we already half way through org-assmpt
+        ;;;     as we already half way through init-assmpt
         (fresh-param (lhs rhs split lhs-assmpt rhs-assmpt)
           (let* (
               [split-goal (conj (cimpl a g) (cimpl b g))]
               [st-pf-filled st]
-              [reduced-assmpt (filter (lambda (x) (not (equal? top-name-assmpt x))) org-assmpt)]
+              [reduced-assmpt (filter (lambda (x) (not (equal? top-name-assmpt x))) init-assmpt)]
               [w/-disj  (pause reduced-assmpt st-pf-filled split-goal)]
-              [w/o-disj (syn-solve remain-assmpt org-assmpt st g)]    
+              [w/o-disj (syn-solve remain-assmpt init-assmpt st g)]    
               )
             (mplus w/-disj w/o-disj)))]
       [(cimpl a b)
           (fresh-param (applied argument)
             (let* (
                 [st-pf-filled  st]
-                [reduced-assmpt (filter (lambda (x) (not (equal? top-name-assmpt x))) org-assmpt)]
+                [reduced-assmpt (filter (lambda (x) (not (equal? top-name-assmpt x))) init-assmpt)]
                 [new-assmpt (cons-assmpt applied b reduced-assmpt)]
                 [k (debug-dump "\n syn-solving: cimpl: new assmpt: ~a" new-assmpt)]
                 [w/-cimpl
                   (mapped-stream
-                    (λ (st) (pause org-assmpt st a))
+                    (λ (st) (pause init-assmpt st a))
                     (pause new-assmpt st-pf-filled g))]
                 [w/o-cimpl
-                  (syn-solve remain-assmpt org-assmpt st-pf-filled g)])
+                  (syn-solve remain-assmpt init-assmpt st-pf-filled g)])
               (mplus w/-cimpl w/o-cimpl)
             ))]
       [(ex v t)
@@ -1001,11 +998,11 @@
             ;;; TODO: apparently there are some duplicate computation, 
             ;;;   with these unremoved assumption before top assmpt
             ;;;     (because the new subgoal-ty barely changed)
-                [reduced-assmpt (filter (λ (a) (not (equal? top-name-assmpt a))) org-assmpt)]
+                [reduced-assmpt (filter (λ (a) (not (equal? top-name-assmpt a))) init-assmpt)]
                 [k (debug-dump "\n syn-solving: reduced assmpt: ~a" reduced-assmpt)]
                 )
               (mplus 
-                (syn-solve remain-assmpt org-assmpt st g)
+                (syn-solve remain-assmpt init-assmpt st g)
                 (pause reduced-assmpt st-pf-filled subgoal-ty))))]
       [(forall v domain t)
             (fresh-param (applied-term dp2)
@@ -1021,9 +1018,9 @@
                 [new-assmpt (cons-assmpt applied-term applied-type remain-assmpt)]
                     )
                
-                (syn-solve new-assmpt org-assmpt st-pf-filled g)) )]
+                (syn-solve new-assmpt init-assmpt st-pf-filled g)) )]
       ;;; atomic prop! just ignore them
-      [o/w (syn-solve remain-assmpt org-assmpt st g)]
+      [o/w (syn-solve remain-assmpt init-assmpt st g)]
     )
   )
 
@@ -1118,8 +1115,8 @@
 
 
   (if (empty-assumption-base? assmpt)
-    (and (ormap has-relate (all-assumption-goals org-assmpt)) 
-         (unfold-assumption-solve org-assmpt st g)) 
+    (and (ormap has-relate (all-assumption-goals init-assmpt)) 
+         (unfold-assumption-solve init-assmpt st g)) 
     ;; TODO: change to re-invokable stream
     ;;; currently we expand the assumption to extract more information
     (match-let* 
