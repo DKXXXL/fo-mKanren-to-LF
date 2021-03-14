@@ -530,6 +530,8 @@
 )
 
 
+;;; 2021-0204 BUGFIX following: Incorrect state f, type information should go away
+;;;     also inequality information disappear
 (NestedCons-1
   (run 1 (c a b) (for-all (x) (=/= c (cons a (cons b x)))))
 . test-reg!=> . 'succeed)
@@ -834,6 +836,44 @@
 )
 
 
+(define-relation (lengtho x y)
+  (conde ((== x '()) (== y '()))
+         ((fresh (xf xr yr)
+            (== x (cons xf xr))
+            (== y (cons 1 yr))
+            (lengtho xr yr)))))
+
+;;; currently unhalting.
+(lengtho-test-1
+  (run 1 () (for-all (x y) (cimpl (cimpl (== x (cons 'a y))
+                                      (lengtho x '(1 1 1)))
+                                (lengtho y '(1 1)))))
+. test-reg!=>ND . 'succeed                              
+) 
+;; ((a -> b) -> c) =/= (a /\ b -> c)
+
+;;; currently unhalting
+(lengtho-test-2
+  (run 1 (L) (for-all (x y) (cimpl (cimpl (== x (cons 'a y))
+                                    (lengtho x '(1 1 1)))
+                                 (lengtho y L))))
+. test-reg!=>ND . 'succeed                              
+)
+
+(lengtho-test-3
+  (run 1 () (for-all (x y) (cimpl (conj (== x (cons 'a y))
+                                        (lengtho x '(1 1 1)))
+                                (lengtho y '(1 1)))))
+. test-reg!=>ND . 'succeed                              
+) 
+
+;;; failing test-case
+(lengtho-test-4
+  (run 1 (L) (for-all (x y) (cimpl (conj (== x (cons 'a y))
+                                         (lengtho x '(1 1 1)))
+                                 (lengtho y L))))
+. test-reg!=>ND . 'succeed                              
+)
 
 ;;; 
 ;;; Following test-cases are for cimpl
@@ -911,6 +951,24 @@
 (define-relation (False x)
   (False x))
 
+(Simple-Rewrite-1
+  (run 1 ()  (for-all (x z) (cimpl (conj (== x z)(False z)) 
+                                   (False x))))
+  . test-reg!=>ND . 'succeed  
+)
+
+
+(Simple-Rewrite-2
+  (run 1 ()  (for-all (x z) (cimpl (conj (== z x)(False z)) 
+                                   (False x))))
+  . test-reg!=>ND . 'succeed  
+)
+
+(Simple-Rewrite-3
+  (run 1 (x z)  (conj (== x z) (cimpl (False z)
+                                   (False x))))
+  . test-reg!=>ND . 'succeed  
+)
 
 (Syn-solve-1
   (run 1 (a)  (cimpl (False a) (False a)))
