@@ -35,7 +35,7 @@
 
   there-is-var-in
   there-is-var-not-in
-  freevar
+  goal-vars
   
 
   syntactical-simplify
@@ -321,37 +321,36 @@
 ;;; The above are interfaces for assumption-base
 
 
-;;; Denote Goal-EndoFunctor type as
+;;; Denote Goal-map type as
 ;;;      (goal -> goal) -> (goal -> goal) -> goal -> goal
 ;;; extensible function on pattern matching
-;;;  pretentious "endofunctor" just means it maps goal to goal
+;;;  pretentious "map" just means it maps goal to goal
 ;;;   named as functor but actually just a homomorphism --
 ;;;     respects all the Goal? structure that is working on Goal?
 ;;;   This is inspired by TVM's IRFunctor, 
 ;;;     which I believe is also inspired by something else
-;;; goal-base-endofunctor : (goal -> goal) -> (goal -> goal) -> goal -> goal
-;;;  prev-f will call the one on the past overloading functor
-;;; RENAME: prev-f => rec-parent
-;;; RENAME: rec => rec-root
-;;; RENAME: endo-functor => goal-map
+;;; goal-base-map : (goal -> goal) -> (goal -> goal) -> goal -> goal
+;;;  rec-parent will call the one on the past overloading functor
+
 ;;;   extended-f will use the whole composed functor
 ;;;  this functor will do nothing but recurse on the tree
-(define (goal-base-endofunctor prev-f rec g)
+(define (goal-base-map rec-parent rec-root g)
   ;;; (define rec extended-f)
-  (match g
-    [(disj   a b)   (disj  (rec a) (rec b))]
-    [(conj   a b)   (conj  (rec a) (rec b))]
-    [(cimpl  a b)   (cimpl (rec a) (rec b))]
-    [(ex     v g)   (ex     v         (rec g))]
-    [(forall v b g) (forall v (rec b) (rec g))]
-    [_              (prev-f g)]))  ;; otherwise do nothing
+  (let* ([rec rec-root])
+    (match g
+      [(disj   a b)   (disj  (rec a) (rec b))]
+      [(conj   a b)   (conj  (rec a) (rec b))]
+      [(cimpl  a b)   (cimpl (rec a) (rec b))]
+      [(ex     v g)   (ex     v         (rec g))]
+      [(forall v b g) (forall v (rec b) (rec g))]
+      [_              (rec-parent g)])))  ;; otherwise do nothing
 
-;;; Denote Goal-EndoFunctor type as
+;;; Denote Goal-map type as
 ;;;      (goal -> goal) -> (goal -> goal) -> goal -> goal
 ;;;   named as functor but actually just a homomorphism --
 ;;;     respects all the Goal? structure that is not only working on Goal?
 ;;; RENAME: goal-term-map
-(define (goal-term-base-endofunctor prev-f rec g)
+(define (goal-term-base-map rec-parent rec g)
   ;;; (define rec extended-f)
   (match g
     [(== x y)        (== (rec x) (rec y))]
@@ -367,22 +366,22 @@
     [(conj a b)     (conj (rec a) (rec b))]
     [(ex v g)       (ex v (rec g))]
     [(forall v b g) (forall v (rec v) (rec g))]
-    [_ (prev-f g)] ;; otherwise do nothing
+    [_ (rec-parent g)] ;; otherwise do nothing
   )
 )
 
 
 ;;; homomorphism on state
-(define (state-base-endo-functor prev-f rec g)
+(define (state-base-endo-functor rec-parent rec g)
   (match g
     [(state a scope d t)
       (state (rec a) scope (rec d) (rec t))]
-    [_ (prev-f g)]
+    [_ (rec-parent g)]
   )
 )
 
 
-(define (identity-endo-functor prev-f rec g) g)
+(define (identity-endo-functor rec-parent rec g) g)
 
 (define (goal-identity g) g)
 
@@ -391,53 +390,51 @@
 ;;; this is the procedure that will compose a bunch of functor into
 ;;;     one homomorphism
 ;;; For example:  I can extend state as I want now  
-;;; [(goal -> goal) -> (goal -> goal) -> goal -> goal] -> (goal -> goal)
-;;; RENAME: overloading-functor-list => compose-maps
-;;; RENAME: endofuncs => maps 
-(define (overloading-functor-list endofuncs)
-  (define (overloading-functor-list-with-extf endofuncs extf)
-    (match endofuncs
+;;; [(goal -> goal) -> (goal -> goal) -> goal -> goal] -> (goal -> goal) 
+(define (compose-maps maps)
+  (define (compose-maps-with-extf maps rec-root)
+    (match maps
       [(cons fst then)
-        (let* ([prev-f (overloading-functor-list-with-extf then extf)])
-          (lambda (g) (fst prev-f extf g))
+        (let* ([rec-parent (compose-maps-with-extf then rec-root)])
+          (lambda (g) (fst rec-parent rec-root g))
         )]
       ['() (lambda (x) x)]
     )
   )
   (define (resultf g)
-    ((overloading-functor-list-with-extf endofuncs resultf) g) )
+    ((compose-maps-with-extf maps resultf) g) )
   resultf
 )
 ;;; Example Usage: 
 ;;; not-symbolo will be translated into (numbero v stringo v pairo v boolo)
 ;;; (define remove-neg-by-decidability
-;;;   (define (match-single prev-f ext-f g)
+;;;   (define (match-single rec-parent rec-root g)
 ;;;     (match g
 ;;;       [(not-symbolo x) (disj (pairo x) (boolo x) (numbero x) (stringo x))]
 ;;;       [(not-numbero x) (disj (pairo x) (boolo x) (symbolo x) (stringo x))]
 ;;;       [(not-stringo x) (disj (pairo x) (boolo x) (numbero x) (symbolo x))]
-;;;       [_ (prev-f g)]
+;;;       [_ (rec-parent g)]
 ;;;     )
 ;;;   )
-;;;   (overloading-functor-list (list match-single goal-base-endofunctor))
+;;;   (compose-maps (list match-single goal-base-map))
 ;;; )
 ;;; (define remove-neg-by-decidability-and-remove-cimple
-;;;   (define (match-single prev-f ext-f g)
+;;;   (define (match-single rec-parent rec-root g)
 ;;;     (match g
 ;;;       [(not-symbolo x) (disj (pairo x) (boolo x) (numbero x) (stringo x))]
 ;;;       [(not-numbero x) (disj (pairo x) (boolo x) (symbolo x) (stringo x))]
 ;;;       [(not-stringo x) (disj (pairo x) (boolo x) (numbero x) (symbolo x))]
-;;;       [_ (prev-f g)]
+;;;       [_ (rec-parent g)]
 ;;;     )
 ;;;   )
-;;;   (define (remove-cimpl prev-f ext-f g)
+;;;   (define (remove-cimpl rec-parent rec-root g)
 ;;;     (match g
 ;;;       [(cimpl x) (disj (pairo x) (boolo x) (numbero x) (stringo x))]
 ;;;       [(stop ..) (ex)]
-;;;       [_ (prev-f g)]
+;;;       [_ (rec-parent g)]
 ;;;     )
 ;;;   )
-;;;   (overloading-functor-list (list remove-cimpl match-single goal-base-endofunctor))
+;;;   (compose-maps (list remove-cimpl match-single goal-base-map))
 ;;; )
 
 ;;; cimpl -> ... /\ remove-neg-by-decidability
@@ -448,13 +445,13 @@
 ;;;  will also respect tproj
 ;;;   Recall tproj is used for intermediate representation
 ;;;   -- during relative complements we need pair-less point-ful representation
-(define (pair-base-endofunctor prev-f extended-f g)
+(define (pair-base-map rec-parent extended-f g)
   (define rec extended-f)
   (match g
     ['() '()]
     [(cons a b) (cons (rec a) (rec b))]
     [(tproj tm cxr) (tproj_ (rec tm) cxr)] ;; respect tproj
-    [_ (prev-f g)]
+    [_ (rec-parent g)]
   )
 )
 
@@ -467,7 +464,7 @@
 ;;; ;;;   now if we map cons to or, '() to Boolean value, then it is a kind of 
 ;;; ;;;     folding after evaluation
 ;;; (define (pair-base-functor op-mapping)
-;;;   (define (pair-base-functor- prev-f extended-f g)
+;;;   (define (pair-base-functor- rec-parent extended-f g)
 ;;;     (define rec extended-f)
 ;;;     (match g
 ;;;       ['() (op-mapping '())]
@@ -486,7 +483,7 @@
 ;;; RENAME: vars-member?
 (define/contract (there-is-var-in vars pair-goal)
   (set? any? . -> . boolean?)
-  (define all-fvs (freevar pair-goal))
+  (define all-fvs (goal-vars pair-goal))
   (not (set-empty? (set-intersect vars all-fvs)))
 )
 
@@ -494,7 +491,7 @@
 ;;; RENAME: vars-missing?
 (define/contract (there-is-var-not-in vars pair-goal)
   (set? any? . -> . boolean?)
-  (define all-fvs (freevar pair-goal))
+  (define all-fvs (goal-vars pair-goal))
   (set-subtract! all-fvs vars)
   (not (set-empty? all-fvs))
 )
@@ -502,10 +499,10 @@
 
 ;;; Example Usage : replace 1 with 0 in an arbitrary list
 ;;; (define (replace-1-to-0 k)
-;;;   (define (case1 prev-f extended-f g)
-;;;     (if (equal? g 1) 0 (prev-f g)))
+;;;   (define (case1 rec-parent extended-f g)
+;;;     (if (equal? g 1) 0 (rec-parent g)))
   
-;;;   ((overloading-functor-list (list case1 pair-base-endofunctor  identity-endo-functor)) k)
+;;;   ((compose-maps (list case1 pair-base-map  identity-endo-functor)) k)
 ;;; )
 
 
@@ -515,17 +512,17 @@
 ;;; RENAME: goal-freevars, 
 ;;; RENAME: goal-vars (if doesn't respect)
 ;;; RENAME: o/w => _
-(define (freevar g)
+(define (goal-vars g)
   (define fvs (mutable-set))
-  (define (counter prev-f ext-f g)
+  (define (counter rec-parent rec-root g)
     (match g
       [(var _ _) (begin (set-add! fvs g) g)]
-      [_ (prev-f g)]
+      [_ (rec-parent g)]
     )
   )
   ;;; RENAME: g-visitor
   (define result-f 
-    (overloading-functor-list (list counter goal-term-base-endofunctor pair-base-endofunctor state-base-endo-functor identity-endo-functor))
+    (compose-maps (list counter goal-term-base-map pair-base-map state-base-endo-functor identity-endo-functor))
   )
 
   (result-f g)
@@ -541,14 +538,14 @@
 ;;; RENAME: asumpt => assmpt
 ;;; RENAME: bind-s => s
 ;;; RENAME: bind-g => g
-(struct bind  stream-struct (asumpt bind-s bind-g)   
+(struct bind  stream-struct (asumpt s g)   
   #:transparent
-  #:guard (lambda (asumpt bind-s bind-g type-name)
+  #:guard (lambda (asumpt s g type-name)
                     (cond
                       [(and (assumption-base? asumpt) 
-                            (Stream? bind-s) 
-                            (Goal? bind-g))
-                       (values asumpt bind-s bind-g)]
+                            (Stream? s) 
+                            (Goal? g))
+                       (values asumpt s g)]
                       [else (error type-name)]))
 )
 ;;; RENAME: mplus-s1 => s1
@@ -743,15 +740,15 @@
   (define res #t)
   ;;; side-effect for folding
   ;;;   still using visitor pattern/homomorphism
-  (define (each-case prev-f rec g)
+  (define (each-case rec-parent rec g)
     (match g
       [(relate _ _) (begin (set! res #f) g)]
       [(cimpl a b) (rec b)] ; only requires b complementable
       [(forall _ b g) (rec (cimpl b g))] ; equivalent semantic
-      [_ (prev-f g)]
+      [_ (rec-parent g)]
     )
   )
-  (define f (overloading-functor-list (list each-case goal-base-endofunctor identity-endo-functor)))
+  (define f (compose-maps (list each-case goal-base-map identity-endo-functor)))
   (f g)
   res
 )
@@ -764,16 +761,16 @@
   (define res #t)
   ;;; side-effect for folding
   ;;;   still using visitor pattern/homomorphism
-  (define (each-case prev-f rec g)
+  (define (each-case rec-parent rec g)
     (match g
       [(relate _ _) (begin (set! res #f) g)]
       ;; TODO (greg): if `a` is decidable, the entire implication may still be decidable
       [(cimpl a b) (begin (set! res #f) g)] ; don't even allow implication to be inside g
       [(forall _ b g) (rec (cimpl b g))] ; equivalent semantic
-      [_ (prev-f g)]
+      [_ (rec-parent g)]
     )
   )
-  (define f (overloading-functor-list (list each-case goal-base-endofunctor identity-endo-functor)))
+  (define f (compose-maps (list each-case goal-base-map identity-endo-functor)))
   (f g)
   res
 )
@@ -842,7 +839,7 @@
 ;;;  RENAME: dv => domain-var
 ;;;  RENAME: first-attempt-s => state
 ;;;  RENAME: s => state
-(struct bind-forall  stream-struct (asumpt scope first-attempt-s dv bind-g)          #:prefab)
+(struct bind-forall  stream-struct (asumpt scope state domain-var g)          #:prefab)
 
 ;;; if a stream is WHNF(?)  
 (define/contract (mature? s)
@@ -1155,14 +1152,14 @@
 ;;;   unfold one-level of relation inside g
 (define/contract (unfold-one-level-relate g)
   (Goal? . -> . Goal?)  
-  (define (each-case prev-f rec g)
+  (define (each-case rec-parent rec g)
     (match g
       [(relate thunk _) (thunk)] 
-      [o/w (prev-f g)]
+      [o/w (rec-parent g)]
     )
   )
   (define result-f 
-    (overloading-functor-list (list each-case goal-base-endofunctor pair-base-endofunctor identity-endo-functor))
+    (compose-maps (list each-case goal-base-map pair-base-map identity-endo-functor))
   )
   (result-f g)
 )
@@ -1171,15 +1168,15 @@
 (define/contract (has-relate g)
   (Goal? . -> . boolean?)  
   (define result #f)
-  (define (each-case prev-f rec g)
+  (define (each-case rec-parent rec g)
     (if result
         g
         (match g
           [(relate thunk _) (begin (set! result #t) g)] 
-          [o/w (prev-f g)]))
+          [o/w (rec-parent g)]))
   )
   (define result-f 
-    (overloading-functor-list (list each-case goal-base-endofunctor pair-base-endofunctor identity-endo-functor))
+    (compose-maps (list each-case goal-base-map pair-base-map identity-endo-functor))
   )
   (result-f g)
   result
@@ -1577,8 +1574,8 @@
 ;;;     equivalence is ensured
 (define/contract (syntactical-simplify goal)
   (Goal? . -> . Goal?)
-  (define (basic-tactic prev-f rec goal)
-    (define prev-result (prev-f goal))
+  (define (basic-tactic rec-parent rec goal)
+    (define prev-result (rec-parent goal))
     (define singlerewrite 
       (match prev-result
         [(conj (Top) x) x]
@@ -1592,7 +1589,7 @@
     )
     (if (equal? singlerewrite 'rewrite-failed) prev-result (rec singlerewrite))
   )
-  ((overloading-functor-list (list basic-tactic goal-base-endofunctor  identity-endo-functor)) goal)
+  ((compose-maps (list basic-tactic goal-base-map  identity-endo-functor)) goal)
 )
 
 
@@ -1622,7 +1619,7 @@
 
   (define subst-mapping (hash->list mapping))
 
-  (define (literal-replace-from-after prev-f rec obj)
+  (define (literal-replace-from-after rec-parent rec obj)
     (match obj
       [x 
         #:when (hash-ref mapping x #f) 
@@ -1650,9 +1647,9 @@
         (let* ([type-infos (hash->list obj)]
                [new-type-infos (rec type-infos)])
           (foldl hash-table-add (hash) new-type-infos) ) ]
-      [_ (prev-f obj)]))
+      [_ (rec-parent obj)]))
 
-  (define internal-f (overloading-functor-list (list literal-replace-from-after pair-base-endofunctor goal-term-base-endofunctor identity-endo-functor)))
+  (define internal-f (compose-maps (list literal-replace-from-after pair-base-map goal-term-base-map identity-endo-functor)))
   ;;; return the following
   (internal-f st)
 )
@@ -1700,7 +1697,7 @@
 ;;;   only used for TO-Non-Assymetry
 (define (record-vars-on-asymmetry-in-diseq st)
   (define each-asymmetry-record! (mutable-set))
-  (define (each-asymmetry prev-f rec g)
+  (define (each-asymmetry rec-parent rec g)
     (match g
       ;;; thiss pattern matching i a bit dangerous
       ;;; TODO: make equation/inequality into a struct so that pattern-matching can be easier
@@ -1713,13 +1710,13 @@
           (let* ([v (cdr g)])
               (set-add! each-asymmetry-record! v)
               g)]
-      [_ (prev-f g)]
+      [_ (rec-parent g)]
 
     )
   )
 
   (define each-asymmetry-recorder
-    (overloading-functor-list (list each-asymmetry pair-base-endofunctor identity-endo-functor))
+    (compose-maps (list each-asymmetry pair-base-map identity-endo-functor))
   )
   (each-asymmetry-recorder (state-diseq st))
   (set->list each-asymmetry-record!)
@@ -2072,14 +2069,14 @@
 ;;;  return a set of all tprojs appear inside
 (define (collect-tprojs anything)
   (define result (mutable-set))
-  (define (each-case prev-f rec g)
+  (define (each-case rec-parent rec g)
     (match g
       [(tproj _ _) (set-add! result g)] ;; local side-effect
-      [o/w (prev-f g)]
+      [o/w (rec-parent g)]
     )
   )
   (define result-f 
-    (overloading-functor-list (list each-case goal-term-base-endofunctor pair-base-endofunctor state-base-endo-functor identity-endo-functor))
+    (compose-maps (list each-case goal-term-base-map pair-base-map state-base-endo-functor identity-endo-functor))
   )
   (result-f anything)
   result
