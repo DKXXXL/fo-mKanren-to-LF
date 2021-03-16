@@ -1378,10 +1378,13 @@
      (syn-solving asm org-asm st g))
     ((to-dnf st mark)
       ;;; mark is the index
-      (and mark
-          (let ([ret (get-state-DNF-by-address st mark)]
+      (if (equal? (state-diseq st) '())
+          (cons st #f)
+          (and mark
+            (let ([ret (get-state-DNF-by-address st mark)]
                 [next-mark (get-state-DNF-next-address st mark)])
-            (cons ret (to-dnf st next-mark)))))
+              (cons ret (to-dnf st next-mark))))
+      ))
 
     ((mapped-stream f stream)
       ;;; TODO: recheck this part .. it might be not correct searching strategy
@@ -1640,7 +1643,8 @@
 ;;; return a set of vars, indicating that those vars, "s" are in the
 ;;;  form of "s =/= (cons ...)", and thus we need to break down s themselves
 ;;;   only used for TO-Non-Assymetry
-(define (record-vars-on-asymmetry-in-diseq st)
+(define/contract (record-vars-on-asymmetry-in-diseq st0)
+  (state? . -> . any?)
   (define each-asymmetry-record! (mutable-set))
   (define (each-asymmetry rec-parent rec g)
     (match g
@@ -1663,7 +1667,7 @@
   (define each-asymmetry-recorder
     (compose-maps (list each-asymmetry pair-base-map identity-endo-functor))
   )
-  (each-asymmetry-recorder (state-diseq st))
+  (each-asymmetry-recorder (state-diseq st0))
   (set->list each-asymmetry-record!)
 )
 
@@ -1800,7 +1804,7 @@
   ;;;   and also the ancestor won't appear, i.e. if a._1 is some term appearing, a won't appearing at all
   ;;;    the canonical-repr is the one helping with it
   (define (while-non-empty-eqs eqs res canonical-repr)
-    (debug-dump "eliminate-conses: while-non-empty-eqs ~a\n          with partial result ~a \n" eqs res)
+    ;;; (debug-dump "eliminate-conses: while-non-empty-eqs ~a\n          with partial result ~a \n" eqs res)
     (if (equal? '() eqs)
       res
       (match-let* 
@@ -2197,12 +2201,12 @@
 ;;; return a stream of states
 ;;;   where the stream is equivalent to the states of clearing
 ;;;   also remove things from scope
-(define/contract (clear-about state scope v)
+(define/contract (clear-about state0 scope v)
   (state? set? var? . -> . any?)
   ;;; TODO: I will just currently make this assumption to empty...
-  (debug-dump "\n clearing about: input st ~a" state)
-  (define dnf-sym-stream (TO-DNF (TO-NON-Asymmetric '() (wrap-state-stream state))))
   
+  (define dnf-sym-stream (TO-DNF (TO-NON-Asymmetric '() (wrap-state-stream state0))))
+  (debug-dump "\n clearing about: input sttate0 ~a" state0)
   (define mentioned-var (set-remove scope v))
   (define (map-clear-about st)
     (let* (
@@ -2212,6 +2216,8 @@
         [unmention-substed-st  domain-enforced-st]
         [k (begin   
                     (debug-dump "\n clearing about: current-vars ~a" current-vars)
+                    (debug-dump "\n clearing about: input state0 ~a" state0)
+                    (debug-dump "\n clearing about: sub-state ~a" st)
                     (debug-dump "\n clearing about: field-projected-st : ~a" field-projected-st)
                     (debug-dump "\n clearing about: domain-enforced-st: ~a" domain-enforced-st)
                     (debug-dump "\n clearing about: unmention-substed-st: ~a" unmention-substed-st)
