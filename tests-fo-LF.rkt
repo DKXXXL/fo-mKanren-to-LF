@@ -1,4 +1,4 @@
-#lang racket
+#lang errortrace racket
 
 (require "mk-fo.rkt")
 (require racket/format)
@@ -268,7 +268,7 @@
     (disj* (not-pairo a) (fresh (z) (== a (cons z z))))))
 
 ;;; ((not-pairo a) (_.0 . _0) ...)
-. test-reg!=> . 'succeed
+. test-reg!=>ND . 'succeed
 )
 
 ((run 1 (a) 

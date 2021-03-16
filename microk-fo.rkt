@@ -1,4 +1,4 @@
-#lang racket
+#lang errortrace racket
 (provide
   (all-from-out "common.rkt")
   (struct-out disj)
@@ -1776,23 +1776,58 @@
 
 ;;; given a set of equations 
 ;;;  return an equivalent set of equations, with no pair inside 
+;;;  also no duplicate form, i.e. a and a._1 won't appear together
 ;;;     but only tproj inside
 (define (eliminate-conses eqs)
   ;;; (debug-dump "\n eliminate-conses's input: ~a" eqs)
-  (define (each-eli-eq single-eq)
-    ;;; won't stop if either side has cons
-    (match single-eq
-      [(cons LHS RHS)
-        #:when (and (is-simple-form LHS) (is-simple-form RHS)) 
-        (list single-eq)]
-      [(cons (cons _ _) _) (eliminate-conses (list (tcar-eq single-eq) (tcdr-eq single-eq)))]
-      [(cons _ (cons _ _)) (eliminate-conses (list (tcar-eq single-eq) (tcdr-eq single-eq)))]
-      [o/w (raise-and-warn "\n Unexpected equation form ~a" single-eq)]
-    )
-  )
+  ;;; (define (each-eli-eq single-eq)
+  ;;;   ;;; won't stop if either side has cons
+  ;;;   (match single-eq
+  ;;;     [(cons LHS RHS)
+  ;;;       #:when (and (is-simple-form LHS) (is-simple-form RHS)) 
+  ;;;       (list single-eq)]
+  ;;;     [(cons (cons _ _) _) (eliminate-conses (list (tcar-eq single-eq) (tcdr-eq single-eq)))]
+  ;;;     [(cons _ (cons _ _)) (eliminate-conses (list (tcar-eq single-eq) (tcdr-eq single-eq)))]
+  ;;;     [o/w (raise-and-warn "\n Unexpected equation form ~a" single-eq)]
+  ;;;   )
+  ;;; )
 
-  (foldl append '() 
-      (map each-eli-eq eqs))
+  ;;; (foldl append '() 
+  ;;;     (map each-eli-eq eqs))
+  
+  ;;; a while loop, very procedure way of doing things
+  ;;; basically will rewrite a bunch of equation into field-proj form
+  ;;;   and also the ancestor won't appear, i.e. if a._1 is some term appearing, a won't appearing at all
+  ;;;    the canonical-repr is the one helping with it
+  (define (while-non-empty-eqs eqs res canonical-repr)
+    (debug-dump "eliminate-conses: while-non-empty-eqs ~a\n          with partial result ~a \n" eqs res)
+    (if (equal? '() eqs)
+      res
+      (match-let* 
+        ([(cons eq rest) eqs]
+         [(cons LHS RHS) eq]
+         [eq-canon 
+            (cons (hash-ref canonical-repr LHS LHS) 
+                  (hash-ref canonical-repr RHS RHS))])
+          (if (not (equal? eq-canon eq))
+            (while-non-empty-eqs (cons eq-canon rest) res canonical-repr)      
+            (if (and (is-simple-form LHS) (is-simple-form RHS))
+              (while-non-empty-eqs rest (cons eq res) canonical-repr)
+              ;;; one side is non-simple
+              (match-let*
+                ([new-eq1 (tcar-eq eq)]
+                 [new-eq2 (tcdr-eq eq)]
+                 [crpr canonical-repr]
+                 [crpr1 (if (is-simple-form LHS) 
+                            (hash-set crpr LHS (cons (tcar LHS) (tcdr LHS)))
+                            crpr)]
+                 [crpr2 (if (is-simple-form RHS) 
+                            (hash-set crpr1 RHS (cons (tcar RHS) (tcdr RHS)))
+                            crpr1)])
+                (while-non-empty-eqs (cons new-eq1 (cons new-eq2 rest)) res crpr2)))))))
+    (filter 
+      (λ(t) (not (equal? (car t) (cdr t))))
+      (while-non-empty-eqs eqs '() (hash)))
 )
 
 
@@ -1866,10 +1901,18 @@
       eq))
 
   (define old-eqs (state-sub st))
+  (define (remove-unnecessary-equation eqs)
+    (filter 
+      (λ(t)
+        (and (pair? t)
+          (not (equal? (car t) (cdr t)))))
+      eqs)
+  )
   (debug-dump "\n unmentioned-substed-form's input st: ~a \n unmentioned-substed-form's vars : ~a \n" st mentioned-vars)
   ;;; precondition: st has empty sub
-  (define (unmention-remove-everywhere eqs st)
+  (define (unmention-remove-everywhere eqs0 st)
     ;;; (define eqs (state-sub st))
+    (define eqs (remove-unnecessary-equation eqs0))
     (if (equal? eqs '())
       st
       (match (swap-if-rhs-unmentioned (car eqs))
@@ -2146,7 +2189,8 @@
   (define tproj-eliminated (eliminate-tproj-return-record unmentioned-removed-st))
   (define tproj-eliminated-content (car tproj-eliminated))
   (define tproj-eliminated-evidence (cdr tproj-eliminated))
-  (unifies-equations tproj-eliminated-evidence tproj-eliminated-content)
+  (valid-type-constraints-check
+    (unifies-equations tproj-eliminated-evidence tproj-eliminated-content))
 )
 
 ;;; the same shrink-away but don't require much precondition
@@ -2166,27 +2210,27 @@
         [field-projected-st (field-proj-form st)]
         [domain-enforced-st (domain-enforcement-st field-projected-st)]
         [unmention-substed-st  domain-enforced-st]
-        ;;; [k (begin   
-        ;;;             (debug-dump "\n clearing about: current-vars ~a" current-vars)
-        ;;;             (debug-dump "\n clearing about: field-projected-st : ~a" field-projected-st)
-        ;;;             (debug-dump "\n clearing about: domain-enforced-st: ~a" domain-enforced-st)
-        ;;;             (debug-dump "\n clearing about: unmention-substed-st: ~a" unmention-substed-st)
-        ;;;             ;;; (debug-dump "\n complemented goal: ")(debug-dump st-scoped-w/ov)
-        ;;;             ;;; (debug-dump "\n next state ") (debug-dump next-st) 
-        ;;;             ;;; (debug-dump "\n search with domain on var ")
-        ;;;             ;;; (debug-dump v) (debug-dump " in ") (debug-dump cgoal) 
-        ;;;             (debug-dump "\n"))
-        ;;;             ] 
+        [k (begin   
+                    (debug-dump "\n clearing about: current-vars ~a" current-vars)
+                    (debug-dump "\n clearing about: field-projected-st : ~a" field-projected-st)
+                    (debug-dump "\n clearing about: domain-enforced-st: ~a" domain-enforced-st)
+                    (debug-dump "\n clearing about: unmention-substed-st: ~a" unmention-substed-st)
+                    ;;; (debug-dump "\n complemented goal: ")(debug-dump st-scoped-w/ov)
+                    ;;; (debug-dump "\n next state ") (debug-dump next-st) 
+                    ;;; (debug-dump "\n search with domain on var ")
+                    ;;; (debug-dump v) (debug-dump " in ") (debug-dump cgoal) 
+                    (debug-dump "\n"))
+                    ] 
         [shrinked-st (shrink-away domain-enforced-st current-vars v)]
         [valid-shrinked-st (valid-type-constraints-check shrinked-st)] ;;; remove unnecessary information
-        ;;; [k (begin  
-        ;;;             (debug-dump "\n clearing about: shrinked-st on ~a: ~a" v shrinked-st) 
-        ;;;             ;;; (debug-dump "\n complemented goal: ")(debug-dump st-scoped-w/ov)
-        ;;;             ;;; (debug-dump "\n next state ") (debug-dump next-st) 
-        ;;;             ;;; (debug-dump "\n search with domain on var ")
-        ;;;             ;;; (debug-dump v) (debug-dump " in ") (debug-dump cgoal) 
-        ;;;             (debug-dump "\n"))
-        ;;;             ] 
+        [k (begin  
+                    (debug-dump "\n clearing about: shrinked-st on ~a: ~a" v shrinked-st) 
+                    ;;; (debug-dump "\n complemented goal: ")(debug-dump st-scoped-w/ov)
+                    ;;; (debug-dump "\n next state ") (debug-dump next-st) 
+                    ;;; (debug-dump "\n search with domain on var ")
+                    ;;; (debug-dump v) (debug-dump " in ") (debug-dump cgoal) 
+                    (debug-dump "\n"))
+                    ] 
         )
       (wrap-state-stream valid-shrinked-st)))
   (mapped-stream map-clear-about dnf-sym-stream)

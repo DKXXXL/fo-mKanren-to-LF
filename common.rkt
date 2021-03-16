@@ -209,6 +209,7 @@
 ;;; x.car.cdr -> ... 
 ;;;  x.car.cdr.car
 (define (walk t sub)
+  ;;; (debug-dump "walk: ~a with ~a \n" t sub)
   (match t
     [(var _ _) 
       (let ((xt (assf (lambda (x) (equal? t x)) sub)))
