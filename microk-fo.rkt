@@ -1444,18 +1444,12 @@
                               ]
                     [valid-shrinked-state (valid-type-constraints-check shrinked-st)] ;; clear up the incorrect state information
                     [current-domain (state->goal st)]
-                    [solved-case-ty (forall v (conj current-domain domain) goal)]
-                    [unsolved-case-ty (forall v (conj relative-complemented-goal domain) goal)]
-                    [case-axiom-ty  ;; trust-base -- we later need to expand it into the proof
-                      (solved-case-ty
-                        . cimpl . (unsolved-case-ty
-                        . cimpl . (forall v domain goal)))]
-                    [shrinked-pf-filled-st  valid-shrinked-state]
+                    ;;; there will be some unnecessary information caused by above computation, better removed. 
                     )
               ;;; forall x (== x 3) (== x 3)
               ;;;   forall x (conj (== x 3) (=/= x 3)) (== x 3)
               ;;;  forall x () (symbolo x) /\ (not-symbolo x)
-              (step (mplus (pause assmpt shrinked-pf-filled-st (forall v (conj relative-complemented-goal domain) goal))
+              (step (mplus (pause assmpt valid-shrinked-state (forall v (conj relative-complemented-goal domain) goal))
                            (bind-forall assmpt current-vars (cdr s) v (forall v domain goal)))))) ;;; other possible requirements search
 
         (else (bind-forall assmpt current-vars s v (forall v domain goal))))
@@ -2183,6 +2177,7 @@
         ;;;             (debug-dump "\n"))
         ;;;             ] 
         [shrinked-st (shrink-away domain-enforced-st current-vars v)]
+        [valid-shrinked-st (valid-type-constraints-check shrinked-st)] ;;; remove unnecessary information
         ;;; [k (begin  
         ;;;             (debug-dump "\n clearing about: shrinked-st on ~a: ~a" v shrinked-st) 
         ;;;             ;;; (debug-dump "\n complemented goal: ")(debug-dump st-scoped-w/ov)
@@ -2192,7 +2187,7 @@
         ;;;             (debug-dump "\n"))
         ;;;             ] 
         )
-      (wrap-state-stream shrinked-st)))
+      (wrap-state-stream valid-shrinked-st)))
   (mapped-stream map-clear-about dnf-sym-stream)
 )
 
