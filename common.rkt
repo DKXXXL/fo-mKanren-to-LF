@@ -52,7 +52,7 @@
 (instrumenting-enabled #t)
 
 ;;; set the following to 'ON then we will have debug info
-(define debug-output-info 'OFF)
+(define debug-output-info 'ON)
 
 
 ;; Logic variables
@@ -133,6 +133,7 @@
   )
 )
 
+
 (struct tproj (v cxr)
   ;;; #:prefab 
   #:transparent
@@ -143,7 +144,25 @@
                       [else (error type-name
                                    "bad v: ~e"
                                    v)]))
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+       (fprintf output-port (pretty-print-tproj val)))]
 )
+
+
+(define/contract (pretty-print-tproj tp)
+  (tproj? . -> . string?)
+  (define/contract (path-pretty x)
+    (list? . -> . string?)
+    (for/fold
+      ([acc ""])
+      ([each x])
+      (string-append 
+        acc
+        (match each ['car "._0"] ['cdr "._1"]))))
+  (let* 
+    ([path (tproj-cxr tp)])
+    (format "~a~a" (tproj-v tp) (path-pretty path))))
 
 
 (define (tcar t) 

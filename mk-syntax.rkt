@@ -44,7 +44,7 @@
 (define-syntax query
   (syntax-rules ()
     ((_ (x ...) g0 gs ...)
-     (let ((goal (fresh (x ...)  g0 gs ... (== (list x ...) initial-var))))
+     (let ((goal (fresh (x ...) (== (list x ...) initial-var) g0 gs ...)))
        (pause '() empty-state goal)))))
 (define (stream-take n s)
   (if (eqv? 0 n) '()

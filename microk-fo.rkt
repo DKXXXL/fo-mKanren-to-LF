@@ -1866,7 +1866,7 @@
       eq))
 
   (define old-eqs (state-sub st))
-  ;;; (debug-dump "\n unmentioned-substed-form's input st: ~a \n unmentioned-substed-form's vars : ~a \n" st mentioned-vars)
+  (debug-dump "\n unmentioned-substed-form's input st: ~a \n unmentioned-substed-form's vars : ~a \n" st mentioned-vars)
   ;;; precondition: st has empty sub
   (define (unmention-remove-everywhere eqs st)
     ;;; (define eqs (state-sub st))
@@ -2156,6 +2156,7 @@
 (define/contract (clear-about state scope v)
   (state? set? var? . -> . any?)
   ;;; TODO: I will just currently make this assumption to empty...
+  (debug-dump "\n clearing about: input st ~a" state)
   (define dnf-sym-stream (TO-DNF (TO-NON-Asymmetric '() (wrap-state-stream state))))
   
   (define mentioned-var (set-remove scope v))
