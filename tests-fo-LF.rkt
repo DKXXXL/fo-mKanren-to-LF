@@ -268,7 +268,7 @@
     (disj* (not-pairo a) (fresh (z) (== a (cons z z))))))
 
 ;;; ((not-pairo a) (_.0 . _0) ...)
-. test-reg!=>ND . 'succeed
+. test-reg!=> . 'succeed
 )
 
 ((run 1 (a) 
@@ -530,13 +530,13 @@
 )
 
 
-;;; 2021-0204 BUGFIX following: Incorrect state f, type information should go away
+;;; 2021-03-20 -- the resulting state returns correctly.
 ;;;     also inequality information disappear
 (NestedCons-1
   (run 1 (c a b) (for-all (x) (=/= c (cons a (cons b x)))))
 . test-reg!=> . 'succeed)
 
-;;; The following current has bug
+
 (NestedCons-2
   (run 1 (c a b) (for-all (y) (=/= c (cons a (cons b y)))) )
 . test-reg!=> . 'succeed)

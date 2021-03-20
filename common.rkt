@@ -60,7 +60,7 @@
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "~a#~a" (var-name val) (var-index val)))]
+     (fprintf output-port "~a" (var-name val)))]
 )
 (define (var=? x1 x2)
   (= (var-index x1) (var-index x2)))

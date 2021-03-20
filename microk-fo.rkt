@@ -2179,6 +2179,7 @@
 ;;;       an gives a set of equation explaining the remove
 ;;;     for example (tproj x car) == k
 ;;;       will transform to (a == k) and a list of equation [(x (cons a b))]
+;;; TODO: this thing seems buggy ... try to replace it with eliminate-tproj-in-st
 (define (eliminate-tproj-return-record anything) ;; tproj x car.cdr.car ;; x = (cons (cons _ (cons _ _)) _)
   (define all-tprojs (set->list (collect-tprojs anything)))
   (define all-tproj-removing-eqs (map equation-for-remove-tproj all-tprojs))
