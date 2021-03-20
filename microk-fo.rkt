@@ -380,6 +380,11 @@
   )
 )
 
+(define (hash-key-value-map rec-parent rec g)
+  (match g 
+    [(? hash?)
+      (make-hash (rec (hash->list g)))]
+    [_ (rec-parent g)]))
 
 (define (identity-endo-functor rec-parent rec g) g)
 
@@ -2147,15 +2152,16 @@
     )
   )
   (define result-f 
-    (compose-maps (list each-case goal-term-base-map pair-base-map state-base-endo-functor identity-endo-functor))
+    (compose-maps (list each-case goal-term-base-map pair-base-map state-base-endo-functor hash-key-value-map identity-endo-functor))
   )
   (result-f anything)
   result
 
 )
 
-(define (eliminate-tproj-in-st st)
+(define/contract (eliminate-tproj-in-st st)
   (state? . -> . state?)
+  (debug-dump "  eliminate-tproj-in-st: input state ~a \n" st)
   (define all-tprojs (set->list (collect-tprojs st)))
   (define-values 
     (var-cons-structure 
@@ -2271,9 +2277,10 @@
 ;;;   st is domain-enforced
 ;;; WARNING: there might be many more bugs undiscovered
 (define/contract (shrink-away st scope var)
-  (state? set? var? . -> . (or/c state? false/c))
+  (state? set? var? . -> . state?)
   (define mentioned-vars (set-remove scope var))
   ;;;  we need to do extra unmentioned-substed because here var is considered unmentioned
+  (debug-dump "\n shrinking var: shrink-var-removed-st: ~a" st)
   (define var-removed-st (unmentioned-substed-form mentioned-vars st))
   ;;; (debug-dump "\n shrinking var: shrink-var-removed-st: ~a" var-removed-st)
   (define domain-enforced-st var-removed-st)
@@ -2290,8 +2297,10 @@
   ;;; (valid-type-constraints-check
   ;;;   (unifies-equations tproj-eliminated-evidence tproj-eliminated-content))
   
+  (let* ([eliminated-tproj-st (eliminate-tproj-in-st unmentioned-removed-st)]
+         [k (debug-dump "  eliminated-tproj-st: ~a\n" eliminated-tproj-st)])
+    (valid-type-constraints-check eliminated-tproj-st))
   
-  (valid-type-constraints-check (eliminate-tproj-in-st unmentioned-removed-st))
 )
 
 ;;; the same shrink-away but don't require much precondition
