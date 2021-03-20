@@ -1753,18 +1753,20 @@
 ;;;   1. a subst mapping from var to its cons-structure
 ;;;   2. a hashmapping from each xs into var
 (define/contract (proj-free-equations-for-tproj xs)
-  ((listof tproj?) . -> . (cons/c (listof pair) hash?))
+  ((listof tproj?) . -> . (cons/c (listof pair?) hash?))
 
   ;;; var-management info, no duplicate vars for same projection
   (define tp-to-var (hash))
   (define (get-var-from-tp tp)
   ;;; note this tp might be var as well
   ;;;     a tp with zero path is just a var
-    (let ([oldvar  (hash-ref path-map-to-var path #f)]
-          [varname (string->unreadable-symbol (format "~a" tp))]
-          [maybe-newvar  (if oldvar oldvar (fresh-var/name varname))])
-        (if oldvar '() (hash-set! tp-to-var tp maybe-newvar))
-        maybe-newvar))
+    (if (tproj? tp)
+        (let* ([oldvar  (hash-ref tp-to-var tp #f)]
+           [varname (string->unreadable-symbol (format "~a" tp))]
+           [maybe-newvar  (if oldvar oldvar (fresh-var/name varname))])
+          (if oldvar '() (set! tp-to-var (hash-set tp-to-var tp maybe-newvar)))
+          maybe-newvar)
+        tp))
 
   ;;; construct equivalent equations for projection form 
   (define/contract (construct-body-eqs x)
@@ -1801,8 +1803,8 @@
     (for/fold
       ([acc-tproj-v (set)])
       ([each-tproj  xs])
-      (match-let* ([(tproj v _)])
-        （set-add acc-tproj-v v)))
+      (match-let* ([(tproj v _) each-tproj])
+        (set-add acc-tproj-v v))))
   
   ;;; now we have a big mapping maps each var to its cons-structure
   (define var-cons-form-mapping
@@ -1811,7 +1813,9 @@
       ([each-v      all-tproj-vs])
       (let* ([new-map (cons each-v (walk* each-v resulting-subst))])
         (cons new-map mappings))))
-  
+
+  (debug-dump "  proj-free-equations-for-tproj : resulting-subst : ~a \n" resulting-subst)
+  (debug-dump "  proj-free-equations-for-tproj : var-cons-form-mapping : ~a \n" var-cons-form-mapping)
   (cons var-cons-form-mapping tp-to-var)
 
   
@@ -2267,7 +2271,7 @@
 ;;;   st is domain-enforced
 ;;; WARNING: there might be many more bugs undiscovered
 (define/contract (shrink-away st scope var)
-  (state? set? var? . -> . state?)
+  (state? set? var? . -> . (or/c state? false/c))
   (define mentioned-vars (set-remove scope var))
   ;;;  we need to do extra unmentioned-substed because here var is considered unmentioned
   (define var-removed-st (unmentioned-substed-form mentioned-vars st))
