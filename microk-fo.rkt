@@ -1724,6 +1724,11 @@
     ((_ x)
      (let ((x (var/fresh 'x))) x))))
 
+(define-syntax fresh-var/name
+  (syntax-rules ()
+    ((_ name)
+     (let ((x (var/fresh name))) x))))
+
 ;;; given a tproj, we construct a tproj-ectable term for it
 ;;;  return the equation for removing the tproj
 ;;; tproj -> pair as var, cons/tree of vars
@@ -1731,6 +1736,7 @@
 ;;;     will become (x == ((a b) c)) (a == ...) 
 (define (equation-for-remove-tproj x)
   ;;; (define field-projection-list (tproj-cxr x))
+  (define x-name (format "~a" x))
   (define (construct-sketch path)
     (match path
       [(cons 'car rest)  (cons (construct-sketch rest) (fresh-var fpu))]
@@ -1740,6 +1746,75 @@
   )
   ;;; TODO: figure out why this algorithm is working! -_-
   (cons (tproj-v x) (construct-sketch (reverse (tproj-cxr x))))
+)
+
+;;; given a bunch of tproj
+;;; return a pair of 
+;;;   1. a subst mapping from var to its cons-structure
+;;;   2. a hashmapping from each xs into var
+(define/contract (proj-free-equations-for-tproj xs)
+  ((listof tproj?) . -> . (cons/c (listof pair) hash?))
+
+  ;;; var-management info, no duplicate vars for same projection
+  (define tp-to-var (hash))
+  (define (get-var-from-tp tp)
+  ;;; note this tp might be var as well
+  ;;;     a tp with zero path is just a var
+    (let ([oldvar  (hash-ref path-map-to-var path #f)]
+          [varname (string->unreadable-symbol (format "~a" tp))]
+          [maybe-newvar  (if oldvar oldvar (fresh-var/name varname))])
+        (if oldvar '() (hash-set! tp-to-var tp maybe-newvar))
+        maybe-newvar))
+
+  ;;; construct equivalent equations for projection form 
+  (define/contract (construct-body-eqs x)
+    (tproj? . -> . (listof pair?))
+    (match x 
+      [(tproj xv (cons _ rem))
+          (let* ([rest-body-equations (construct-body-eqs (tproj_ xv rem))]
+                 [xv-rem     (get-var-from-tp (tproj_ xv rem))]
+                 [xv-rem.1   (get-var-from-tp (tproj_ xv (cons 'car rem)))]
+                 [xv-rem.2   (get-var-from-tp (tproj_ xv (cons 'cdr rem)))]
+                 [xv-rem-eq  (cons xv-rem (cons xv-rem.1 xv-rem.2))])
+            (cons xv-rem-eq rest-body-equations))]
+      [(? var?) '()]
+    )
+  )
+
+  ;;; collect all the equations w.r.t. xs
+  (define all-equations 
+    (for/fold
+      ([acc     '()])
+      ([each-tp  xs])
+      (append (construct-body-eqs each-tp) acc)))
+
+  ;;; equivalent as all-equations, but cycle-free (subst list)
+  (define resulting-subst 
+    (for/fold
+      ([acc-sub     '()])
+      ([each-eq all-equations])
+      (match-let* ([(cons lhs rhs) each-eq])
+        (unify/sub lhs rhs acc-sub))))
+
+  ;;; collect all the projected var
+  (define all-tproj-vs
+    (for/fold
+      ([acc-tproj-v (set)])
+      ([each-tproj  xs])
+      (match-let* ([(tproj v _)])
+        （set-add acc-tproj-v v)))
+  
+  ;;; now we have a big mapping maps each var to its cons-structure
+  (define var-cons-form-mapping
+    (for/fold
+      ([mappings     '()])
+      ([each-v      all-tproj-vs])
+      (let* ([new-map (cons each-v (walk* each-v resulting-subst))])
+        (cons new-map mappings))))
+  
+  (cons var-cons-form-mapping tp-to-var)
+
+  
 )
 
 ;;; taking car on both sides of eq
@@ -2075,6 +2150,20 @@
 
 )
 
+(define (eliminate-tproj-in-st st)
+  (state? . -> . state?)
+  (define all-tprojs (set->list (collect-tprojs st)))
+  (define-values 
+    (var-cons-structure 
+     tproj-maps-to-var)
+    (match-let* ([(cons a b) (proj-free-equations-for-tproj all-tprojs)])
+      (values a b)
+    ))
+  (let* ([tproj-removed-st (literal-replace* tproj-maps-to-var st)]
+         [sub              (state-sub tproj-removed-st)]
+         [newsub           (append var-cons-structure sub)])
+    (state-sub-set tproj-removed-st newsub)))
+
 ;;; anything (most likely pairs of goals) -> anything x List of equation
 ;;;     will remove every tproj, 
 ;;;       an gives a set of equation explaining the remove
@@ -2190,11 +2279,15 @@
   (define unmentioned-removed-st (unmentioned-totally-removed mentioned-vars domain-enforced-st))
   ;;; (debug-dump "\n shrinking var: remove unmention in type/ineq-cst: ~a" unmentioned-removed-st)
   ;;; then we eliminate tproj
-  (define tproj-eliminated (eliminate-tproj-return-record unmentioned-removed-st))
-  (define tproj-eliminated-content (car tproj-eliminated))
-  (define tproj-eliminated-evidence (cdr tproj-eliminated))
-  (valid-type-constraints-check
-    (unifies-equations tproj-eliminated-evidence tproj-eliminated-content))
+
+  ;;; (define tproj-eliminated (eliminate-tproj-return-record unmentioned-removed-st))
+  ;;; (define tproj-eliminated-content (car tproj-eliminated))
+  ;;; (define tproj-eliminated-evidence (cdr tproj-eliminated))
+  ;;; (valid-type-constraints-check
+  ;;;   (unifies-equations tproj-eliminated-evidence tproj-eliminated-content))
+  
+  
+  (valid-type-constraints-check (eliminate-tproj-in-st unmentioned-removed-st))
 )
 
 ;;; the same shrink-away but don't require much precondition
