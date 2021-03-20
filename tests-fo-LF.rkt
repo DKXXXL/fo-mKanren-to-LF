@@ -758,7 +758,7 @@
 . test-reg!=>ND . 'succeed 
 )
 
-;;; BUGFIX: The following should halt
+;;; BUGFIX: The following is not halting
 (sort-boolo-implies-membero-2-1-3
   (run 1 () (for-all (a) 
       (cimpl (sort-boolo (list a) (list #f))
@@ -767,6 +767,7 @@
 . test-reg!=>ND . 'succeed 
 )
 
+;;; the following is halting, takes 30 sec
 (sort-boolo-implies-membero-2-1-4
   (run 1 () (for-all (a) 
       (cimpl (membero #f (list a)) 
@@ -775,7 +776,7 @@
 . test-reg!=>ND . 'succeed 
 )
 
-;;; BUGFIX: The following should halt!!!
+;;; the following is halting, takes 8 sec
 (sort-boolo-implies-membero-2-1-5
   (run 1 () (for-all (a) 
       (cimpl (membero #f (list a)) 
