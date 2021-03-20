@@ -55,6 +55,11 @@
 (define-syntax run
   (syntax-rules ()
     ((_ n body ...) (map reify/initial-var (stream-take n (query body ...))))))
+
+(define-syntax run/state
+  (syntax-rules ()
+    ((_ n body ...) (stream-take n (query body ...)))))
+
 (define-syntax run*
   (syntax-rules () ((_ body ...) (run #f body ...))))
 

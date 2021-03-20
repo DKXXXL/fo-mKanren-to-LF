@@ -162,7 +162,7 @@
         (match each ['car "._0"] ['cdr "._1"]))))
   (let* 
     ([path (tproj-cxr tp)])
-    (format "~a~a" (tproj-v tp) (path-pretty path))))
+    (format "~a~a" (tproj-v tp) (path-pretty (reverse path)))))
 
 
 (define (tcar t) 
