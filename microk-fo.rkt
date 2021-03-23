@@ -54,6 +54,9 @@
 
   conj*
   disj*
+
+  literal-replace
+  literal-replace*
   )
 
 (require "common.rkt")
@@ -517,7 +520,8 @@
   (define fvs (mutable-set))
   (define (counter rec-parent rec-root g)
     (match g
-      [(var _ _) (begin (set-add! fvs g) g)]
+      [(? var?) (begin (set-add! fvs g) g)]
+      [(tproj x _) (begin (set-add! fvs x) g)]
       [_ (rec-parent g)]
     )
   )
@@ -1576,8 +1580,8 @@
   (define (literal-replace-from-after rec-parent rec obj)
     (match obj
       [x 
-        #:when (hash-ref mapping x #f) 
-        (walk* (hash-ref mapping x #f) subst-mapping) ]
+        #:when (not (equal? (hash-ref mapping x 'LITERAL-REPLACE-UNFOUND) 'LITERAL-REPLACE-UNFOUND))
+        (walk* (hash-ref mapping x) subst-mapping) ]
       ;;; other extended construct -- like state
       ;;;  very untyped...
       ;;;  (a = a) (type-constrant a (number?))
@@ -1656,12 +1660,12 @@
     (match g
       ;;; thiss pattern matching i a bit dangerous
       ;;; TODO: make equation/inequality into a struct so that pattern-matching can be easier
-      [(cons (var _ _) (cons _ _)) 
+      [(? (cons/c var? pair?)) 
           (let* ([v (car g)])
               (set-add! each-asymmetry-record! v)
               g
                  )]
-      [(cons (cons _ _) (var _ _)) 
+      [(? (cons/c pair? var?)) 
           (let* ([v (cdr g)])
               (set-add! each-asymmetry-record! v)
               g)]
@@ -1730,10 +1734,8 @@
     ((_ x)
      (let ((x (var/fresh 'x))) x))))
 
-(define-syntax fresh-var/name
-  (syntax-rules ()
-    ((_ name)
-     (let ((x (var/fresh name))) x))))
+
+
 
 ;;; given a tproj, we construct a tproj-ectable term for it
 ;;;  return the equation for removing the tproj
@@ -1742,16 +1744,9 @@
 ;;;     will become (x == ((a b) c)) (a == ...) 
 (define (equation-for-remove-tproj x)
   ;;; (define field-projection-list (tproj-cxr x))
-  (define x-name (format "~a" x))
-  (define (construct-sketch path)
-    (match path
-      [(cons 'car rest)  (cons (construct-sketch rest) (fresh-var fpu))]
-      [(cons 'cdr rest)  (cons (fresh-var fpu) (construct-sketch rest))]
-      ['() (fresh-var fpu)]
-    )
-  )
-  ;;; TODO: figure out why this algorithm is working! -_-
-  (cons (tproj-v x) (construct-sketch (reverse (tproj-cxr x))))
+  (match-let* 
+    ([(cons var-cons-map _) (proj-free-equations-for-tproj (list x))])
+    (car var-cons-map))
 )
 
 ;;; given a bunch of tproj
@@ -1767,9 +1762,10 @@
   ;;; note this tp might be var as well
   ;;;     a tp with zero path is just a var
     (if (tproj? tp)
-        (let* ([oldvar  (hash-ref tp-to-var tp #f)]
-           [varname (string->unreadable-symbol (format "v~a" tp))]
-           [maybe-newvar  (if oldvar oldvar (fresh-var/name varname))])
+        (match-let* 
+              ([oldvar  (hash-ref tp-to-var tp #f)]
+               [(tproj v cxr) tp]
+               [maybe-newvar  (if oldvar oldvar (tp-var v cxr))])
           (if oldvar '() (set! tp-to-var (hash-set tp-to-var tp maybe-newvar)))
           maybe-newvar)
         tp))
@@ -2013,6 +2009,8 @@
             ([new-rhs (walk* rhs (cdr eqs))]
              [(cons new-st remain-eqs) (literal-replace lhs new-rhs (cons st (cdr eqs)))]
              [k (debug-dump "\n        unmentioned-substed-form removing: ~a, into ~a" lhs new-rhs)]
+             [k (debug-dump "\n        unmentioned-substed-form literal-replace st input: ~a, \n          output ~a" st new-st)]
+             [k (debug-dump "\n        unmentioned-substed-form literal-replace eqs input: ~a,\n          output ~a" (cdr eqs) remain-eqs)]
             )
             (unmention-remove-everywhere remain-eqs new-st))]
         [(cons v rhs)

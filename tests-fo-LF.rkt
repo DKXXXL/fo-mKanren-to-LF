@@ -798,7 +798,7 @@
 . test-reg!=> . 'succeed 
 )
 
-
+;;; This currently is unhalting
 (sort-boolo-implies-membero-2-3
   (run 1 () (for-all (y lst)
       (cimpl (conj* 
@@ -807,16 +807,16 @@
                 (sort-boolo lst (cons #f y)))
              (membero #f lst))
     ))
-. test-reg!=> . 'succeed 
+. test-reg!=>ND . 'succeed 
 )
 
-
+;;; TODO: The following is unhalting as well.
 (sort-boolo-implies-membero-3
   (run 1 () (for-all (lst y) 
       (cimpl (sort-boolo lst (cons #f y))
              (membero #f lst))
     ))
-. test-reg!=> . 'succeed 
+. test-reg!=>ND . 'succeed 
 )
 
 

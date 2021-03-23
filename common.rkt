@@ -1,8 +1,9 @@
-#lang racket
+#lang errortrace racket
 (provide
   (struct-out var)
   initial-var
   var/fresh
+  (struct-out tp-var)
   (struct-out state)
   (struct-out tproj)
   tcar
@@ -52,7 +53,7 @@
 (instrumenting-enabled #t)
 
 ;;; set the following to 'ON then we will have debug info
-(define debug-output-info 'ON)
+(define debug-output-info 'OFF)
 
 
 ;; Logic variables
@@ -60,8 +61,19 @@
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "~a" (var-name val)))]
+     (fprintf output-port "~a#~a" (var-name val) (var-index val)))]
 )
+
+;;; making part of tproj as var, 
+(struct tp-var var ()
+  #:transparent
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "v~a" 
+      (pretty-print-tproj (tproj_ (var-name val) (var-index val)))))]
+)
+
+
 (define (var=? x1 x2)
   (= (var-index x1) (var-index x2)))
 (define initial-var (var #f 0))
@@ -211,7 +223,7 @@
 (define (walk t sub)
   ;;; (debug-dump "walk: ~a with ~a \n" t sub)
   (match t
-    [(var _ _) 
+    [(? var?) 
       (let ((xt (assf (lambda (x) (equal? t x)) sub)))
         (if xt (walk (cdr xt) sub) t))]
     [(tproj v (cons cxr rest))
@@ -234,7 +246,7 @@
 (define (occurs? x t sub)
   (cond ((pair? t) (or (occurs? x (walk (car t) sub) sub)
                        (occurs? x (walk (cdr t) sub) sub)))
-        ((var? t)  (var=? x t))
+        ((var? t)  (equal? x t))
         (else      #f)))
 
 (define (extend-sub x t sub)
@@ -292,7 +304,7 @@
 (define (unify/sub u v sub)
   (let ((u (walk u sub)) (v (walk v sub)))
     (cond
-      ((and (var? u) (var? v) (var=? u v)) sub)
+      ((and (var? u) (var? v) (equal? u v)) sub)
       ((var? u)                            (extend-sub u v sub))
       ((var? v)                            (extend-sub v u sub))
       ((and (pair? u) (pair? v))           (let ((sub (unify/sub (car u) (car v) sub)))
@@ -389,7 +401,7 @@
     (match tm
       [(cons a b) (cons (walk-struct-once a sub) (walk-struct-once b sub))]
       [(tproj x cxr) (walk tm sub)]
-      [(var _ _) (walk tm sub)]
+      [(? var?) (walk tm sub)]
       [_ tm]
     ))
 
@@ -556,6 +568,7 @@
       ;;; TODO: fixing the case when type?* is actually empty
       ;;;     if it is empty, then we state that t is of finite type
       (match (walk* t (state-sub st))
+          ;;; BUGFIX: here we have tp-var as well!!
           [(var name index) 
             ;;; check if there is already typercd for index on symbol
             (let* ([v (var name index)]
