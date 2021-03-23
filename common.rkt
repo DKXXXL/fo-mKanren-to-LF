@@ -52,7 +52,7 @@
 (instrumenting-enabled #t)
 
 ;;; set the following to 'ON then we will have debug info
-(define debug-output-info 'OFF)
+(define debug-output-info 'ON)
 
 
 ;; Logic variables

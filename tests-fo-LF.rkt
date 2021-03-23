@@ -707,7 +707,9 @@
 . test-reg!=> . 'succeed 
 )
 
-;;; the following need more checking
+
+;;; BUGFIX: the following returning incorrect state
+;;;   the type constraint is incorrect
 (sort-bool-synthesize-base
   (run 1 (o) (for-all (x) (sort-boolo-base-case (list x #f #f #f) (list #f #f #f x) o)))
 . test-reg!=> . 'succeed 
@@ -1270,6 +1272,7 @@
   . test-reg!=> . 'succeed  
 )
 
+;;; BUGFIX: this currently return incorrect state
 (Test-has-false-0
   (run 1 (x) (for-all (b) (has-false (list b b x)))) 
   . test-reg!=> . 'succeed  

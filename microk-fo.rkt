@@ -1768,7 +1768,7 @@
   ;;;     a tp with zero path is just a var
     (if (tproj? tp)
         (let* ([oldvar  (hash-ref tp-to-var tp #f)]
-           [varname (string->unreadable-symbol (format "~a" tp))]
+           [varname (string->unreadable-symbol (format "v~a" tp))]
            [maybe-newvar  (if oldvar oldvar (fresh-var/name varname))])
           (if oldvar '() (set! tp-to-var (hash-set tp-to-var tp maybe-newvar)))
           maybe-newvar)
