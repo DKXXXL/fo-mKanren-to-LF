@@ -838,6 +838,12 @@
 . test-reg!=> . 'succeed 
 )
 
+(sort-boolo-simple-2
+(run 1 (a) 
+      (for-all (x) (sort-boolo (list #f #f x) (list a #f x))))
+. test-reg!=> . 'succeed 
+)
+
 
 (define-relation (lengtho x y)
   (conde ((== x '()) (== y '()))
@@ -1272,7 +1278,6 @@
   . test-reg!=> . 'succeed  
 )
 
-;;; BUGFIX: this currently return incorrect state
 (Test-has-false-0
   (run 1 (x) (for-all (b) (has-false (list b b x)))) 
   . test-reg!=> . 'succeed  
