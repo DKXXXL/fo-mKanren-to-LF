@@ -943,7 +943,6 @@
                 [st-pf-filled  st]
                 [reduced-assmpt (filter (lambda (x) (not (equal? top-name-assmpt x))) init-assmpt)]
                 [new-assmpt (cons-assmpt applied b reduced-assmpt)]
-                [k (debug-dump "\n syn-solving: cimpl: new assmpt: ~a" new-assmpt)]
                 [w/-cimpl
                   (mapped-stream
                     (λ (st) (pause init-assmpt st a))
@@ -964,7 +963,6 @@
             ;;;   with these unremoved assumption before top assmpt
             ;;;     (because the new subgoal-ty barely changed)
                 [reduced-assmpt (filter (λ (a) (not (equal? top-name-assmpt a))) init-assmpt)]
-                [k (debug-dump "\n syn-solving: reduced assmpt: ~a" reduced-assmpt)]
                 )
               (mplus 
                 (syn-solve remain-assmpt init-assmpt st g)
@@ -1769,8 +1767,6 @@
       (let* ([new-map (cons each-v (walk* each-v resulting-subst))])
         (cons new-map mappings))))
 
-  (debug-dump "  proj-free-equations-for-tproj : resulting-subst : ~a \n" resulting-subst)
-  (debug-dump "  proj-free-equations-for-tproj : var-cons-form-mapping : ~a \n" var-cons-form-mapping)
   (cons var-cons-form-mapping tp-to-var)
 
   
@@ -1822,7 +1818,6 @@
   ;;;   and also the ancestor won't appear, i.e. if a._1 is some term appearing, a won't appearing at all
   ;;;    the canonical-repr is the one helping with it
   (define (while-non-empty-eqs eqs res canonical-repr)
-    ;;; (debug-dump "eliminate-conses: while-non-empty-eqs ~a\n          with partial result ~a \n" eqs res)
     (if (equal? '() eqs)
       res
       (match-let* 
@@ -1930,7 +1925,7 @@
           (not (equal? (car t) (cdr t)))))
       eqs)
   )
-  (debug-dump "\n unmentioned-substed-form's input st: ~a \n unmentioned-substed-form's vars : ~a \n" st mentioned-vars)
+
   ;;; precondition: st has empty sub
   (define (unmention-remove-everywhere eqs0 st)
     ;;; (define eqs (state-sub st))
@@ -1945,9 +1940,6 @@
           (match-let* 
             ([new-rhs (walk* rhs (cdr eqs))]
              [(cons new-st remain-eqs) (literal-replace lhs new-rhs (cons st (cdr eqs)))]
-             [k (debug-dump "\n        unmentioned-substed-form removing: ~a, into ~a" lhs new-rhs)]
-             [k (debug-dump "\n        unmentioned-substed-form literal-replace st input: ~a, \n          output ~a" st new-st)]
-             [k (debug-dump "\n        unmentioned-substed-form literal-replace eqs input: ~a,\n          output ~a" (cdr eqs) remain-eqs)]
             )
             (unmention-remove-everywhere remain-eqs new-st))]
         [(cons v rhs)
@@ -2022,7 +2014,6 @@
       )
     )
     (define collected-domain-terms (all-domain-terms term))
-    ;;; (debug-dump "\n   inside force-as-pair current collected-domain-terms: ~a" collected-domain-terms)
     (for/fold 
       ([acc-st st])
       ([each-projed-term collected-domain-terms])
@@ -2097,7 +2088,6 @@
 
 (define/contract (eliminate-tproj-in-st st)
   (state? . -> . state?)
-  (debug-dump "  eliminate-tproj-in-st: input state ~a \n" st)
   (define all-tprojs (set->list (collect-tprojs st)))
   (define-values 
     (var-cons-structure 
@@ -2126,13 +2116,6 @@
   ;;; then we do huge literal-replace
   ;;;  the literal-replace respects 
   (define tproj-removed (literal-replace* (make-hash unified-all-tproj-removing-eqs) anything))
-  ;;; (debug-dump "\n eliminate-tproj-return-record's input: \n ~a" anything)
-  ;;; (debug-dump "\n eliminate-tproj-return-record's input's tprojs: \n ~a" all-tprojs)
-
-  ;;; (debug-dump "\n eliminate-tproj-return-record's using initial equation: \n ~a" all-tproj-removing-eqs)
-  ;;; (debug-dump "\n eliminate-tproj-return-record's using unified equation: \n ~a" unified-all-tproj-removing-eqs)
-  ;;; ;;; TODO : make sure that the constraint about (tproj x car) is transferred to the newly introduced var
-  ;;; (debug-dump "\n eliminate-tproj-return-record's return: \n ~a" tproj-removed)
   
   ;;; TODO : make it into a contract
   (let* ([all-tproj (collect-tprojs tproj-removed)])
@@ -2217,7 +2200,6 @@
   (state? set? var? . -> . state?)
   (define mentioned-vars (set-remove scope var))
   ;;;  we need to do extra unmentioned-substed because here var is considered unmentioned
-  (debug-dump "\n shrinking var: shrink-var-removed-st: ~a" st)
   (define var-removed-st (unmentioned-substed-form mentioned-vars st))
   ;;; (debug-dump "\n shrinking var: shrink-var-removed-st: ~a" var-removed-st)
   (define domain-enforced-st var-removed-st)
@@ -2227,8 +2209,7 @@
   (define unmentioned-removed-st (unmentioned-totally-removed mentioned-vars domain-enforced-st))
   ;;; (debug-dump "\n shrinking var: remove unmention in type/ineq-cst: ~a" unmentioned-removed-st)
   ;;; then we eliminate tproj
-  (let* ([eliminated-tproj-st (eliminate-tproj-in-st unmentioned-removed-st)]
-         [k (debug-dump "  eliminated-tproj-st: ~a\n" eliminated-tproj-st)])
+  (let* ([eliminated-tproj-st (eliminate-tproj-in-st unmentioned-removed-st)])
     (valid-type-constraints-check eliminated-tproj-st))
   
 )
@@ -2250,29 +2231,8 @@
         [field-projected-st (field-proj-form st)]
         [domain-enforced-st (domain-enforcement-st field-projected-st)]
         [unmention-substed-st  domain-enforced-st]
-        [k (begin   
-                    (debug-dump "\n clearing about: current-vars ~a" current-vars)
-                    (debug-dump "\n clearing about: input state0 ~a" state0)
-                    (debug-dump "\n clearing about: sub-state ~a" st)
-                    (debug-dump "\n clearing about: field-projected-st : ~a" field-projected-st)
-                    (debug-dump "\n clearing about: domain-enforced-st: ~a" domain-enforced-st)
-                    (debug-dump "\n clearing about: unmention-substed-st: ~a" unmention-substed-st)
-                    ;;; (debug-dump "\n complemented goal: ")(debug-dump st-scoped-w/ov)
-                    ;;; (debug-dump "\n next state ") (debug-dump next-st) 
-                    ;;; (debug-dump "\n search with domain on var ")
-                    ;;; (debug-dump v) (debug-dump " in ") (debug-dump cgoal) 
-                    (debug-dump "\n"))
-                    ] 
         [shrinked-st (shrink-away domain-enforced-st current-vars v)]
         [valid-shrinked-st (valid-type-constraints-check shrinked-st)] ;;; remove unnecessary information
-        [k (begin  
-                    (debug-dump "\n clearing about: shrinked-st on ~a: ~a" v shrinked-st) 
-                    ;;; (debug-dump "\n complemented goal: ")(debug-dump st-scoped-w/ov)
-                    ;;; (debug-dump "\n next state ") (debug-dump next-st) 
-                    ;;; (debug-dump "\n search with domain on var ")
-                    ;;; (debug-dump v) (debug-dump " in ") (debug-dump cgoal) 
-                    (debug-dump "\n"))
-                    ] 
         )
       (wrap-state-stream valid-shrinked-st)))
   (mapped-stream map-clear-about dnf-sym-stream)

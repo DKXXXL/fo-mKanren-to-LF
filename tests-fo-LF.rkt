@@ -1361,6 +1361,7 @@
      ) )
  ))
 
+(set-debug-info-threshold! -100)
 
 
 ;;; 
@@ -1370,4 +1371,5 @@
   (require rackunit/text-ui)
   (require errortrace)
   (instrumenting-enabled #t)
+  (set-debug-info-threshold! 1)
   (run-tests all-tests))
