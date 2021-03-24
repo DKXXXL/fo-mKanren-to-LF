@@ -466,25 +466,6 @@
 
 
 
-;;; ;;; homomorphism from pair, except that each "composed node" will translate to "or"
-;;; ;;;   it's just mapping pairs into arithmetic
-;;; ;;; for example, we have cons and unit in the language of lisp
-;;; ;;; now you can basically look at it as another AST
-;;; ;;;   now if we map cons to or, '() to Boolean value, then it is a kind of 
-;;; ;;;     folding after evaluation
-;;; (define (pair-base-functor op-mapping)
-;;;   (define (pair-base-functor- rec-parent extended-f g)
-;;;     (define rec extended-f)
-;;;     (match g
-;;;       ['() (op-mapping '())]
-;;;       [(cons a b) ((op-mapping cons) (rec a) (rec b))]
-;;;       [_ (op-mapping 'default )] ;;; otherwise use op-mapping's default
-;;;     )
-;;;   )
-;;;   pair-base-functor-
-;;; )
-
-
 ;;; The following two function can detect if there is 
 ;;;   var existence anywhere
 ;;;   in a given pair-goal
@@ -977,9 +958,6 @@
           (fresh-param (axiom-deconstructor subgoal)
             (let* (
                 [subgoal-ty (for-all (x) ( (t . subst . [x // v]) . cimpl . g ))]
-                [axiom-decons-ty
-                  (subgoal-ty . cimpl . 
-                   ((ex v t) . cimpl . g))]
                 [st-pf-filled st]
             ;;; remove that existential assumption as well
             ;;; TODO: apparently there are some duplicate computation, 
@@ -1240,12 +1218,7 @@
       ;;; TODO: rewrite the following into ANF-style (the push-let form)
       (match-let* 
             ([(cons g1-dec g1-ndec) (simplify-dec+nondec g1)]
-             [Axiom-DEC+NDEC-ty (cimpl g1 (conj g1-dec g1-ndec))]
-             [Axiom-Bottom-g2-ty (cimpl (Bottom) g2)]
              [~g1-dec-ty (complement g1-dec)]
-             [~g1-dec->g1-dec->bot (cimpl ~g1-dec-ty (cimpl g1-dec (Bottom)))]
-             [~g1ndec (cimpl-syn g1-ndec (Bottom))]
-             [g1ndec-g2 (cimpl-syn g1-ndec g2)]
              [st-to-fill st]
              [st-~g1-dec st-to-fill]
              [st-~g1ndec st]
@@ -1295,27 +1268,14 @@
           ;;; then we compose new proof-term hole
           [body-to-fill-scoped-st scoped-st]
           [solving-gn (pause assmpt body-to-fill-scoped-st gn)]
-
           ;;; we pop added scope information
           ;;;  and then make sure v become ground term (by using force-v-ground)
           ;;;  so that proof-term filling can succeed
           [remove-scoped-stream (mapped-stream remove-from-scope-stream solving-gn)]
-          ;;; TODO: turn on the constructive existential
-          ;;; [extract-ground-v-stream (mapped-stream (lambda (st) (force-v-ground v st)) remove-scoped-stream)]
-          ;;; [instantiate-v-from-state
-          ;;;   (lambda (st)
-          ;;;     (wrap-state-stream
-          ;;;       (st . <-pfg . (walk* v (state-sub st)))))]
-          ;;; [term-filled-stream (mapped-stream instantiate-v-from-state extract-ground-v-stream)]
           [term-filled-stream remove-scoped-stream]
           )
          term-filled-stream))
-    ;;; forall is tricky, 
-    ;;;   we first use simplification to
-    ;;;   we first need to consider forall as just another fresh
-    ;;;   and "bind" the complement of result to the nexttime forall as domain
-    ;;;   
-    ;;; 
+
     ((forall var domain goal) 
       ;;; Note: we won't support complicated (like recursive 
       ;;;   relationship) in domain as the user
@@ -1337,17 +1297,12 @@
           ;;;   we try to prove domain -> Bottom, and then prove Bottom -> goal
           ;;;   then by composition we are done
           [(Bottom) (let* 
-                      ([k (debug-dump "\n one solution: ~a" st)]
-                       [from-bottom-ty (cimpl (Bottom) goal)]
-                       [pf-term-to-fill-st st]
-                       [st-terminating st]
-                       [w/scope (state-scope st-terminating)]
-                       [res (clear-about st-terminating (list->set (state-scope st-terminating)) var)]
-                      ;;;  [q (mature res)]
-                      ;;;  [k (debug-dump "\n after clear about: ~a \n  with scope ~a removing ~a" q w/scope var)]
-                       )
-                      res 
-                      ) ]
+                        ([k (debug-dump "\n one solution: ~a" st)]
+                        [pf-term-to-fill-st st]
+                        [st-terminating st]
+                        [w/scope (state-scope st-terminating)]
+                        [res (clear-about st-terminating (list->set (state-scope st-terminating)) var)])
+                      res)]
           [_ 
             (let* ([ignore-one-hole-st st])
               (bind-forall  assmpt
@@ -1384,8 +1339,8 @@
               (step (mplus (pause assmpt (car s) g)
                            (bind assmpt (cdr s) g))))
              (else (bind assmpt s g)))))
-    ((syn-solve asm org-asm st g)
-     (syn-solving asm org-asm st g))
+    ((syn-solve assmpt org-assmpt st g)
+     (syn-solving assmpt org-assmpt st g))
     ((to-dnf st mark)
       ;;; mark is the index
       (if (equal? (state-diseq st) '())
@@ -1437,8 +1392,6 @@
                    [field-projected-st (field-proj-form st)]
                    [domain-enforced-st (domain-enforcement-st field-projected-st)]
                    [unmention-substed-st (unmentioned-substed-form mentioned-var domain-enforced-st)]
-                   
-                   
                    [relative-complemented-goal (relative-complement unmention-substed-st current-vars v)]
                   ;;;  remove more than one variable is good, make state as small as possible
                    [shrinked-st (shrink-away unmention-substed-st current-vars v)]
@@ -1864,22 +1817,6 @@
 ;;;  also no duplicate form, i.e. a and a._1 won't appear together
 ;;;     but only tproj inside
 (define (eliminate-conses eqs)
-  ;;; (debug-dump "\n eliminate-conses's input: ~a" eqs)
-  ;;; (define (each-eli-eq single-eq)
-  ;;;   ;;; won't stop if either side has cons
-  ;;;   (match single-eq
-  ;;;     [(cons LHS RHS)
-  ;;;       #:when (and (is-simple-form LHS) (is-simple-form RHS)) 
-  ;;;       (list single-eq)]
-  ;;;     [(cons (cons _ _) _) (eliminate-conses (list (tcar-eq single-eq) (tcdr-eq single-eq)))]
-  ;;;     [(cons _ (cons _ _)) (eliminate-conses (list (tcar-eq single-eq) (tcdr-eq single-eq)))]
-  ;;;     [o/w (raise-and-warn "\n Unexpected equation form ~a" single-eq)]
-  ;;;   )
-  ;;; )
-
-  ;;; (foldl append '() 
-  ;;;     (map each-eli-eq eqs))
-  
   ;;; a while loop, very procedure way of doing things
   ;;; basically will rewrite a bunch of equation into field-proj form
   ;;;   and also the ancestor won't appear, i.e. if a._1 is some term appearing, a won't appearing at all
@@ -2290,13 +2227,6 @@
   (define unmentioned-removed-st (unmentioned-totally-removed mentioned-vars domain-enforced-st))
   ;;; (debug-dump "\n shrinking var: remove unmention in type/ineq-cst: ~a" unmentioned-removed-st)
   ;;; then we eliminate tproj
-
-  ;;; (define tproj-eliminated (eliminate-tproj-return-record unmentioned-removed-st))
-  ;;; (define tproj-eliminated-content (car tproj-eliminated))
-  ;;; (define tproj-eliminated-evidence (cdr tproj-eliminated))
-  ;;; (valid-type-constraints-check
-  ;;;   (unifies-equations tproj-eliminated-evidence tproj-eliminated-content))
-  
   (let* ([eliminated-tproj-st (eliminate-tproj-in-st unmentioned-removed-st)]
          [k (debug-dump "  eliminated-tproj-st: ~a\n" eliminated-tproj-st)])
     (valid-type-constraints-check eliminated-tproj-st))
