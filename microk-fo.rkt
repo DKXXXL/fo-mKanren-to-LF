@@ -1225,7 +1225,10 @@
         (mplus*
           (pause assmpt st-~g1-dec ~g1-dec-ty)
           ;;; A -> bot /\ A
-          (pause assmpt st-~g1ndec (conj g1-dec (cimpl-syn g1-ndec (Bottom)))) 
+          ;;; Note: the following is only useful when user use bottom to encode arbitrary
+          ;;;     negation
+          ;;;       so we will turn it off by default
+          ;;; (pause assmpt st-~g1ndec (conj g1-dec (cimpl-syn g1-ndec (Bottom)))) 
           ;;; and syntactical falsifying 
           (pause assmpt st-g1ndec-g2 (conj g1-dec (cimpl-syn g1-ndec g2)))))
           ;;; and syntactical solving
