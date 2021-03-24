@@ -1339,6 +1339,150 @@
 ;;;   (annotate-covered-file (string->path "tests-fo-LF.rkt"))
 ;;; )
 
+;; This is an interpreter for a simple Lisp.  Variables in this language are
+;; represented namelessly, using De Bruijn indices.
+;; Because it is implemented as a relation, we can run this interpreter with
+;; unknowns in any argument position.  If we place unknowns in the `expr`
+;; position, we can synthesize programs.
+(define-relation (eval-expo expr env value)
+  (conde ;; NOTE: this clause order is optimized for quine generation.
+    ((fresh (body)
+       (== `(lambda ,body) expr)      ;; expr is a procedure definition
+       (== `(closure ,body ,env) value)))
+    ;; If this is before lambda, quoted closures become likely.
+    ((== `(quote ,value) expr))       ;; expr is a literal constant
+    ((fresh (a*)
+       (== `(list . ,a*) expr)        ;; expr is a list operation
+       (eval-listo a* env value)))
+    ((fresh (a d va vd)
+       (== `(cons ,a ,d) expr)        ;; expr is a cons operation
+       (== `(,va . ,vd) value)
+       (eval-expo a env va)
+       (eval-expo d env vd)))
+    ((fresh (index)
+       (== `(var ,index) expr)        ;; expr is a variable
+       (lookupo index env value)))
+    ;((fresh (c va vd)
+       ;(== `(car ,c) expr)            ;; expr is a car operation
+       ;(== va value)
+       ;(eval-expo c env `(,va . ,vd))))
+    ;((fresh (c va vd)
+       ;(== `(cdr ,c) expr)            ;; expr is a cdr operation
+       ;(== vd value)
+       ;(eval-expo c env `(,va . ,vd))))
+    ((fresh (rator rand arg env^ body)
+       (== `(app ,rator ,rand) expr)  ;; expr is a procedure application
+       (eval-expo rator env `(closure ,body ,env^))
+       (eval-expo rand env arg)
+       (eval-expo body `(,arg . ,env^) value)))))
+
+;; Lookup the value a variable is bound to.
+;; Variables are represented namelessly using relative De Bruijn indices.
+;; These indices are encoded as peano numerals: (), (s), (s s), etc.
+(define-relation (lookupo index env value)
+  (fresh (arg e*)
+    (== `(,arg . ,e*) env)
+    (conde
+      ((== '() index) (== arg value))
+      ((fresh (i* a d)
+         (== `(s . ,i*) index)
+         (== `(,a . ,d) e*)
+         (lookupo i* e* value))))))
+
+;; This helper evaluates arguments to a list construction.
+(define-relation (eval-listo e* env value)
+  (conde
+    ((== '() e*) (== '() value))
+    ((fresh (ea ed va vd)
+       (== `(,ea . ,ed) e*)
+       (== `(,va . ,vd) value)
+       (eval-expo ea env va)
+       (eval-listo ed env vd)))))
+
+(define (evalo expr value) (eval-expo expr '() value))
+
+
+(define omega
+  '(app (lambda (app (var ()) (var ()))) (lambda (app (var ()) (var ())))))
+
+
+(Evalo-trivial-1
+  (run 1 ()
+     (cimpl 
+      (evalo (quote 6) 5)
+      (evalo (quote 6) 5))) 
+  . test-reg!=> . 'succeed
+)
+; shold succeed
+
+;;; The Following is too slow
+(Evalo-trivial-2
+  (run 1 ()
+     (cimpl 
+      (evalo (quote 6) 6)
+      (evalo (quote 6) 7))) 
+  . test-reg!=>ND . 'succeed
+)
+
+;;; The Following is too slow
+(Evalo-trivial-3
+  (run 1 ()
+     (cimpl 
+      (evalo (quote 6) 5)
+      (evalo (quote 6) 7))) 
+  . test-reg!=>ND . 'succeed
+)
+
+(Omega-trivial-1
+  (run 1 ()
+     (cimpl 
+      (evalo omega 5)
+      (evalo omega 5))) 
+  . test-reg!=> . 'succeed
+)
+
+
+(Omega-trivial-2
+  (run 1 ()
+     (cimpl 
+      (evalo '6 5)
+      (evalo omega 5))) 
+  . test-reg!=>ND . 'succeed
+)
+
+
+; this should generate constant functions
+(Evalo-simple-1
+  (run 1 (x z) (forall (y) (evalo `(app ,x ,y) z)))
+  . test-reg!=>ND . 'succeed
+)
+
+; if (app x y) == z for all y, then (app x 6) == z
+(Evalo-simple-2
+  (run 1 (x z) (cimpl (forall (y) (evalo `(app ,x ,y) z))
+                      (== (evalo `(app ,x (quote 6)) z))))
+  . test-reg!=>ND . 'succeed
+)
+
+; this should generate the "cons" function
+(Evalo-simple-3
+  (run 1 (f) (forall (y) (evalo `(app ,f (quote ,y)) (,y . ,y))))
+  . test-reg!=>ND . 'succeed
+)
+
+; this should generate identity functions
+(Evalo-simple-4
+  (run 1 (x) (forall (y) (evalo `(app ,x (quote ,y)) y)))
+  . test-reg!=>ND . 'succeed  
+) ; quoting issue?
+
+;very slow: quines are also twines
+(Evalo-simple-5
+  (run 1 (q) (cimpl (evalo q q)
+                  (fresh (t) (evalo q t) (evalo t q))))
+  . test-reg!=>ND . 'succeed
+)
+
 (define all-tests
   (test-suite 
     "all"
