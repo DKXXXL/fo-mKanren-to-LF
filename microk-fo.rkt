@@ -1580,7 +1580,7 @@
   (define (literal-replace-from-after rec-parent rec obj)
     (match obj
       [x 
-        #:when (not (equal? (hash-ref mapping x 'LITERAL-REPLACE-UNFOUND) 'LITERAL-REPLACE-UNFOUND))
+        #:when (hash-has-key? mapping x) ;;(not (equal? (hash-ref mapping x 'LITERAL-REPLACE-UNFOUND) 'LITERAL-REPLACE-UNFOUND))
         (walk* (hash-ref mapping x) subst-mapping) ]
       ;;; other extended construct -- like state
       ;;;  very untyped...
