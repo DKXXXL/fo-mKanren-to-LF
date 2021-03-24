@@ -55,8 +55,8 @@
   conj*
   disj*
 
-  literal-replace
-  literal-replace*
+  simplify-dec+nondec
+  decidable-goal?
   )
 
 (require "common.rkt")
@@ -1208,11 +1208,7 @@
       ;;;     = ~g1-dec \/ 
       ;;; [g1-dec /\ (g1-ndec -> bot)] \/ 
       ;;; [g1-dec /\ (g1-ndec -> g2)]
-     (fresh-param (name-g1 adnd adnd-conj ~g1-dec-term ~g1-ndec-term
-                   ~g1-dec->g1-dec->bot-term bot2
-                   g1-dec-conj-~g1-ndec-term g1-dec-conj-g1-ndec-g2-term
-                   g1-dec-term g2-dec-term g1-ndec-term g1-ndec-g2-term
-                   bot->g2-term bot1)
+     
       ;;; TODO: rewrite the following into ANF-style (the push-let form)
       (match-let* 
             ([(cons g1-dec g1-ndec) (simplify-dec+nondec g1)]
@@ -1225,12 +1221,12 @@
         (mplus*
           (pause assmpt st-~g1-dec ~g1-dec-ty)
           ;;; A -> bot /\ A
-          ;;; Note: the following is only useful when user use bottom to encode arbitrary
-          ;;;     negation
-          ;;;       so we will turn it off by default
-          ;;; (pause assmpt st-~g1ndec (conj g1-dec (cimpl-syn g1-ndec (Bottom)))) 
+          ;;; Note: the following decides the soundness of the whole algorithm
+          ;;;     because without it, we may not expand the definition of assumption
+          ;;;     and really falsifying it
+          (pause assmpt st-~g1ndec (conj g1-dec (cimpl-syn g1-ndec (Bottom)))) 
           ;;; and syntactical falsifying 
-          (pause assmpt st-g1ndec-g2 (conj g1-dec (cimpl-syn g1-ndec g2)))))
+          (pause assmpt st-g1ndec-g2 (conj g1-dec (cimpl-syn g1-ndec g2))))
           ;;; and syntactical solving
     ))
     ((relate thunk descript)

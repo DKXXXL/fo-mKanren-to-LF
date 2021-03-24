@@ -778,13 +778,14 @@
 . test-reg!=>ND . 'succeed 
 )
 
-;;; the following is halting, takes 8 sec
+;;; the following currently takes a long time
+;;; ==> cpu time: 9235 real time: 9220 gc time: 1174
 (sort-boolo-implies-membero-2-1-5
   (run 1 () (for-all (a) 
       (cimpl (membero #f (list a)) 
              (== a #f))
     ))
-. test-reg!=>ND . 'succeed 
+. test-reg!=> . 'succeed 
 )
 
 (sort-boolo-implies-membero-2-2
@@ -798,7 +799,8 @@
 . test-reg!=> . 'succeed 
 )
 
-;;; This currently is unhalting
+;;; This currently is 
+;;; ==> cpu time: 26531 real time: 26505 gc time: 2141
 (sort-boolo-implies-membero-2-3
   (run 1 () (for-all (y lst)
       (cimpl (conj* 
