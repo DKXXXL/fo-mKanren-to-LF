@@ -1487,6 +1487,8 @@
     (define prev-result (rec-parent goal))
     (define singlerewrite 
       (match prev-result
+        ;;; Because we are more likely to have Bottom
+        ;;;     so we make those related to bottom at the top.
         [(conj x (Bottom)) (Bottom)]
         [(conj (Bottom) x) (Bottom)]
         [(disj (Bottom) x) x]
