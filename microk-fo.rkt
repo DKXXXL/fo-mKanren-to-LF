@@ -1500,6 +1500,87 @@
   ((compose-maps (list basic-tactic goal-base-map  identity-endo-functor)) goal)
 )
 
+;;; estimate evaluation -- will evaluate taking st as upperbound of state
+;;;   and return an upperbound of the resulting state
+;;;   looks like a partial evaluation 
+;;; precond: st as the upperbound of what goal will be solved upon
+;;; 
+(define/contract (est-eval goal st)
+  (Goal? state? . -> . (cons/c Goal? state?))
+  (define (all-mature stream)
+    (if (matrue? stream)
+      (cons (car stream) (all-mature (cdr stream)))
+      (matrue stream)))
+  (define (get-state-out-of-singleton-stream stream)
+    (match stream
+      ([(cons sth #f)] sth)))
+
+  (define result
+    (if (not st)
+      (cons (Bottom) #f)
+      (match goal
+        [(conj a b) 
+          (match-let* 
+            ([(cons new-a st1) (est-eval a st)]
+             [(cons new-b st2) (est-eval b st1)]
+             [final-goal       (conj new-a newb)])
+            (cons final-goal st2))]
+        [(disj a b)
+          (match-let* 
+            ([(cons new-a st-l) (est-eval a st)]
+             [(cons new-b st-r) (est-eval b st)]
+             [resulting-st      (and (or st-l st-r) st)] ; merge to top of all the state
+             [final-goal        (disj new-a new-b)])
+            (cons final-goal resulting-st))]
+        [(cimpl-syn a b)
+          (match-let* 
+            ([(cons new-a st-l) (est-eval a st)]
+             [(cons new-b st-r) (est-eval b st)]
+            ;;;  we only make resulting-st false if st-r is false and st-l = st
+             [cond-failing      (and (equal? st-l st) (not st-r))]
+             [resulting-st      (if cond-failing #f st)]
+             [final-goal        (cimpl-syn new-a new-b)]
+             )
+            (cons final-goal resulting-st))]
+        [(cimpl a b)
+          (match-let* 
+            ([(cons new-a st-l) (est-eval a st)]
+             [(cons new-b st-r) (est-eval b st)]
+            ;;;  we only make resulting-st false if st-r is false and st-l = st
+             [cond-failing      (and (equal? st-l st) (not st-r))]
+             [resulting-st      (if cond-failing #f st)]
+             [final-goal        (cimpl new-a new-b)])
+            (cons final-goal resulting-st))]
+        [(relate _ _) ; do nothing, otherwise how to terminate
+          (cons goal st)]
+        [(ex v g)
+          (match-let* 
+            ([(cons new-g new-st) (est-eval g st)]
+             [resulting-st (and new-st st)])
+            (cons (ex v new-g) resulting-st))]
+        [(forall v d g)
+          (match-let* 
+            ([(cons (cimpl new-d new-g) new-st) (est-eval (cimpl d g) st)]
+             [resulting-st (and new-st st)])
+            (cons (forall v new-d new-g) resulting-st))]
+        [_
+          (let*
+            ([all-states   (all-mature (pause '() goal st))]
+             [actually-one (get-state-out-of-singleton-stream all-states)])
+            (cons goal actually-one))]
+        )
+    ))
+    ;;;  we make sure returns bottom if returning state is #f
+    (if (not (cdr result))
+        (cons (Bottom) #f)
+        result)
+)
+
+(define/contract (est-simplify goal)
+  (match (est-eval goal empty-state)
+    [(cons res-g _) res-g]))
+
+
 
 (define type-label-to-type-goal
   (hash
