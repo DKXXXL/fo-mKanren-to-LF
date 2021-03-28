@@ -797,12 +797,13 @@
 
 ;;; Use syntactical-simplification
 ;;;   right after decidable component extraction
-(define/contract (simplify-dec+nondec g)
+(define/contract (simplify-dec+nondec g_)
   (Goal? . -> . pair?)
+  (define g (all-linear-simplify g_))
   (if (decidable-goal? g)
       `(,g . ,(Top))
       (match-let* ([(cons a b) (split-dec+nondec g)])
-        `(,(syntactical-simplify a) . ,(syntactical-simplify b)))
+        `(,(all-linear-simplify a) . ,(all-linear-simplify b)))
   )   
 )
 
@@ -1149,7 +1150,7 @@
   (define conj-assumpt-term (foldl LFpair (LFaxiom (Top)) (all-assumption-terms assmpt)))
   
   (define unfold-conj-assumpt-ty (unfold-one-level-relate conj-assumpt-ty))
-  (define s-unfold-conj-assmpt-ty (syntactical-simplify unfold-conj-assumpt-ty))
+  (define s-unfold-conj-assmpt-ty (all-linear-simplify unfold-conj-assumpt-ty))
 
   (define unfolded-goal (cimpl s-unfold-conj-assmpt-ty goal)) 
   ;;; use cimpl here to allow newly unfolded assumption processed by sem-solving
@@ -1506,14 +1507,15 @@
 ;;; precond: st as the upperbound of what goal will be solved upon
 ;;; 
 (define/contract (est-eval goal st)
-  (Goal? state? . -> . (cons/c Goal? state?))
+  (Goal? (or/c state? false/c) . -> . (cons/c Goal? (or/c state? false/c)))
   (define (all-mature stream)
-    (if (matrue? stream)
+    (if (mature? stream)
       (cons (car stream) (all-mature (cdr stream)))
-      (matrue stream)))
-  (define (get-state-out-of-singleton-stream stream)
-    (match stream
-      ([(cons sth #f)] sth)))
+      (mature stream)))
+  (define (get-state-out-of-at-most-singleton-stream stream)
+    (match stream 
+      [(cons sth #f) sth]
+      [#f #f]))
 
   (define result
     (if (not st)
@@ -1523,7 +1525,7 @@
           (match-let* 
             ([(cons new-a st1) (est-eval a st)]
              [(cons new-b st2) (est-eval b st1)]
-             [final-goal       (conj new-a newb)])
+             [final-goal       (conj new-a new-b)])
             (cons final-goal st2))]
         [(disj a b)
           (match-let* 
@@ -1565,8 +1567,8 @@
             (cons (forall v new-d new-g) resulting-st))]
         [_
           (let*
-            ([all-states   (all-mature (pause '() goal st))]
-             [actually-one (get-state-out-of-singleton-stream all-states)])
+            ([all-states   (all-mature (pause '() st goal))]
+             [actually-one (get-state-out-of-at-most-singleton-stream all-states)])
             (cons goal actually-one))]
         )
     ))
@@ -1576,7 +1578,15 @@
         result)
 )
 
+
+;;; all the simplification that only linear to the size of g 
+(define/contract (all-linear-simplify g)
+  (Goal? . -> . Goal?)
+  (syntactical-simplify (est-simplify g))
+)
+
 (define/contract (est-simplify goal)
+  (Goal? . -> . Goal?)
   (match (est-eval goal empty-state)
     [(cons res-g _) res-g]))
 
