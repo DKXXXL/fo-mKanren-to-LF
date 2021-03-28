@@ -217,33 +217,19 @@
 ;; States
 (define empty-sub '())
 
-;;; Now it should support tproj term subject to substitution
-;;; x.car -> ...
-;;; x.car.cdr -> ... 
-;;;  x.car.cdr.car
+;;; Will totally ignore tproj (doing nothing on them)
 (define (walk t sub)
   ;;; (debug-dump "walk: ~a with ~a \n" t sub)
   (match t
     [(? var?) 
       (let ((xt (assf (lambda (x) (equal? t x)) sub)))
         (if xt (walk (cdr xt) sub) t))]
-    [(tproj v (cons cxr rest))
-      #:when (member cxr '(car cdr))
-      (let ([xt (assf (lambda (x) (equal? t x)) sub)]
-            [tcxr (match cxr 
-                    ['car tcar] 
-                    ['cdr tcdr] 
-                    [o/w (raise-and-warn "Unexpected projection ~a" t)])]
-            )
-        (if xt 
-          (walk (cdr xt) sub) 
-          (tcxr (walk (tproj_ v rest) sub))))]
     [_ t]
   )
 )
 
-;;; BUGFIX: might need to double check this
-;;;    as we introduce a new type of 'substitutable' tproj
+
+;;; TODO: think about if tproj will cause problems
 (define (occurs? x t sub)
   (cond ((pair? t) (or (occurs? x (walk (car t) sub) sub)
                        (occurs? x (walk (cdr t) sub) sub)))
@@ -272,29 +258,6 @@
 (define empty-state (state empty-sub (list initial-var) '() (hash)))
 (define-struct-updaters state)
 
-;;; lift <-pf/h-inc into state
-;;; (define-syntax <-pfg
-;;;   (syntax-rules ()
-;;;     ((_ st term) 
-;;;       (and st
-;;;            (state-pfterm-update st 
-;;;               (lambda (pft) (pft . <-pf/h-inc . term)))) )     
-
-;;;     ((_ st (hole holes ...) body) 
-;;;       (and st
-;;;            (state-pfterm-update st 
-;;;               (lambda (pft) (pft . <-pf/h-inc . (hole holes ...) body)))) )
-;;;   ))
-
-
-;;; ;;; ANF-style push-let
-;;; (define-syntax push-lflet
-;;;   (syntax-rules (:)
-;;;     ((_ st term : Type) 
-;;;       (fresh-param (new)
-;;;         (let
-;;;           ([new-st (st . <-pfg . (_) (lf-let* ([new term : Type]) _))])
-;;;           `(,new-st . ,new))))))
 
 ;;; we consider #f is the failed state, also one of the state
 (define (?state? obj) (or (equal? obj #f) (state? obj)))
@@ -395,26 +358,32 @@
 ;;;       [_ tm]
 ;;;     )))
 
-;;; walk with struct respecting
-;;;  will replace each var inside a structure with what sub points to
-(define/contract (walk-struct-once tm sub)
-  (any? list? . -> . any?)
-    (match tm
-      [(cons a b) (cons (walk-struct-once a sub) (walk-struct-once b sub))]
-      [(tproj x cxr) (walk tm sub)]
-      [(? var?) (walk tm sub)]
-      [_ tm]
-    ))
+;;; ;;; walk with struct respecting
+;;; ;;;  will replace each var inside a structure with what sub points to
+;;; (define/contract (walk-struct-once tm sub)
+;;;   (any? list? . -> . any?)
+;;;     (match tm
+;;;       [(cons a b) (cons (walk-struct-once a sub) (walk-struct-once b sub))]
+;;;       [(tproj x cxr) (walk tm sub)]
+;;;       [(? var?) (walk tm sub)]
+;;;       [_ tm]
+;;;     ))
 
-;; TODO (greg): currently repeats a lot of work (probably quadratic in pathological cases)
-;;; walk* -- walk-struct-once until fixpoint
-;;;  unhalt only if there is cycle in sub
-(define/contract (walk* tm sub)
-  (any? list? . -> . any?)
-  (let* ([tm- (walk-struct-once tm sub)]
-        ;;;  [k (debug-dump "\n walk* ~a -> ~a" tm tm-)]
-         )
-    (if (equal? tm- tm) tm (walk* tm- sub))))
+;;; ;; TODO (greg): currently repeats a lot of work (probably quadratic in pathological cases)
+;;; ;;; walk* -- walk-struct-once until fixpoint
+;;; ;;;  unhalt only if there is cycle in sub
+;;; (define/contract (walk* tm sub)
+;;;   (any? list? . -> . any?)
+;;;   (let* ([tm- (walk-struct-once tm sub)]
+;;;         ;;;  [k (debug-dump "\n walk* ~a -> ~a" tm tm-)]
+;;;          )
+;;;     (if (equal? tm- tm) tm (walk* tm- sub))))
+
+(define (walk* tm sub)
+  (let ((tm (walk tm sub)))
+    (if (pair? tm)
+        `(,(walk* (car tm) sub) .  ,(walk* (cdr tm) sub))
+        tm)))
 
 (define (reified-index index)
   (string->symbol

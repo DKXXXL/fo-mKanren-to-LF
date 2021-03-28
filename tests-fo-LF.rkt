@@ -535,6 +535,8 @@
 (NestedCons-1
   (run 1 (c a b) (for-all (x) (=/= c (cons a (cons b x)))))
 . test-reg!=> . 'succeed)
+;;; this should lead to (((_.0 _.1 . _.2) _.3 _.4)) as result
+
 
 
 (NestedCons-2
@@ -1284,6 +1286,7 @@
   (run 1 (x) (for-all (b) (has-false (list b b x)))) 
   . test-reg!=> . 'succeed  
 )
+;;; '((#f)) as the result
 ; test performance degredation with # of "b"s
 
 
