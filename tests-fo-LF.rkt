@@ -1453,26 +1453,26 @@
 
 ; this should generate constant functions
 (Evalo-simple-1
-  (run 1 (x z) (forall (y) (evalo `(app ,x ,y) z)))
+  (run 1 (x z) (for-all (y) (evalo `(app ,x ,y) z)))
   . test-reg!=>ND . 'succeed
 )
 
 ; if (app x y) == z for all y, then (app x 6) == z
 (Evalo-simple-2
-  (run 1 (x z) (cimpl (forall (y) (evalo `(app ,x ,y) z))
+  (run 1 (x z) (cimpl (for-all (y) (evalo `(app ,x ,y) z))
                       (== (evalo `(app ,x (quote 6)) z))))
   . test-reg!=>ND . 'succeed
 )
 
 ; this should generate the "cons" function
 (Evalo-simple-3
-  (run 1 (f) (forall (y) (evalo `(app ,f (quote ,y)) (,y . ,y))))
+  (run 1 (f) (for-all (y) (evalo `(app ,f (quote ,y)) `(,y . ,y))))
   . test-reg!=>ND . 'succeed
 )
 
 ; this should generate identity functions
 (Evalo-simple-4
-  (run 1 (x) (forall (y) (evalo `(app ,x (quote ,y)) y)))
+  (run 1 (x) (for-all (y) (evalo `(app ,x (quote ,y)) y)))
   . test-reg!=>ND . 'succeed  
 ) ; quoting issue?
 
