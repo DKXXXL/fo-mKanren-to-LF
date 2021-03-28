@@ -1487,12 +1487,24 @@
     (define prev-result (rec-parent goal))
     (define singlerewrite 
       (match prev-result
-        [(conj (Top) x) x]
-        [(conj x (Top)) x]
+        [(conj x (Bottom)) (Bottom)]
+        [(conj (Bottom) x) (Bottom)]
         [(disj (Bottom) x) x]
         [(disj x (Bottom)) x]
+        [(cimpl (Bottom) x) (Top)]
+        [(ex _ (Bottom)) (Bottom)]
+        [(forall _ (Bottom) _) (Top)]
+        [(forall _ (Top) (Bottom)) (Bottom)]
+        [(conj (Top) x) x]
+        [(conj x (Top)) x]
+        [(disj (Top) x) (Top)]
+        [(disj x (Top)) (Top)]
         [(conj x x) x]
         [(disj x x) x]
+        [(cimpl x (Top)) (Top)]
+        [(cimpl (Top) x) x]
+        [(ex _ (Top)) (Top)]
+        [(forall _ _ (Top)) (Top)]
         [_ 'rewrite-failed]
       )
     )
