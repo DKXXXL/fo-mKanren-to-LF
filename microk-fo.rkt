@@ -1390,7 +1390,7 @@
                    [field-projected-st (field-proj-form st)]
                    [domain-enforced-st (domain-enforcement-st field-projected-st)]
                    [unmention-substed-st (unmentioned-substed-form mentioned-var domain-enforced-st)]
-                   [relative-complemented-goal (relative-complement unmention-substed-st current-vars v)]
+                   [relative-complemented-goal (all-linear-simplify (relative-complement unmention-substed-st current-vars v))]
                   ;;;  remove more than one variable is good, make state as small as possible
                    [shrinked-st (shrink-away unmention-substed-st current-vars v)]
                    [k (begin  (debug-dump "\n domain ~a" domain)
@@ -1399,7 +1399,7 @@
                               (debug-dump "\n domain-enforced-st: ~a" domain-enforced-st)
                               (debug-dump "\n unmention-substed-st: ~a" unmention-substed-st)
                               (debug-dump "\n shrinked-st on ~a: ~a" v shrinked-st) 
-                              (debug-dump "\n relative-complemented-goal: ~a" (syntactical-simplify relative-complemented-goal))
+                              (debug-dump "\n relative-complemented-goal: ~a" relative-complemented-goal)
                               ;;; (debug-dump "\n complemented goal: ")(debug-dump st-scoped-w/ov)
                               ;;; (debug-dump "\n next state ") (debug-dump next-st) 
                               ;;; (debug-dump "\n search with domain on var ")
@@ -1475,7 +1475,7 @@
       [v v]))
   ;;; Note: following we only allowed semantic solving,
   ;;;     as we don't allow cimpl/quantifier/customized relation in domain bound
-  (if (first-non-empty-mature (pause empty-assumption-base st goal)) (syntactical-simplify goal) (Bottom))
+  (if (first-non-empty-mature (pause empty-assumption-base st goal)) (all-linear-simplify goal) (Bottom))
   
   )
 
@@ -1579,7 +1579,8 @@
 )
 
 
-;;; all the simplification that only linear to the size of g 
+;;; include all the simplification that 
+;;;   only linear complexity to the size of g 
 (define/contract (all-linear-simplify g)
   (Goal? . -> . Goal?)
   (syntactical-simplify (est-simplify g))

@@ -1421,7 +1421,7 @@
      (cimpl 
       (evalo (quote 6) 6)
       (evalo (quote 6) 7))) 
-  . test-reg!=>ND . 'succeed
+  . test-reg!=> . 'succeed
 )
 
 ;;; The Following is too slow
@@ -1430,7 +1430,7 @@
      (cimpl 
       (evalo (quote 6) 5)
       (evalo (quote 6) 7))) 
-  . test-reg!=>ND . 'succeed
+  . test-reg!=> . 'succeed
 )
 
 (Omega-trivial-1
@@ -1447,7 +1447,7 @@
      (cimpl 
       (evalo '6 5)
       (evalo omega 5))) 
-  . test-reg!=>ND . 'succeed
+  . test-reg!=> . 'succeed
 )
 
 
