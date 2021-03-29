@@ -72,6 +72,13 @@
   [(define (write-proc val output-port output-mode)
      (fprintf output-port "v~a" 
       (pretty-print-tproj (tproj_ (var-name val) (var-index val)))))]
+  #:guard (lambda (v cxr type-name)
+                    (cond
+                      [(and (var? v) (not (tp-var? v)) (pair? cxr)) 
+                       (values v cxr)]
+                      [else (error type-name
+                                   "bad v: ~e"
+                                   v)]))
 )
 
 
@@ -152,7 +159,7 @@
   #:transparent
   #:guard (lambda (v cxr type-name)
                     (cond
-                      [(and (var? v) (pair? cxr)) 
+                      [(and (var? v) (not (tp-var? v)) (pair? cxr)) 
                        (values v cxr)]
                       [else (error type-name
                                    "bad v: ~e"
@@ -182,6 +189,7 @@
   (match t 
     [(cons a b) a]
     [(tproj x y) (tproj x (cons 'car y))]
+    [(tp-var x y) (tcar (tproj x y))]
     [(var _ _) (tproj t (list 'car))]
     [_ (raise-and-warn "tcar: Unexpected Value ~a" t)]
   ))
@@ -190,6 +198,7 @@
   (match t 
     [(cons a b) b]
     [(tproj x y) (tproj x (cons 'cdr y))]
+    [(tp-var x y) (tcdr (tproj x y))]
     [(var _ _) (tproj t (list 'cdr))]
     [_ (raise-and-warn "tcdr: Unexpected Value ~a" t)]
   ))

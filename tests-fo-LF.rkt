@@ -255,10 +255,7 @@
 )
 
 
-;;; BUGFIX: the following currently unhalt 
-;;;   if set to run 1
-;;; BUGFIX: change the following into two runs
-;;;   each check one of (not-pairo) and (identity pair)
+;;; 2021-03-28: currently this unhalts
 (Complicated-3
   (run 1 (a) 
   (conj* 
@@ -268,7 +265,7 @@
     (disj* (not-pairo a) (fresh (z) (== a (cons z z))))))
 
 ;;; ((not-pairo a) (_.0 . _0) ...)
-. test-reg!=> . 'succeed
+. test-reg!=>ND . 'succeed
 )
 
 ((run 1 (a) 
@@ -1453,6 +1450,13 @@
   . test-reg!=> . 'succeed
 )
 
+(define-relation (noclosure x)
+  (conde
+    (=/= x 'closure)
+    ((fresh (a b)
+        (== x (cons a b))
+        (noclosure a)
+        (noclosure b)))))
 
 ; this should generate constant functions
 (Evalo-simple-1
@@ -1467,24 +1471,38 @@
   . test-reg!=>ND . 'succeed
 )
 
+;;; the following has bug?
 ; this should generate the "cons" function
 (Evalo-simple-3
-  (run 1 (f) (for-all (y) (evalo `(app ,f (quote ,y)) `(,y . ,y))))
-  . test-reg!=>ND . 'succeed
+  (run 1 (f) (for-all (y) (evalo `(app ,f (quote ,y)) `(,y . ,y)) ))
+  . test-reg!=> . 'succeed
+)
+
+(Evalo-simple-3-1
+  (run 1 (f y)  (evalo `(app ,f (quote ,y)) `(,y . ,y) ))
+  . test-reg!=> . 'succeed
 )
 
 ; this should generate identity functions
 (Evalo-simple-4
   (run 1 (x) (for-all (y) (evalo `(app ,x (quote ,y)) y)))
-  . test-reg!=>ND . 'succeed  
+  . test-reg!=> . 'succeed  
 ) ; quoting issue?
 
-;very slow: quines are also twines
+
 (Evalo-simple-5
   (run 1 (q) (cimpl (evalo q q)
                   (fresh (t) (evalo q t) (evalo t q))))
-  . test-reg!=>ND . 'succeed
+  . test-reg!=> . 'succeed
 )
+
+(Evalo-simple-6
+  (run 1 () (for-all (q)
+                (cimpl (evalo q q)
+                  (fresh (t) (evalo q t) (evalo t q)))))
+  . test-reg!=> . 'succeed
+)
+
 
 (define all-tests
   (test-suite 
