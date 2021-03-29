@@ -255,7 +255,8 @@
 )
 
 
-;;; 2021-03-28: currently this unhalts
+;;; 2021-03-28: currently this construct an invalid substitution list
+;;;   (causing walk unhalt)
 (Complicated-3
   (run 1 (a) 
   (conj* 
@@ -1452,8 +1453,8 @@
 
 (define-relation (noclosure x)
   (conde
-    (=/= x 'closure)
-    ((fresh (a b)
+    ((=/= x 'closure)
+     (fresh (a b)
         (== x (cons a b))
         (noclosure a)
         (noclosure b)))))
@@ -1467,19 +1468,20 @@
 ; if (app x y) == z for all y, then (app x 6) == z
 (Evalo-simple-2
   (run 1 (x z) (cimpl (for-all (y) (evalo `(app ,x ,y) z))
-                      (== (evalo `(app ,x (quote 6)) z))))
-  . test-reg!=>ND . 'succeed
+                      (evalo `(app ,x (quote 6)) z)))
+  . test-reg!=> . 'succeed
 )
 
 ;;; the following has bug?
 ; this should generate the "cons" function
 (Evalo-simple-3
-  (run 1 (f) (for-all (y) (evalo `(app ,f (quote ,y)) `(,y . ,y)) ))
+  (run 1 (f) 
+    (for-all (y) (evalo `(app ,f (quote ,y)) `(,y . ,y)) ))
   . test-reg!=> . 'succeed
 )
 
 (Evalo-simple-3-1
-  (run 1 (f y)  (evalo `(app ,f (quote ,y)) `(,y . ,y) ))
+  (run 1 (f y)  (evalo `(app ,f (quote ,y)) `(,y . ,y) ) )
   . test-reg!=> . 'succeed
 )
 

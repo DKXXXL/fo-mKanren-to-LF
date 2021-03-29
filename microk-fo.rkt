@@ -1087,7 +1087,6 @@
         ([(cons (cons term-name ag) remain-assmpt) 
             (iter-assumption-base assmpt)]
          [if-top-level-match (unify/goal ag g st)] ;;; type: Stream?
-         [k (debug-dump "\n current assmpt: ~a, matching ~a" ag if-top-level-match)]
          [if-top-level-match-filled if-top-level-match];;; fill the current proof term
         )
       (if if-top-level-match
@@ -1395,9 +1394,9 @@
                    [shrinked-st (shrink-away unmention-substed-st current-vars v)]
                    [k (begin  (debug-dump "\n domain ~a" domain)
                               (debug-dump "\n initial st: ~a" st)
-                              (debug-dump "\n field-projected-st: ~a" field-projected-st)
-                              (debug-dump "\n domain-enforced-st: ~a" domain-enforced-st)
-                              (debug-dump "\n unmention-substed-st: ~a" unmention-substed-st)
+                              ;;; (debug-dump "\n field-projected-st: ~a" field-projected-st)
+                              ;;; (debug-dump "\n domain-enforced-st: ~a" domain-enforced-st)
+                              ;;; (debug-dump "\n unmention-substed-st: ~a" unmention-substed-st)
                               (debug-dump "\n shrinked-st on ~a: ~a" v shrinked-st) 
                               (debug-dump "\n relative-complemented-goal: ~a" relative-complemented-goal)
                               ;;; (debug-dump "\n complemented goal: ")(debug-dump st-scoped-w/ov)
