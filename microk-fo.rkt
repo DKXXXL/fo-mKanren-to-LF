@@ -1945,24 +1945,55 @@
   (state-sub-set tp-free-st (eliminate-conses eqs))
 )
 
+;;; TODO: we can try to also specify the following to not having too much projection
+  ;;; (define atomic-term? (or/c var? tproj?))
+  ;;; (define (while-non-empty-eqs eqs res proj-to-var)
+  ;;;   (if (equal? '() eqs)
+  ;;;     res
+  ;;;     (match-let* 
+  ;;;       ([(cons eq rest) eqs]
+  ;;;        [(cons LHS RHS) eq])
+  ;;;       (cond
+  ;;;         ;;; if both sides are pair then we just deconstruct the pair
+  ;;;         [(andmap pair? (list LHS RHS))         (while-non-empty-eqs (cons (fst-eq eq) (cons (snd-eq eq) rest)) res)]
+  ;;;         ;;; if both sides are simply var, then do nothing
+  ;;;         [(andmap var?  (list LHS RHS))         (while-non-empty-eqs rest (cons eq res))]
+  ;;;         [(andmap tproj? (list LHS RHS)         (raise-and-warn "Invariant Broken: shouldn't have tproj at both sides.\n"))]
+  ;;;         ;;; if both are atomic term, then must be one tproj, one var, we can just add it as result
+  ;;;         [(andmap atomic-term? eq)              (while-non-empty-eqs rest (cons eq res))]
+  ;;;         ;;; otherwise, oneside is var, the otherside as pair, we only deal with LHS = var, RHS = pair
+  ;;;         [((cons/c pair? atomic-term?) eq)      (while-non-empty-eqs (cons (cons RHS LHS) rest) res)]
+  ;;;         ;;; finally, it must be one LHS = atomic-term, RHS = pair
+  ;;;         ;;;   we just deconstruct into two equations again, and thus introduce two new projection
+  ;;;         ;;;     and we will map the two new projection into vars, recorded in proj-to-var
+  ;;;         ;;;     and then we do a global substitution on the current LHS, 
+  ;;;         ;;;         (of course if it is proj then it cannot appear anywhere later in eqs)
+  ;;;         [((cons/c atomic-term? pair?) eq) 
+  ;;;             (match-let* 
+  ;;;               ([new-rest (if (var? LHS) (literal-replace LHS RHS rest) rest)]
+  ;;;                [feq (fst-eq eq)]
+  ;;;                [(cons feq-l feq-r) feq]
+  ;;;                [seq (snd-eq eq)]
+  ;;;                [(cons seq-l seq-r) seq]
+  ;;;                )
+  ;;;             )
+  ;;;         ]
+  ;;;       )
+
+
 ;;; given a set of equations 
 ;;;  return an equivalent set of equations, with no pair inside 
 ;;;  also no duplicate form, i.e. a and a._1 won't appear together
 ;;;     but only tproj inside
 (define (eliminate-conses eqs)
-  (define (if-continue-to-tproj eq)
-    (match eq
-      [(cons LHS RHS)
-        (or (pair LHS) (pair RHS)) ;; if oneside is pair, then definitely doing 
-      ]
-    )
-  )
+
+  ;;; 
   ;;; a while loop, very procedure way of doing things
   ;;; basically will rewrite a bunch of equation into field-proj form
   ;;;   and also the ancestor won't appear, 
   ;;;   1. i.e. if a._1 is some term appearing, a won't appearing at all
-  ;;;   2. won't have tproj at both side of an equation
-  ;;;    the canonical-repr is the one helping with it
+  ;;;     the canonical-repr is the one helping with it
+  ;;;     BUG 2021-03-31, we currently have duplicate term (i.e. breaking invariance 1)
   (define (while-non-empty-eqs eqs res canonical-repr)
     (if (equal? '() eqs)
       res
