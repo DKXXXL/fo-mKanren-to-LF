@@ -1356,7 +1356,7 @@
        (== `(list . ,a*) expr)        ;; expr is a list operation
        (eval-listo a* env value)))
     ((fresh (a d va vd)
-       (== `(pair ,a ,d) expr)        ;; expr is a cons operation
+       (== `(cons ,a ,d) expr)        ;; expr is a cons operation
        (== `(,va . ,vd) value)
        (eval-expo a env va)
        (eval-expo d env vd)))
@@ -1401,6 +1401,7 @@
        (eval-listo ed env vd)))))
 
 (define (evalo expr value) (eval-expo expr '() value))
+
 
 
 (define omega
