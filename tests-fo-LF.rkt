@@ -845,12 +845,46 @@
 )
 
 
+;;; currently this one is failing 
+(Test-unification-cimpl-0
+  (run 1 (R)
+    (for-all (x y) 
+      (cimpl (conj (== x (cons 'a y)) 
+                   (== x (list 'a 'b 'c))) 
+             (== y R))))
+. test-reg!=>ND . 'succeed
+)
+
+;;; but this one is also failing
+(Test-unification-cimpl-1
+  (run 1 (R)
+    (for-all (x y)
+        (cimpl (conj* (== x (cons 'a y)) (== y (list 'b 'c)))
+               (== y R))))
+. test-reg!=>ND . 'succeed
+)
+
 (define-relation (lengtho x y)
   (conde ((== x '()) (== y '()))
          ((fresh (xf xr yr)
             (== x (cons xf xr))
             (== y (cons 1 yr))
             (lengtho xr yr)))))
+
+;;; (run 1 (q L x) 
+;;;   (lengtho x  '(1 1))
+;;;   (for-all (y) 
+;;;       (cimpl (conj (== x (cons (quote a) y))) 
+;;;              (lengtho y '(1)))))
+
+;;; (run 1 (L) (for-all (x y) 
+;;;         (cimpl (conj (== x (cons (quote a) y)) 
+;;;                      (lengtho x (quote (1 1)))) (lengtho y L ))))
+
+;;; (run 1 (L) (for-all (x y) 
+;;;         (cimpl (conj (== x (cons (quote a) y)) 
+;;;                       (lengtho y '(1) )) (lengtho x L))))
+
 
 ;;; currently unhalting.
 (lengtho-test-1
@@ -1472,7 +1506,9 @@
 )
 
 ;;; the following has bug?
-; this should generate the "cons" function
+;;;  this should generate the "cons" function
+;;; cpu time: 105670 real time: 105408 gc time: 619
+;;; '(('(closure (cons (var ()) (var ())) _.0)))
 (Evalo-simple-3
   (run 1 (f) 
     (for-all (y) (evalo `(app ,f (quote ,y)) `(,y . ,y)) ))
@@ -1480,9 +1516,17 @@
 )
 
 (Evalo-simple-3-1
-  (run 1 (f y)  (evalo `(app ,f (quote ,y)) `(,y . ,y) ) )
+  (run 1 (f) 
+    (for-all (y) (evalo `(app (lambda ,f) (quote ,y)) `(,y . ,y)) ))
+  . test-reg!=>ND . 'succeed
+)
+
+(Evalo-simple-3-2
+  (run 1 (f) 
+    (for-all (y) (evalo `(app (lambda (cons ,f)) (quote ,y)) `(,y . ,y)) ))
   . test-reg!=> . 'succeed
 )
+
 
 ; this should generate identity functions
 (Evalo-simple-4
