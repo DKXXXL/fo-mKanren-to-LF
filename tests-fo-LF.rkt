@@ -1356,7 +1356,7 @@
        (== `(list . ,a*) expr)        ;; expr is a list operation
        (eval-listo a* env value)))
     ((fresh (a d va vd)
-       (== `(cons ,a ,d) expr)        ;; expr is a cons operation
+       (== `(pair ,a ,d) expr)        ;; expr is a cons operation
        (== `(,va . ,vd) value)
        (eval-expo a env va)
        (eval-expo d env vd)))

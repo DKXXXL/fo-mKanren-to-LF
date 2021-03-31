@@ -387,7 +387,7 @@
 (define (hash-key-value-map rec-parent rec g)
   (match g 
     [(? hash?)
-      (make-hash (rec (hash->list g)))]
+      (make-immutable-hash (rec (hash->list g)))]
     [_ (rec-parent g)]))
 
 (define (identity-endo-functor rec-parent rec g) g)
@@ -1175,6 +1175,7 @@
 (define/contract (sem-solving assmpt st g)
   (assumption-base? ?state? Goal? . -> . Stream?)
   ;;; the following used when primitive goal is to fill in the
+  ;;; (debug-dump "  current-solving goal: ~a\n" g)
   (and st ;;; always circuit the st
     (match g
     ((disj g1 g2)
@@ -1286,7 +1287,8 @@
       ;;; TODO: add syntactical solving (i.e. put domain_ into the assumption but never solve it)
       ;;;         as now we know domain is always decidable so we just need to solve it (to add into state)
       (let* [(domain_ (simplify-domain-wrt assmpt st domain var))  
-             (k (begin (debug-dump "\n ~a : domain_ : ~a " var domain_)))] 
+            ;;;  (k (begin (debug-dump "\n ~a : domain_ : ~a " var domain_)))
+             ] 
 
         (match domain_
 
@@ -1294,8 +1296,7 @@
           ;;;   we try to prove domain -> Bottom, and then prove Bottom -> goal
           ;;;   then by composition we are done
           [(Bottom) (let* 
-                        ([k (debug-dump "\n one solution: ~a" st)]
-                        [pf-term-to-fill-st st]
+                        ([pf-term-to-fill-st st]
                         [st-terminating st]
                         [w/scope (state-scope st-terminating)]
                         [res (clear-about st-terminating (list->set (state-scope st-terminating)) var)])
@@ -1389,16 +1390,35 @@
                    [field-projected-st (field-proj-form st)]
                    [domain-enforced-st (domain-enforcement-st field-projected-st)]
                    [unmention-substed-st (unmentioned-substed-form mentioned-var domain-enforced-st)]
-                   [relative-complemented-goal (all-linear-simplify (relative-complement unmention-substed-st current-vars v))]
+                   [relative-complemented-goal-original (relative-complement unmention-substed-st current-vars v)]
+                   [relative-complemented-goal (all-linear-simplify relative-complemented-goal-original)]
                   ;;;  remove more than one variable is good, make state as small as possible
                    [shrinked-st (shrink-away unmention-substed-st current-vars v)]
-                   [k (begin  (debug-dump "\n domain ~a" domain)
-                              (debug-dump "\n initial st: ~a" st)
+                   [test-future (simplify-domain-wrt assmpt shrinked-st (conj relative-complemented-goal domain) var)]
+                   
+                   [k (begin  
+                              ;;; (debug-dump "\n       step: I am going through ~a" s)
+                              (debug-dump "\n initial st: ~v" st)
+                              (debug-dump "\n \n \n \n domain, : ~v" domain)
+                              (debug-dump "\n next domain (relative complement) : ~a" test-future)
+                              (debug-dump "\n g : ~v" goal)
+                              (if (equal? test-future (Bottom))
+                                (begin 
+                                  (debug-dump "\n       current-vars : ~a \n      v : ~a \n " current-vars v)
+                                  (debug-dump "\n       field-projected-st: ~a" field-projected-st)
+                                  (debug-dump "\n       domain-enforced-st: ~a" domain-enforced-st)
+                                  (debug-dump "\n       unmention-substed-st: ~a" unmention-substed-st)
+                                  (debug-dump "\n       relative complement : ~a" relative-complemented-goal-original)
+                                  (debug-dump "\n       shrinked-st         : ~a" shrinked-st) 
+                                  )
+                                '())
+                              (debug-dump "\n current-var initial st: ~v" (reify/initial-var st))
                               ;;; (debug-dump "\n field-projected-st: ~a" field-projected-st)
                               ;;; (debug-dump "\n domain-enforced-st: ~a" domain-enforced-st)
                               ;;; (debug-dump "\n unmention-substed-st: ~a" unmention-substed-st)
-                              (debug-dump "\n shrinked-st on ~a: ~a" v shrinked-st) 
-                              (debug-dump "\n relative-complemented-goal: ~a" relative-complemented-goal)
+                              ;;; (debug-dump "\n shrinked-st on ~s: ~v" v shrinked-st) 
+                              (debug-dump "\n current-var shrinked-st: ~v" (reify/initial-var shrinked-st))
+                              ;;; (debug-dump "\n relative-complemented-goal: ~v" relative-complemented-goal)
                               ;;; (debug-dump "\n complemented goal: ")(debug-dump st-scoped-w/ov)
                               ;;; (debug-dump "\n next state ") (debug-dump next-st) 
                               ;;; (debug-dump "\n search with domain on var ")
@@ -1901,15 +1921,28 @@
 (define (is-simple-form x) (not (not-simple-form x)))
 
 
+;;; transform every tp-var into a tproj inside st
+(define/contract (tp-var-to-tproj st)
+  (state? . -> . state?)
+
+  (define (each-case rec-parent rec g)
+    (match g
+      [(tp-var a b) (tproj_ a b)] 
+      [o/w (rec-parent g)]))
+  (define result-f 
+    (compose-maps (list each-case goal-term-base-map pair-base-map state-base-endo-functor hash-key-value-map identity-endo-functor)))
+  (result-f st))
+
 ;;; given a set of equation 
 ;;;  return an equivalent set of equation 
 ;;;  s.t. each equation won't have pair inside, and at each side of
 ;;;     one equation there is only one var
 (define/contract (field-proj-form st)
   (state? . -> . state?)
-  (define eqs (state-sub st))
+  (define tp-free-st (tp-var-to-tproj st))
+  (define eqs (state-sub tp-free-st))
 
-  (state-sub-set st (eliminate-conses eqs))
+  (state-sub-set tp-free-st (eliminate-conses eqs))
 )
 
 ;;; given a set of equations 
@@ -1917,9 +1950,18 @@
 ;;;  also no duplicate form, i.e. a and a._1 won't appear together
 ;;;     but only tproj inside
 (define (eliminate-conses eqs)
+  (define (if-continue-to-tproj eq)
+    (match eq
+      [(cons LHS RHS)
+        (or (pair LHS) (pair RHS)) ;; if oneside is pair, then definitely doing 
+      ]
+    )
+  )
   ;;; a while loop, very procedure way of doing things
   ;;; basically will rewrite a bunch of equation into field-proj form
-  ;;;   and also the ancestor won't appear, i.e. if a._1 is some term appearing, a won't appearing at all
+  ;;;   and also the ancestor won't appear, 
+  ;;;   1. i.e. if a._1 is some term appearing, a won't appearing at all
+  ;;;   2. won't have tproj at both side of an equation
   ;;;    the canonical-repr is the one helping with it
   (define (while-non-empty-eqs eqs res canonical-repr)
     (if (equal? '() eqs)
@@ -2044,6 +2086,7 @@
           (match-let* 
             ([new-rhs (walk* rhs (cdr eqs))]
              [(cons new-st remain-eqs) (literal-replace lhs new-rhs (cons st (cdr eqs)))]
+             [k (debug-dump  "\n     unmentioned-subst: ~a -> ~a" lhs rhs)]
             )
             (unmention-remove-everywhere remain-eqs new-st))]
         [(cons v rhs)
@@ -2327,7 +2370,7 @@
   ;;; TODO: I will just currently make this assumption to empty...
   
   (define dnf-sym-stream (TO-DNF (TO-NON-Asymmetric '() (wrap-state-stream state0))))
-  (debug-dump "\n clearing about: input sttate0 ~a" state0)
+  ;;; (debug-dump "\n clearing about: input sttate0 ~a" state0)
   (define mentioned-var (set-remove scope v))
   (define (map-clear-about st)
     (let* (

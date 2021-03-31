@@ -70,7 +70,7 @@
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "v~a" 
+     (fprintf output-port "π~a" 
       (pretty-print-tproj (tproj_ (var-name val) (var-index val)))))]
   #:guard (lambda (v cxr type-name)
                     (cond
@@ -434,7 +434,7 @@
   `(,tm-result : ≠ ,conj-disj-diseqs )
   )           
 (define (reify/initial-var st)
-  (debug-dump "\n reify with state: ~a" st)
+  ;;; (debug-dump "\n reify with state: ~a" st)
   (reify initial-var st))
 
 ;;; reify the variable toggether with the constraints
