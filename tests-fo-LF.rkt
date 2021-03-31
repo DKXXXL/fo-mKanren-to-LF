@@ -1462,8 +1462,8 @@
 
 ; this should generate constant functions
 (Evalo-simple-1
-  (run 1 (x z) (for-all (y) (evalo `(app ,x ,y) z)))
-  . test-reg!=>ND . 'succeed
+  (run 1 (x z) (for-all (y) (evalo `(app ,x (quote ,y)) z)))
+  . test-reg!=> . 'succeed
 )
 
 ; if (app x y) == z for all y, then (app x 6) == z

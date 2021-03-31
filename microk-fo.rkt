@@ -1394,25 +1394,7 @@
                    [relative-complemented-goal (all-linear-simplify relative-complemented-goal-original)]
                   ;;;  remove more than one variable is good, make state as small as possible
                    [shrinked-st (shrink-away unmention-substed-st current-vars v)]
-                   [test-future (simplify-domain-wrt assmpt shrinked-st (conj relative-complemented-goal domain) var)]
-                   
-                   [k (begin  
-                              ;;; (debug-dump "\n       step: I am going through ~a" s)
-                              (debug-dump "\n initial st: ~v" st)
-                              (debug-dump "\n \n \n \n domain, : ~v" domain)
-                              (debug-dump "\n next domain (relative complement) : ~a" test-future)
-                              (debug-dump "\n g : ~v" goal)
-                              (if (equal? test-future (Bottom))
-                                (begin 
-                                  (debug-dump "\n       current-vars : ~a \n      v : ~a \n " current-vars v)
-                                  (debug-dump "\n       field-projected-st: ~a" field-projected-st)
-                                  (debug-dump "\n       domain-enforced-st: ~a" domain-enforced-st)
-                                  (debug-dump "\n       unmention-substed-st: ~a" unmention-substed-st)
-                                  (debug-dump "\n       relative complement : ~a" relative-complemented-goal-original)
-                                  (debug-dump "\n       shrinked-st         : ~a" shrinked-st) 
-                                  )
-                                '())
-                              (debug-dump "\n current-var initial st: ~v" (reify/initial-var st))
+                   [k (begin  (debug-dump "\n current-var initial st: ~v" (reify/initial-var st))
                               ;;; (debug-dump "\n field-projected-st: ~a" field-projected-st)
                               ;;; (debug-dump "\n domain-enforced-st: ~a" domain-enforced-st)
                               ;;; (debug-dump "\n unmention-substed-st: ~a" unmention-substed-st)
@@ -1952,86 +1934,6 @@
   (state-sub-set tp-free-st (eliminate-conses eqs))
 )
 
-;;; TODO: we can try to also specify the following to not having too much projection
-  ;;; (define atomic-term? (or/c var? tproj?))
-  ;;; (define (while-non-empty-eqs eqs res proj-to-var)
-  ;;;   (if (equal? '() eqs)
-  ;;;     res
-  ;;;     (match-let* 
-  ;;;       ([(cons eq rest) eqs]
-  ;;;        [(cons LHS RHS) eq])
-  ;;;       (cond
-  ;;;         ;;; if both sides are pair then we just deconstruct the pair
-  ;;;         [(andmap pair? (list LHS RHS))         (while-non-empty-eqs (cons (fst-eq eq) (cons (snd-eq eq) rest)) res)]
-  ;;;         ;;; if both sides are simply var, then do nothing
-  ;;;         [(andmap var?  (list LHS RHS))         (while-non-empty-eqs rest (cons eq res))]
-  ;;;         [(andmap tproj? (list LHS RHS)         (raise-and-warn "Invariant Broken: shouldn't have tproj at both sides.\n"))]
-  ;;;         ;;; if both are atomic term, then must be one tproj, one var, we can just add it as result
-  ;;;         [(andmap atomic-term? eq)              (while-non-empty-eqs rest (cons eq res))]
-  ;;;         ;;; otherwise, oneside is var, the otherside as pair, we only deal with LHS = var, RHS = pair
-  ;;;         [((cons/c pair? atomic-term?) eq)      (while-non-empty-eqs (cons (cons RHS LHS) rest) res)]
-  ;;;         ;;; finally, it must be one LHS = atomic-term, RHS = pair
-  ;;;         ;;;   we just deconstruct into two equations again, and thus introduce two new projection
-  ;;;         ;;;     and we will map the two new projection into vars, recorded in proj-to-var
-  ;;;         ;;;     and then we do a global substitution on the current LHS, 
-  ;;;         ;;;         (of course if it is proj then it cannot appear anywhere later in eqs)
-  ;;;         [((cons/c atomic-term? pair?) eq) 
-  ;;;             (match-let* 
-  ;;;               ([new-rest (if (var? LHS) (literal-replace LHS RHS rest) rest)]
-  ;;;                [feq (fst-eq eq)]
-  ;;;                [(cons feq-l feq-r) feq]
-  ;;;                [seq (snd-eq eq)]
-  ;;;                [(cons seq-l seq-r) seq]
-  ;;;                )
-  ;;;             )
-  ;;;         ]
-  ;;;       )
-
-
-;;; ;;; given a set of equations 
-;;; ;;;  return an equivalent set of equations, with no pair inside 
-;;; ;;;  also no duplicate form, i.e. a and a._1 won't appear together
-;;; ;;;     but only tproj inside
-;;; (define (eliminate-conses eqs)
-
-;;;   ;;; 
-;;;   ;;; a while loop, very procedure way of doing things
-;;;   ;;; basically will rewrite a bunch of equation into field-proj form
-;;;   ;;;   and also the ancestor won't appear, 
-;;;   ;;;   1. i.e. if a._1 is some term appearing, a won't appearing at all
-;;;   ;;;     the canonical-repr is the one helping with it
-;;;   ;;;     BUG 2021-03-31, we currently have duplicate term (i.e. breaking invariance 1)
-;;;   (define (while-non-empty-eqs eqs res canonical-repr)
-;;;     (if (equal? '() eqs)
-;;;       res
-;;;       (match-let* 
-;;;         ([(cons eq rest) eqs]
-;;;          [(cons LHS RHS) eq]
-;;;          [eq-canon 
-;;;             (cons (hash-ref canonical-repr LHS LHS) 
-;;;                   (hash-ref canonical-repr RHS RHS))])
-;;;           (if (not (equal? eq-canon eq))
-;;;             (while-non-empty-eqs (cons eq-canon rest) res canonical-repr)      
-;;;             (if (and (is-simple-form LHS) (is-simple-form RHS))
-;;;               (while-non-empty-eqs rest (cons eq res) canonical-repr)
-;;;               ;;; one side is non-simple
-;;;               (match-let*
-;;;                 ([new-eq1 (tcar-eq eq)]
-;;;                  [new-eq2 (tcdr-eq eq)]
-;;;                  [crpr canonical-repr]
-;;;                  [crpr1 (if (is-simple-form LHS) 
-;;;                             (hash-set crpr LHS (cons (tcar LHS) (tcdr LHS)))
-;;;                             crpr)]
-;;;                  [crpr2 (if (is-simple-form RHS) 
-;;;                             (hash-set crpr1 RHS (cons (tcar RHS) (tcdr RHS)))
-;;;                             crpr1)])
-;;;                 (while-non-empty-eqs (cons new-eq1 (cons new-eq2 rest)) res crpr2)))))))
-;;;     (filter 
-;;;       (λ(t) (not (equal? (car t) (cdr t))))
-;;;       (while-non-empty-eqs eqs '() (hash)))
-;;; )
-
-
 ;;; given a set of equations 
 ;;;  return an equivalent set of equations, with no pair inside 
 ;;;  also no duplicate form, i.e. a and a._1 won't appear together
@@ -2162,7 +2064,7 @@
           (match-let* 
             ([new-rhs (walk* rhs (cdr eqs))]
              [(cons new-st remain-eqs) (literal-replace lhs new-rhs (cons st (cdr eqs)))]
-             [k (debug-dump  "\n     unmentioned-subst: ~a -> ~a" lhs rhs)]
+            ;;;  [k (debug-dump  "\n     unmentioned-subst: ~a -> ~a" lhs rhs)]
             )
             (unmention-remove-everywhere remain-eqs new-st))]
         [(cons v rhs)
