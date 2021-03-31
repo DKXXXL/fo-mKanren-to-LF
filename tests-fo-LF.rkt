@@ -1477,7 +1477,7 @@
 (Evalo-simple-3
   (run 1 (f) 
     (for-all (y) (evalo `(app ,f (quote ,y)) `(,y . ,y)) ))
-  . test-reg!=> . 'succeed
+  . test-reg!=>ND . 'succeed
 )
 
 (Evalo-simple-3-1

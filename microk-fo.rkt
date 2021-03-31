@@ -1922,12 +1922,19 @@
 
 
 ;;; transform every tp-var into a tproj inside st
-(define/contract (tp-var-to-tproj st)
+(define/contract (tp-var-to-normal-var st)
   (state? . -> . state?)
-
+  (define tp-var-to-var-hash (make-hash))
+  (define (tp-var-to-var tpv)
+    (if (hash-has-key? tp-var-to-var-hash tpv)
+      (hash-ref tp-var-to-var-hash tpv)
+      (let* ([newname (string->symbol (format "~a" tpv))]
+               [vtpv    (var/fresh newname)]
+               [_       (hash-set! tp-var-to-var-hash tpv vtpv)])
+          vtpv)))
   (define (each-case rec-parent rec g)
     (match g
-      [(tp-var a b) (tproj_ a b)] 
+      [(tp-var _ _) (tp-var-to-var g)] 
       [o/w (rec-parent g)]))
   (define result-f 
     (compose-maps (list each-case goal-term-base-map pair-base-map state-base-endo-functor hash-key-value-map identity-endo-functor)))
@@ -1939,7 +1946,7 @@
 ;;;     one equation there is only one var
 (define/contract (field-proj-form st)
   (state? . -> . state?)
-  (define tp-free-st (tp-var-to-tproj st))
+  (define tp-free-st (tp-var-to-normal-var st))
   (define eqs (state-sub tp-free-st))
 
   (state-sub-set tp-free-st (eliminate-conses eqs))
@@ -1981,48 +1988,86 @@
   ;;;       )
 
 
+;;; ;;; given a set of equations 
+;;; ;;;  return an equivalent set of equations, with no pair inside 
+;;; ;;;  also no duplicate form, i.e. a and a._1 won't appear together
+;;; ;;;     but only tproj inside
+;;; (define (eliminate-conses eqs)
+
+;;;   ;;; 
+;;;   ;;; a while loop, very procedure way of doing things
+;;;   ;;; basically will rewrite a bunch of equation into field-proj form
+;;;   ;;;   and also the ancestor won't appear, 
+;;;   ;;;   1. i.e. if a._1 is some term appearing, a won't appearing at all
+;;;   ;;;     the canonical-repr is the one helping with it
+;;;   ;;;     BUG 2021-03-31, we currently have duplicate term (i.e. breaking invariance 1)
+;;;   (define (while-non-empty-eqs eqs res canonical-repr)
+;;;     (if (equal? '() eqs)
+;;;       res
+;;;       (match-let* 
+;;;         ([(cons eq rest) eqs]
+;;;          [(cons LHS RHS) eq]
+;;;          [eq-canon 
+;;;             (cons (hash-ref canonical-repr LHS LHS) 
+;;;                   (hash-ref canonical-repr RHS RHS))])
+;;;           (if (not (equal? eq-canon eq))
+;;;             (while-non-empty-eqs (cons eq-canon rest) res canonical-repr)      
+;;;             (if (and (is-simple-form LHS) (is-simple-form RHS))
+;;;               (while-non-empty-eqs rest (cons eq res) canonical-repr)
+;;;               ;;; one side is non-simple
+;;;               (match-let*
+;;;                 ([new-eq1 (tcar-eq eq)]
+;;;                  [new-eq2 (tcdr-eq eq)]
+;;;                  [crpr canonical-repr]
+;;;                  [crpr1 (if (is-simple-form LHS) 
+;;;                             (hash-set crpr LHS (cons (tcar LHS) (tcdr LHS)))
+;;;                             crpr)]
+;;;                  [crpr2 (if (is-simple-form RHS) 
+;;;                             (hash-set crpr1 RHS (cons (tcar RHS) (tcdr RHS)))
+;;;                             crpr1)])
+;;;                 (while-non-empty-eqs (cons new-eq1 (cons new-eq2 rest)) res crpr2)))))))
+;;;     (filter 
+;;;       (λ(t) (not (equal? (car t) (cdr t))))
+;;;       (while-non-empty-eqs eqs '() (hash)))
+;;; )
+
+
 ;;; given a set of equations 
 ;;;  return an equivalent set of equations, with no pair inside 
 ;;;  also no duplicate form, i.e. a and a._1 won't appear together
 ;;;     but only tproj inside
+;;; precondition: eqs is actually a substitution list
+;;; precondition: no tproj in the beginning
 (define (eliminate-conses eqs)
+  ((list/c pair?) . -> . (list/c pair?))
+  ;;; canonicalize all the variables, i.e. collect all variables and walk* them
+  (define all-vars (set->list (goal-vars eqs)))
+  ;;; (assert-or-warn (not (equal? (length all-vars) 0)) "\n eliminate-conses found no vars")
+  (define each-var-canon-from
+    (map (λ (t) (cons t (walk* t eqs))) all-vars))
 
-  ;;; 
-  ;;; a while loop, very procedure way of doing things
-  ;;; basically will rewrite a bunch of equation into field-proj form
-  ;;;   and also the ancestor won't appear, 
-  ;;;   1. i.e. if a._1 is some term appearing, a won't appearing at all
-  ;;;     the canonical-repr is the one helping with it
-  ;;;     BUG 2021-03-31, we currently have duplicate term (i.e. breaking invariance 1)
-  (define (while-non-empty-eqs eqs res canonical-repr)
-    (if (equal? '() eqs)
-      res
-      (match-let* 
-        ([(cons eq rest) eqs]
-         [(cons LHS RHS) eq]
-         [eq-canon 
-            (cons (hash-ref canonical-repr LHS LHS) 
-                  (hash-ref canonical-repr RHS RHS))])
-          (if (not (equal? eq-canon eq))
-            (while-non-empty-eqs (cons eq-canon rest) res canonical-repr)      
-            (if (and (is-simple-form LHS) (is-simple-form RHS))
-              (while-non-empty-eqs rest (cons eq res) canonical-repr)
-              ;;; one side is non-simple
-              (match-let*
-                ([new-eq1 (tcar-eq eq)]
-                 [new-eq2 (tcdr-eq eq)]
-                 [crpr canonical-repr]
-                 [crpr1 (if (is-simple-form LHS) 
-                            (hash-set crpr LHS (cons (tcar LHS) (tcdr LHS)))
-                            crpr)]
-                 [crpr2 (if (is-simple-form RHS) 
-                            (hash-set crpr1 RHS (cons (tcar RHS) (tcdr RHS)))
-                            crpr1)])
-                (while-non-empty-eqs (cons new-eq1 (cons new-eq2 rest)) res crpr2)))))))
-    (filter 
-      (λ(t) (not (equal? (car t) (cdr t))))
-      (while-non-empty-eqs eqs '() (hash)))
-)
+
+  (define atomic-form? (or/c tproj? var?))
+  (define (fst-eq eq) (cons (tcar (car eq)) (tcar (cdr eq))))
+  (define (snd-eq eq) (cons (tcdr (car eq)) (tcdr (cdr eq))))
+
+  ;;; given an equaition of var and pair, construct 
+  (define/contract (var-pair-eq-to-tproj v-p-eq)
+    ((cons/c atomic-form? any?) . -> . any?)
+    ;;; BUGFIX: contract  
+    ;;;   ((cons/c atomic-form? any?) . -> . (or/c null? (list/c pair?)))
+    ;;;     is failing
+    (define v (car v-p-eq))
+    (define p (cdr v-p-eq))
+    (if (not (pair? p)) 
+        (if (equal? v p) '() (list v-p-eq))
+        (append
+          (var-pair-eq-to-tproj (fst-eq v-p-eq))
+          (var-pair-eq-to-tproj (snd-eq v-p-eq)))))
+  (for/fold 
+    ([all-eqs       '()])
+    ([each-v-p-pair each-var-canon-from])
+    (append (var-pair-eq-to-tproj each-v-p-pair) all-eqs)))
 
 
 (define-syntax for-all
