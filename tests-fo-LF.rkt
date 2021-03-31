@@ -255,8 +255,6 @@
 )
 
 
-;;; 2021-03-28: currently this construct an invalid substitution list
-;;;   (causing walk unhalt)
 (Complicated-3
   (run 1 (a) 
   (conj* 
@@ -266,7 +264,7 @@
     (disj* (not-pairo a) (fresh (z) (== a (cons z z))))))
 
 ;;; ((not-pairo a) (_.0 . _0) ...)
-. test-reg!=>ND . 'succeed
+. test-reg!=> . 'succeed
 )
 
 ((run 1 (a) 

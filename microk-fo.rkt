@@ -898,8 +898,8 @@
 ;;;       and thus invoke a new "pause/start" (so that new possible sem-solving can be proceeded)
 (define/contract (syn-solving assmpt init-assmpt st g)
   (assumption-base? assumption-base? ?state? Goal? . -> . Stream?)
-  (debug-dump "\n syn-solving assmpt: ~a" assmpt)
-  (debug-dump "\n syn-solving goal: ~a" g)
+  ;;; (debug-dump "\n syn-solving assmpt: ~a" assmpt)
+  ;;; (debug-dump "\n syn-solving goal: ~a" g)
   ;;; first we look at top-level assumption to see if unification can succeed
   ;;; then we need to deconstruct the (top)-assumption base
   ;;;   to syntactical pattern match on all the sub-assumption
@@ -1394,12 +1394,22 @@
                    [relative-complemented-goal (all-linear-simplify relative-complemented-goal-original)]
                   ;;;  remove more than one variable is good, make state as small as possible
                    [shrinked-st (shrink-away unmention-substed-st current-vars v)]
-                   [k (begin  (debug-dump "\n current-var initial st: ~v" (reify/initial-var st))
+                   [k (begin  
+                              (debug-dump "\n current state initial var: ~v" (reify/initial-var st))
+                              (debug-dump "\n shrinked state initial var: ~v" (reify/initial-var shrinked-st))
                               ;;; (debug-dump "\n field-projected-st: ~a" field-projected-st)
                               ;;; (debug-dump "\n domain-enforced-st: ~a" domain-enforced-st)
                               ;;; (debug-dump "\n unmention-substed-st: ~a" unmention-substed-st)
                               ;;; (debug-dump "\n shrinked-st on ~s: ~v" v shrinked-st) 
-                              (debug-dump "\n current-var shrinked-st: ~v" (reify/initial-var shrinked-st))
+                              ;;; (for/fold
+                              ;;;   ([_ (void)])
+                              ;;;   ([each-var (set->list (state-scope st))])
+                              ;;;   (debug-dump "\n vars at current st: ~v : ~v" each-var (reify each-var st)))
+                              ;;; (debug-dump "\n current-var shrinked-st: ~v" (reify/initial-var shrinked-st))
+                              ;;; (for/fold
+                              ;;;   ([_ (void)])
+                              ;;;   ([each-var (set->list (state-scope shrinked-st))])
+                              ;;;   (debug-dump "\n vars at shrinked st: ~v : ~v" each-var (reify each-var shrinked-st)))
                               ;;; (debug-dump "\n relative-complemented-goal: ~v" relative-complemented-goal)
                               ;;; (debug-dump "\n complemented goal: ")(debug-dump st-scoped-w/ov)
                               ;;; (debug-dump "\n next state ") (debug-dump next-st) 
