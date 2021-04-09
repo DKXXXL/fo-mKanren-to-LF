@@ -864,6 +864,18 @@
 . test-reg!=>ND . 'succeed
 )
 
+(Test-unification-cimpl-2
+  (run 1 (R) (for-all (x y) 
+    (cimpl (conj* (== y (list (quote b) (quote c)))) (== y '(1) ))))
+. test-reg!=>ND . 'fail
+)
+
+(Test-unification-failed 
+  (run 1 (R) (for-all (y) 
+        (disj* (== y '(1))  (=/= y (list (quote b) (quote c)))  )))
+. test-reg!=>ND . 'fail
+)
+
 (define-relation (lengtho x y)
   (conde ((== x '()) (== y '()))
          ((fresh (xf xr yr)
