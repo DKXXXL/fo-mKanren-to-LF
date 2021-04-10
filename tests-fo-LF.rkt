@@ -870,6 +870,7 @@
 . test-reg!=>ND . 'fail
 )
 
+;;; The following is very slow!
 (Test-unification-failed 
   (run 1 (R) (for-all (y) 
         (disj* (== y '(1))  (=/= y (list (quote b) (quote c)))  )))

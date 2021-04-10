@@ -611,9 +611,9 @@
       [(cons (relate _ b) (relate _ d))
         (and (equal? (car b) (car d)) (== b d))]
       [(cons (== a b) (== c d))
-        (disj (conj* (== a c) (== b d)) (conj* (== a d) (== b c)))] 
+        (conj* (== a c) (== b d))] 
       [(cons (=/= a b) (=/= c d))
-        (disj (conj* (== a c) (== b d)) (conj* (== a d) (== b c)))]
+        (conj* (== a c) (== b d))]
       ;;; composed goals
       [(cons (ex a b) (ex c d))
         (let* ([k (gensym)]
@@ -1213,10 +1213,13 @@
       ;;; TODO: rewrite the following into ANF-style (the push-let form)
       (match-let* 
             ([(cons g1-dec g1-ndec) (simplify-dec+nondec g1)]
+             [k (debug-dump-off "\n dec comp: ~a \n undec comp ~a \n " g1-dec g1-ndec)]
              [~g1-dec-ty (complement g1-dec)]
              [st-to-fill st]
              [st-~g1-dec st-to-fill]
              [st-~g1ndec st]
+             [cimpl-syn-short-circuit 
+                (λ (antc conseq) (if (equal? antc (Top)) conseq (cimpl-syn antc conseq)))]
              [st-g1ndec-g2 st-to-fill]
             )
         (mplus*
@@ -1225,7 +1228,7 @@
           ;;; Note: the following decides the soundness of the whole algorithm
           ;;;     because without it, we may not expand the definition of assumption
           ;;;     and really falsifying it
-          (pause assmpt st-~g1ndec (conj g1-dec (cimpl-syn g1-ndec (Bottom)))) 
+          ;;; (pause assmpt st-~g1ndec (conj g1-dec (cimpl-syn g1-ndec (Bottom)))) 
           ;;; and syntactical falsifying 
           (pause assmpt st-g1ndec-g2 (conj g1-dec (cimpl-syn g1-ndec g2))))
           ;;; and syntactical solving
@@ -1393,14 +1396,31 @@
                    [relative-complemented-goal-original (relative-complement unmention-substed-st current-vars v)]
                    [relative-complemented-goal (all-linear-simplify relative-complemented-goal-original)]
                   ;;;  remove more than one variable is good, make state as small as possible
+                   
                    [shrinked-st (shrink-away unmention-substed-st current-vars v)]
+                   [next-domain (simplify-domain-wrt assmpt (valid-type-constraints-check shrinked-st) (conj relative-complemented-goal domain) v)]
+                   [will-next-exit (equal? next-domain (Bottom))]
                    [k (begin  
-                              (debug-dump "\n current state initial var: ~v" (reify/initial-var st))
-                              (debug-dump "\n shrinked state initial var: ~v" (reify/initial-var shrinked-st))
-                              ;;; (debug-dump "\n field-projected-st: ~a" field-projected-st)
-                              ;;; (debug-dump "\n domain-enforced-st: ~a" domain-enforced-st)
-                              ;;; (debug-dump "\n unmention-substed-st: ~a" unmention-substed-st)
-                              ;;; (debug-dump "\n shrinked-st on ~s: ~v" v shrinked-st) 
+
+                              (if will-next-exit
+                                (begin 
+                                  (debug-dump "\n current state initial var: ~v" (reify/initial-var st))
+                                  (debug-dump "\n shrinked state initial var: ~v" (reify/initial-var shrinked-st))
+                                  (debug-dump "\n current state: ~v" st)
+                                  (debug-dump "\n field-projected-st: ~a"  field-projected-st)
+                                  ;;; (debug-dump "\n field-projected-st initial var: ~a" (reify/initial-var (eliminate-tproj-in-st field-projected-st)))
+                                  (debug-dump "\n domain-enforced-st: ~a" domain-enforced-st)
+                                  ;;; (debug-dump "\n domain-enforced-st initial var: ~a" (reify/initial-var (eliminate-tproj-in-st domain-enforced-st)))
+                                  (debug-dump "\n unmention-substed-st: ~a" unmention-substed-st)
+                                  ;;; (debug-dump "\n unmention-substed-st initial var: ~a" (reify/initial-var (eliminate-tproj-in-st unmention-substed-st)))
+
+                                  (debug-dump "\n relative-complemented-goal: ~v" relative-complemented-goal)
+                                  (debug-dump "\n relative-complemented-goal-original: ~v  on ~a" relative-complemented-goal-original v)
+                                  (debug-dump "\n shrinked-st on ~s: ~v \n \n" v shrinked-st) 
+                                )
+                                '()
+                              )
+
                               ;;; (for/fold
                               ;;;   ([_ (void)])
                               ;;;   ([each-var (set->list (state-scope st))])
@@ -1410,12 +1430,12 @@
                               ;;;   ([_ (void)])
                               ;;;   ([each-var (set->list (state-scope shrinked-st))])
                               ;;;   (debug-dump "\n vars at shrinked st: ~v : ~v" each-var (reify each-var shrinked-st)))
-                              ;;; (debug-dump "\n relative-complemented-goal: ~v" relative-complemented-goal)
-                              ;;; (debug-dump "\n complemented goal: ")(debug-dump st-scoped-w/ov)
+
                               ;;; (debug-dump "\n next state ") (debug-dump next-st) 
                               ;;; (debug-dump "\n search with domain on var ")
                               ;;; (debug-dump v) (debug-dump " in ") (debug-dump cgoal) 
-                              (debug-dump "\n"))
+                              ;;; (debug-dump "\n")
+                              )
                               ]
                     [valid-shrinked-state (valid-type-constraints-check shrinked-st)] ;; clear up the incorrect state information
                     [current-domain (state->goal st)]

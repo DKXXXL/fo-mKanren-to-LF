@@ -37,6 +37,7 @@
   ?state?
   debug-dump-w/level
   debug-dump
+  debug-dump-off
   raise-and-warn
   assert-or-warn
   assert
@@ -117,6 +118,10 @@
         (printf x ...)
         'Threshold-Too-High))
           ))
+(define-syntax debug-dump-off
+  (syntax-rules ()
+    ((_ ...) 
+      (void))))
 
 (define-syntax debug-dump
   (syntax-rules ()
