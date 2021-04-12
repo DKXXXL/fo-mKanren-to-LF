@@ -100,6 +100,60 @@
       (else                                (and (eqv? u v) sub)))))
 
 
+;;; return a state where except for substitution list, 
+;;;   every variable appearing 
+;;;     is the representative of the equality class of the variable
+;;; Note: if st has type-constraint on two var (with same equality class)
+;;;     this might lead to some problems
+(define/contract (canonicalize-state st)
+  (state? . -> . state?)
+  (define current-sub (state-sub st))
+  (define current-scope (state-scope st))
+  (define st-without-sub-and-scope 
+    (state-scope-set (state-sub-set st empty-sub) '()))
+
+  (define (each-case rec-parent rec g)
+    (match g
+      [(var _ _) (walk* g current-sub)] 
+      [o/w (rec-parent g)]))
+  (define result-f 
+    (compose-maps (list each-case goal-term-base-map pair-base-map state-base-endo-functor hash-key-value-map identity-endo-functor)))
+  (state-scope-set
+    (state-sub-set (result-f st-without-sub-and-scope) current-sub)
+    current-scope
+    )
+)
+
+;;; return a state where except for substitution list, 
+;;;   every variable appearing 
+;;;     is the representative of the equality class of the variable
+;;; Note: if st has type-constraint on two var (with same equality class)
+;;;     this might lead to some problems
+(define/contract (canonicalized-state? st)
+  (state? . -> . boolean?)
+  (define current-sub (state-sub st))
+  (define st-without-sub-and-scope 
+    (state-scope-set (state-sub-set st empty-sub) '()))
+
+  ;;; using visitor + side effect
+  (define there-is-non-canonical-var? #f)
+  (define (each-case rec-parent rec g)
+    (match g
+      [(var _ _)
+          (begin 
+            (if (not (equal? g (walk* g current-sub)))
+                (set! there-is-non-canonical-var? #t)
+                (void))
+            g)] 
+      ;;; short-circuit
+      [o/w (if there-is-non-canonical-var? g (rec-parent g))]))
+  (define result-f 
+    (compose-maps (list each-case goal-term-base-map pair-base-map state-base-endo-functor hash-key-value-map identity-endo-functor)))
+  (result-f st-without-sub-and-scope)
+  (not there-is-non-canonical-var?)
+)
+
+
 
 (define (wrap-state-stream st) (and st (cons st #f)))
 
@@ -131,7 +185,7 @@
     (check-as-inf-type-disj (cdr each-var-types) (car each-var-types) acc-st)))
 
 (define/contract (unify u v st)
-  (any? any? state? . -> . any?)
+  (any? any? state? . -> . Stream?)
   ;;; inequality-recheck :: state -> state
   (define (inequality-recheck st)
     (define conj-all-diseq (state-diseq st))
@@ -164,11 +218,11 @@
               [checked-type-state (foldl check-as-inf-type-disj*-c
                                          erased-type-state 
                                          new-vars-types new-vars)]
-                                         )
+              [after-ineq-check-st (and checked-type-state
+                                        (inequality-recheck checked-type-state))]
+              [_ (assert ((or/c false/c canonicalized-state?) after-ineq-check-st))])
         ;;;  TODO: short-circuit the possible #f appearing inside foldl
-
-        (and checked-type-state
-          (wrap-state-stream (inequality-recheck checked-type-state) )))
+        (wrap-state-stream after-ineq-check-st))
   
   )))
 
@@ -275,7 +329,8 @@
 ;;; dis-unification, we try to find the solution
 ;;;   for u =/= v
 ;;;   and return a list of state that satisfies the inequalities between u v
-(define (neg-unify u v st)
+(define/contract (neg-unify u v st)
+  (any? any? state? . -> . Stream?)
   (let* ([result (neg-unify* (list `(,u . ,v)) st)])
     (and result (cons result #f)))
 )
@@ -284,6 +339,7 @@
 ;;;   disjunction of inequality, solve them according to the current state
 ;;;   return a state that satisifies the disjunction of inequalities
 (define (neg-unify* list-u-v st)
+  ((list/c pair?) state? . -> . (or/c false/c canonicalized-state?))
   (match list-u-v 
     ['() #f]
     [(cons (cons u v) rest) 
@@ -345,7 +401,7 @@
 ;;;  precondition: type?* is never #f, st is never #f
 ;;;   precondition: type?* \subseteq all-inf-type-label
 (define/contract (check-as-inf-type-disj type?* t st)
-  (set? any? ?state? . -> . ?state?)
+  (set? any? (or/c false/c canonicalized-state?) . -> . (or/c false/c canonicalized-state?))
   (assert-or-warn (subset? type?* all-inf-type-label) 
     "check-as-inf-type-disj cannot handle these type constraints ~a" type?*)
   ;;; TODO: fixing the case when type?* is actually empty
@@ -382,7 +438,7 @@
                     ;;;   quantifier because they don't specify scope!!
                     ;;;  here it is even more complicated ... what is the scope of a b?
                     ;;;    if we don't know the scope, will it cause problem when generating trace?
-                    [(? (lambda (the-set) (equal? the-set (set pair?))))
+                    [(? (λ (the-set) (equal? the-set (set pair?))))
                       (let* ([t1 (var/fresh 't1)]
                              [t2 (var/fresh 't2)]
                              [st-unify-updated 

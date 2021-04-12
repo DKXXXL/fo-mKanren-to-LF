@@ -1414,7 +1414,8 @@
       [o/w (rec-parent g)]))
   (define result-f 
     (compose-maps (list each-case goal-term-base-map pair-base-map state-base-endo-functor hash-key-value-map identity-endo-functor)))
-  (result-f st))
+  (result-f st)
+)
 
 ;;; given a set of equation 
 ;;;  return an equivalent set of equation 

@@ -62,7 +62,7 @@
 (define-syntax assert
   (syntax-rules ()
     ((_ COND) 
-      (assert-or-warn COND "Assertion Violated!"))))
+      (assert-or-warn COND "Assertion Violated! ~a" 'COND))))
 
 
 
@@ -173,6 +173,8 @@
 
 ;;; we consider #f is the failed state, also one of the state
 (define (?state? obj) (or (equal? obj #f) (state? obj)))
+
+
 
 
 ;;; the parent type of all goals
@@ -473,16 +475,12 @@
 (struct bind-forall  stream-struct (assmpt scope state domain-var g)          #:prefab)
 
 
-;;; detect stream or not
+;;; (lazily) detect stream or not
 ;;;   because we have #f as part of stream structure so
 ;;;   we cannot easily use stream-struct?
 (define (Stream? s)
-  (or (stream-struct? s)
-    (match s
-      [#f #t]
-      [(cons k r) (Stream? r)]
-      [o/w #f]
-    )))
+  (or/c stream-struct?
+        (cons/c (or/c #f state?) Stream?)))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
