@@ -270,29 +270,30 @@
 ;;;     is the representative of the equality class of the variable
 ;;; Note: if st has type-constraint on two var (with same equality class)
 ;;;     this might lead to some problems
-(define/contract (canonicalized-state? st)
-  (state? . -> . boolean?)
-  (define current-sub (state-sub st))
-  (define st-without-sub-and-scope 
-    (state-scope-set (state-sub-set st empty-sub) '()))
+;;; (define/contract (canonicalized-state? st)
+;;;   (state? . -> . boolean?)
+;;;   (define current-sub (state-sub st))
+;;;   (define st-without-sub-and-scope 
+;;;     (state-scope-set (state-sub-set st empty-sub) '()))
 
-  ;;; using visitor + side effect
-  (define there-is-non-canonical-var? #f)
-  (define (each-case rec-parent rec g)
-    (match g
-      [(var _ _)
-          (begin 
-            (if (not (equal? g (walk* g current-sub)))
-                (set! there-is-non-canonical-var? #t)
-                (void))
-            g)] 
-      ;;; short-circuit
-      [o/w (if there-is-non-canonical-var? g (rec-parent g))]))
-  (define result-f 
-    (compose-maps (list each-case goal-term-base-map pair-base-map state-base-endo-functor hash-key-value-map identity-endo-functor)))
-  (result-f st-without-sub-and-scope)
-  (not there-is-non-canonical-var?)
-)
+;;;   ;;; using visitor + side effect
+;;;   (define there-is-non-canonical-var? #f)
+;;;   (define (each-case rec-parent rec g)
+;;;     (match g
+;;;       [(var _ _)
+;;;           (begin 
+;;;             (if (not (equal? g (walk* g current-sub)))
+;;;                 (set! there-is-non-canonical-var? #t)
+;;;                 (void))
+;;;             g)] 
+;;;       ;;; short-circuit
+;;;       [o/w (if there-is-non-canonical-var? g (rec-parent g))]))
+;;;   (define result-f 
+;;;     (compose-maps (list each-case goal-term-base-map pair-base-map state-base-endo-functor hash-key-value-map identity-endo-functor)))
+;;;   (result-f st-without-sub-and-scope)
+;;;   (not there-is-non-canonical-var?)
+;;; )
+(define canonicalized-state? state?)
 
 (define ?canonicalized-state? (or/c false/c canonicalized-state?))
 
@@ -354,7 +355,7 @@
       (match-let* 
         ([(cons v cst) each])
         ((if (set? cst)
-             (do [<-end (check-as-inf-type-disj/st v cst)])
+             (do [<-end (check-as-inf-type-disj/st cst v)])
              (pure-st '())) 
          . >> . acc))))
   (do 
