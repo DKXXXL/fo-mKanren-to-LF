@@ -45,191 +45,13 @@
   set-debug-info-threshold!
   )
 
-;;; bear with it now.... let me search if there is
-;;;  extensible record later
-(require struct-update)
+
 (require racket/contract)
 (require errortrace)
-(require "proof-term.rkt")
-
-(instrumenting-enabled #t)
-
-;;; set the following to 'ON then we will have debug info
-(define debug-output-info 'ON)
+(require "microk-fo-def.rkt")
 
 
-;; Logic variables
-(struct var (name index) ;;;#:prefab
-  #:transparent
-  #:methods gen:custom-write
-  [(define (write-proc val output-port output-mode)
-     (fprintf output-port "~a#~a" (var-name val) (var-index val)))]
-)
 
-;;; making part of tproj as var, 
-(struct tp-var var ()
-  #:transparent
-  #:methods gen:custom-write
-  [(define (write-proc val output-port output-mode)
-     (fprintf output-port "π~a" 
-      (pretty-print-tproj (tproj_ (var-name val) (var-index val)))))]
-  #:guard (lambda (v cxr type-name)
-                    (cond
-                      [(and (var? v) (not (tp-var? v)) (pair? cxr)) 
-                       (values v cxr)]
-                      [else (error type-name
-                                   "bad v: ~e"
-                                   v)]))
-)
-
-
-(define (var=? x1 x2)
-  (= (var-index x1) (var-index x2)))
-(define initial-var (var #f 0))
-
-(define var/fresh (void))
-;; return a new var with incremented id
-(define var-reset! (void)) 
-;; reset the maximum existing var-id to 0
-(define var-number (void)) 
-;; return the maximum existing var-id, unless it is 0
-
-(define (debug-info-initialization)
-  (define debug-info-threshold 
-    (if (equal? debug-output-info 'ON) -100 1))
-  (define (get-debug-info-threshold)
-    debug-info-threshold)
-
-  (define (set-debug-info-threshold! l)
-    (set! debug-info-threshold l))
-  
-  (values get-debug-info-threshold set-debug-info-threshold!)
-)
-
-(define-values 
-  (get-debug-info-threshold set-debug-info-threshold!)
-  (debug-info-initialization))
-
-
-(define-syntax debug-dump-w/level
-  (syntax-rules ()
-    ((_ l x ...) 
-      (if (>= l (get-debug-info-threshold)) 
-        (printf x ...)
-        'Threshold-Too-High))
-          ))
-(define-syntax debug-dump-off
-  (syntax-rules ()
-    ((_ ...) 
-      (void))))
-
-(define-syntax debug-dump
-  (syntax-rules ()
-    ((_ x ...) 
-      (debug-dump-w/level 0 x ...))))
-
-(define-syntax raise-and-warn
-  (syntax-rules ()
-    ((_ x ...) 
-      (begin (debug-dump-w/level 100 x ...) (/ 1 0)))))
-
-(define-syntax assert-or-warn
-  (syntax-rules ()
-    ((_ COND x ...) 
-      (if COND
-        #t
-        (begin (debug-dump-w/level 100 x ...) (/ 1 0)  )))))
-
-(define-syntax assert
-  (syntax-rules ()
-    ((_ COND) 
-      (assert-or-warn COND "Assertion Violated!"))))
-
-
-(let ((index 0))
-  (begin 
-    (set! var/fresh     
-      (lambda (name) 
-        (set! index (+ 1 index))
-        (var name index)))
-    (set! var-reset!
-      (lambda () (set! index 0)))
-    (set! var-number (lambda () index))  
-  )
-)
-
-
-(struct tproj (v cxr)
-  ;;; #:prefab 
-  #:transparent
-  #:guard (lambda (v cxr type-name)
-                    (cond
-                      [(and (var? v) (not (tp-var? v)) (pair? cxr)) 
-                       (values v cxr)]
-                      [else (error type-name
-                                   "bad v: ~e"
-                                   v)]))
-  #:methods gen:custom-write
-  [(define (write-proc val output-port output-mode)
-       (fprintf output-port (pretty-print-tproj val)))]
-)
-
-
-(define/contract (pretty-print-tproj tp)
-  (tproj? . -> . string?)
-  (define/contract (path-pretty x)
-    (list? . -> . string?)
-    (for/fold
-      ([acc ""])
-      ([each x])
-      (string-append 
-        acc
-        (match each ['car "._0"] ['cdr "._1"]))))
-  (let* 
-    ([path (tproj-cxr tp)])
-    (format "~a~a" (tproj-v tp) (path-pretty (reverse path)))))
-
-
-(define (tcar t) 
-  (match t 
-    [(cons a b) a]
-    [(tproj x y) (tproj x (cons 'car y))]
-    [(tp-var x y) (tcar (tproj x y))]
-    [(var _ _) (tproj t (list 'car))]
-    [_ (raise-and-warn "tcar: Unexpected Value ~a" t)]
-  ))
-
-(define (tcdr t) 
-  (match t 
-    [(cons a b) b]
-    [(tproj x y) (tproj x (cons 'cdr y))]
-    [(tp-var x y) (tcdr (tproj x y))]
-    [(var _ _) (tproj t (list 'cdr))]
-    [_ (raise-and-warn "tcdr: Unexpected Value ~a" t)]
-  ))
-
-(define (term? x) (or (var? x) (tproj? x)))
-
-;;; normalize a tproj term so that tproj-v is always a var 
-;;;  tproj (list a b c) (cdr cdr) = c
-;;;  tproj (cons a b) cdr cdr = (tproj b cdr) // var
-;;;  tcar (tproj b cdr) = b.cdr.car
-;;;  tcar (cons a b) = a
-(define (tproj_ term cxr)
-  (if (var? term) 
-    (if (null? cxr)
-      term
-      (tproj term cxr))
-    (match cxr
-      [(cons 'car rest) (tcar (tproj_ term rest))]
-      [(cons 'cdr rest) (tcdr (tproj_ term rest))]
-      ['() term] 
-    ))
-)
-
-
-;; States
-(define empty-sub '())
 
 ;;; Will totally ignore tproj (doing nothing on them)
 (define (walk t sub)
@@ -262,19 +84,7 @@
 (define type-label-top (set true? false? null? pair? number? string? symbol?))
 (define all-inf-type-label (set pair? number? string? symbol?))
 
-;;; sub -- list of assignments
-;;; diseq -- list of list of disassignments
-;;;     -- interpreted as conjunction of disjunction of inequality 
-;;;   typercd : a dictionary index -> set of type-encoding 
-;;;     "as disjunction of possible types"
-;;;   
-(struct state (sub scope diseq typercd) #:prefab)
-(define empty-state (state empty-sub (list initial-var) '() (hash)))
-(define-struct-updaters state)
 
-
-;;; we consider #f is the failed state, also one of the state
-(define (?state? obj) (or (equal? obj #f) (state? obj)))
 
 
 
