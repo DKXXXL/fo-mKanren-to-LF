@@ -1536,7 +1536,7 @@
 
 (Evalo-simple-3-2
   (run 1 (f) 
-    (for-all (y) (evalo `(app (lambda (cons ,f)) (quote ,y)) `(,y . ,y)) ))
+    (for-all (y) (evalo `(app (lambda (cons ,f ,f)) (quote ,y)) `(,y . ,y)) ))
   . test-reg!=> . 'succeed
 )
 

@@ -700,7 +700,7 @@
           ;;; Note: the following decides the soundness of the whole algorithm
           ;;;     because without it, we may not expand the definition of assumption
           ;;;     and really falsifying it
-          ;;; (pause assmpt st-~g1ndec (conj g1-dec (cimpl-syn g1-ndec (Bottom)))) 
+          (pause assmpt st-~g1ndec (conj g1-dec (cimpl-syn g1-ndec (Bottom)))) 
           ;;; and syntactical falsifying 
           (pause assmpt st-g1ndec-g2 (conj g1-dec (cimpl-syn g1-ndec g2))))
           ;;; and syntactical solving
