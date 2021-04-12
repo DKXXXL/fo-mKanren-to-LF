@@ -78,9 +78,11 @@
                       [(andmap procedure? (list bgT? bgf)) 
                        (values 
                           bgT? 
-                          (invariant-assertion 
-                            (bgT? . -> . (cons/c bgT? any?)) 
-                            bgf))]
+                          ;;; (invariant-assertion 
+                          ;;;   (bgT? . -> . (cons/c bgT? any?)) 
+                          ;;;   bgf)
+                          bgf
+                            )]
                       [else (error type-name
                                    "Should be a hashmap")]))
 ;;; #:prefab
@@ -179,7 +181,7 @@
 (define (modify ty)
   (λ (f)
     (do [st <- get-st]
-        [_ <- (set-st (f st))]
+        [_  <- (set-st (f st))]
         [<-return '()])))
 
 
@@ -193,6 +195,8 @@
 (define failed-current-st
   (do 
     [_ <- (set-st #f)]
+    [k <- get-st]
+    [_ = (printf "after failing... : ~a" k)]
     [<-return #f]
   ) 
 )
@@ -364,18 +368,27 @@
     [old-ineq   = (state-diseq old-st)]
     [old-sub    = (state-sub old-st)]
     [new-sub    = (unify/sub u v old-sub)]
-    [_ <- (if new-sub (pure-st '()) failed-current-st)]
-    ;;; [extra-sub  = (extract-new new-sub old-sub)]
+    [_          <- (if new-sub (pure-st '()) failed-current-st)]
+    
+    [_          <- (begin (debug-dump "new-sub1 :~a \n" new-sub) (pure-st '()))]
+    [_          =  (debug-dump "new-sub2 :~a \n" new-sub)]
+    [extra-var  = (map car (extract-new new-sub old-sub))]
     ;;; [new-vars      = (map car new-subst)]
     ;;;   above are for incremental information
-    [all-type-csts = (hash->list old-htable)]
+    ;;; [all-type-csts = (hash->list old-htable)]
+    [new-type-csts = 
+      (map (λ (t) (cons t (hash-ref old-htable t #f))) extra-var)]
+    [related-type-csts =
+      (filter (λ (t) (cdr t)) new-type-csts)]
+    [erased-htable     =
+      (foldl (λ (index htable) (hash-remove htable index)) old-htable extra-var)]
     [rechecking-st = 
         (state-sub-set
           (state-typercd-set 
-            (state-diseq-set old-st '()) (hash)) new-sub)]
+            (state-diseq-set old-st '()) erased-htable) new-sub)]
     [_ <- (set-st rechecking-st)]
     ;;; TODO: Incrementally recheck state information
-    [_ <- (typecst-recheck all-type-csts)]
+    [_ <- (typecst-recheck related-type-csts)]
     [_ <- (inequality-recheck old-ineq)]
     [<-return '()]
   ))
