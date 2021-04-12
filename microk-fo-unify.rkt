@@ -51,6 +51,140 @@
 (require "microk-fo-def.rkt")
 
 
+;;; we introduce monadic style of coding
+;;;   as we will need to change state during
+
+;;; we need to introduct a racket/generic for isNothing
+;;; so that WithBackground is basically StateT (Maybe T)
+;;;  see https://docs.racket-lang.org/reference/struct-generics.html
+
+;;; we can even later supports polymorphic rows/effect for it
+;;;  as we are untyped stuff
+;;; TODO: bg->front = bg -> (bg, front | #f)
+;;;   and bg supports Emptyable as racket/generic
+;;;     Emptyable supports isNone? and none operation
+(struct WithBackground (bgType bg->front) 
+    #:guard (lambda (bgT? bgf type-name)
+                    (cond
+                      [(andmap procedure? (list bgT? bgf)) 
+                       (values 
+                          bgT? 
+                          (invariant-assertion 
+                            (bgT? . -> . (pair-of? bgT? any?)) 
+                            bgf))]
+                      [else (error type-name
+                                   "Should be a hashmap")]))
+;;; #:prefab
+)
+
+
+(define (WithBackgroundOf? u?) 
+  (λ (k)
+    (and (WithBackground? k) (u? (WithBackground-bgType k)))))
+
+
+(define (=== k) (λ (x) (equal? x k)))
+
+;;; dbginfo
+(define/contract (>>= fwb domap dbginfo)
+  (WithBackground? (any? . -> . WithBackground?) any? . -> . WithBackground?)
+  (WithBackground
+    (WithBackground-bgType fwb)
+    (let*
+      ([isNone? false/c] ;; BUGFIX: adopt to generic later
+       [fwbdo (WithBackground-bg->front fwb)])
+        (λ (bg)
+            (if (isNone? bg)
+              (cons bg #f)
+              (match-let* 
+                  ([(cons bg1 fr1) 
+                      (with-handlers 
+                        ([any? (λ (e) (printf "Error is invoked from do: ~s\n" dbginfo) (raise e))])
+                        (fwbdo bg))]
+                   [(WithBackground _ swbdo) (domap fr1)]
+                   [bg2+fr2 (swbdo bg1)])
+                bg2+fr2))))))
+
+(define (>> a b) (>>= a (λ (_) b) #f))
+
+;;; Recall that
+;;; get :: (WB state-type state-type)
+;;; set :: state-type -> (WB state-type '())
+;;;   we might be able to support polymorphic rows/effect (not type inference)
+;;;     on this two operations
+;;; >>= :: (WB x K) x (K -> WB x Y) -> (WB x Y)
+;;; most importantly : do notation
+;;; (do [x = y] sth ...) = match-let ([x y]) in (do sth ...) : (WithBackground ...)
+;;; (do [x <- y] sth ...) = 
+;;;     assert y of type (WB ...)
+;;;     y >>= \x -> (do sth ...)
+;;; with above it is easy to see that we can 
+;;; (do [_ <- y] sth ...) = y >> (do sth ...) 
+;;; (do [<-end x]) = x
+;;; (do [<-return x]) = (pure-st x)
+;;;     usually it is  
+
+;;; (define-syntax (here stx)
+;;;     #`(list (quote-line-number #,stx)))
+
+;;; (define-syntax stab-trace
+;;;   (syntax-rules ()
+;;;     ((_ number k)
+;;;        ((λ (_ t) t) "INFO" k) )
+;;;     ((_ k)
+;;;        ((λ (_ __ t) t) "LINE" (here) k) )   ))
+
+(define-syntax do
+  (syntax-rules (<- <-end <-return =)
+    ((_ [ x = y ] sth ...) 
+      (match-let ([x y]) (do sth ...)))
+    ((_ [ x <- y ] sth ...) 
+      (let* ([_ (assert-or-warn (WithBackground? y) "Type Error at :~s\n" #'y)])
+         (>>= y (match-lambda [x (do sth ...)]) #'y)) ) 
+    ((_ [ <-end y ]) 
+      (let* ([_ (assert-or-warn (WithBackground? y) "Type Error at :~s\n" #'y)]) 
+        y))
+    ((_ [ <-return y ]) 
+      (pure-st y))
+  ))
+
+
+;;; can we multi-stage it? I mean partially evaluate monadic style
+;;; change the following into macro
+(define (get ty) (WB ty (λ (bg) (cons bg bg))))
+(define (set ty) (λ (term) (WB ty (λ (_) (cons term '())))))
+(define (pure ty) (λ (term) (WB ty (λ (bg) (cons bg  term)))) )
+(define (run ty)  
+  (invariant-assertion
+    (ty (WithBackgroundOf? (=== ty)) . -> . any?)
+    (λ (st wb)
+    (match-let* 
+      ([(WithBackground ty? bg->front) wb]
+       [_ (assert-or-warn (ty? st) "Wrong WithBackground Invocation\n")])
+      (bg->front st))))
+  )
+(define (modify ty)
+  (λ (f)
+    (do [st <- get-st]
+        [_ <- (set-st (f st))]
+        [<-return '()])))
+
+
+
+
+(define get-st  (get state-type?))
+(define set-st  (set state-type?))
+(define pure-st (pure state-type?))
+(define run-st  (run state-type?))
+(define modify-st (modify state-type?))
+(define failed-current-st
+  (do 
+    [_ <- (set-st #f)]
+    [<-return #f]
+  ) 
+)
+
+
 
 
 ;;; Will totally ignore tproj (doing nothing on them)
@@ -153,6 +287,8 @@
   (not there-is-non-canonical-var?)
 )
 
+(define ?canonicalized-state? (or/c false/c canonicalized-state?))
+
 
 
 (define (wrap-state-stream st) (and st (cons st #f)))
@@ -226,42 +362,66 @@
   
   )))
 
+
+(define/contract (unify/st u v)
+  (any? any? . -> . (WithBackgroundOf? ?canonicalized-state?))
+  ;;; inequality-recheck :: state -> state
+  (define/contract (inequality-recheck conj-disj-pair)
+    (list? . -> . (WithBackgroundOf? ?canonicalized-state?))
+    (for/fold 
+      ([acc       (pure-st #f)])
+      ([each-disj-list conj-disj-pair])
+        ((neg-unify*/state each-disj) . >> . acc)))
+
+  (define/contract (typecst-recheck var-type-pair)
+    (list? . -> . (WithBackgroundOf? ?canonicalized-state?))
+    (for/fold 
+      ([acc (pure-st '())])
+      ([each var-type-pair])
+      (match-let* 
+        ([(cons v cst) each])
+        ((if (set? cst)
+             (do [<-end (check-as-inf-type-disj/state v cst)])
+             (pure-st '())) 
+         . >> . acc))))
+  (do 
+    [old-st     <- get-st]
+    [old-htable = (state-typercd old-st)]
+    [old-ineq   = (state-diseq old-st)]
+    [old-sub    = (state-sub old-st)]
+    [new-sub    = (unify/sub u v old-sub)]
+    ;;; [extra-sub  = (extract-new new-sub old-sub)]
+    ;;; [new-vars      = (map car new-subst)]
+    ;;;   above are for incremental information
+    [all-type-csts = (hash->list old-htable)]
+    [rechecking-st = 
+        (state-sub-set
+          (state-typercd-set 
+            (state-diseq-set old-st '()) (hash)) new-sub)]\
+    [_ <- (set-st rechecking-st)]
+    ;;; TODO: Incrementally recheck state information
+    [_ <- (typecst-recheck related-type-csts)]
+    [_ <- (inequality-recheck unified-st-ineq)]
+    [<-return '()]
+  ))
+
 ;; Reification
-;;; (define/contract (walk* tm sub)
-;;;   (any? list? . -> . any?)
-;;;   (let ((tm (walk tm sub)))
-;;;     (match tm
-;;;       [(cons a b) (cons (walk* a sub) (walk* b sub))]
-;;;       [(tproj x cxr) (tproj_ (walk x sub) cxr)]
-;;;       [_ tm]
-;;;     )))
-
-;;; ;;; walk with struct respecting
-;;; ;;;  will replace each var inside a structure with what sub points to
-;;; (define/contract (walk-struct-once tm sub)
-;;;   (any? list? . -> . any?)
-;;;     (match tm
-;;;       [(cons a b) (cons (walk-struct-once a sub) (walk-struct-once b sub))]
-;;;       [(tproj x cxr) (walk tm sub)]
-;;;       [(? var?) (walk tm sub)]
-;;;       [_ tm]
-;;;     ))
-
-;;; ;; TODO (greg): currently repeats a lot of work (probably quadratic in pathological cases)
-;;; ;;; walk* -- walk-struct-once until fixpoint
-;;; ;;;  unhalt only if there is cycle in sub
-;;; (define/contract (walk* tm sub)
-;;;   (any? list? . -> . any?)
-;;;   (let* ([tm- (walk-struct-once tm sub)]
-;;;         ;;;  [k (debug-dump "\n walk* ~a -> ~a" tm tm-)]
-;;;          )
-;;;     (if (equal? tm- tm) tm (walk* tm- sub))))
-
 (define (walk* tm sub)
   (let ((tm (walk tm sub)))
     (if (pair? tm)
         `(,(walk* (car tm) sub) .  ,(walk* (cdr tm) sub))
         tm)))
+
+(define/contract (walk*/st tm)
+  (any . -> . (WithBackgroundOf? state?))
+  (do 
+    [st  <- get-st]
+    [sub =  (state-sub st)]
+    [tm  =  (walk tm sub)]
+    [<-return 
+      (if (pair? tm)
+          `(,(walk* (car tm) sub) .  ,(walk* (cdr tm) sub))
+          tm)]))
 
 (define (reified-index index)
   (string->symbol
@@ -373,6 +533,43 @@
       ]
   )
 )
+
+;;; neg-unify* : given a list of pairs, indicating 
+;;;   disjunction of inequality, solve them according to the current state
+;;;   return a state that satisifies the disjunction of inequalities
+(define (neg-unify*/st list-u-v)
+  ((list/c pair?) . -> . (WithBackgroundOf? ?canonicalized-state?))
+  (match list-u-v 
+    ['() failed-current-st]
+    [(cons (cons u v) rest) 
+        (do 
+          [old-st <- get-st]
+          ;;; run with nested do
+          ;;;     because this do is a composition of maybe and state
+          ;;;     so we can avoid 
+          [(cons _ newly-added) =
+            (run-st old-st
+              (do [_ <- (unify/st u v)]
+                  [new-st  <- get-st]
+                  [old-sub = (state-sub old-st)]
+                  [new-sub = (state-sub new-st)]
+                  [<-return (extract-new new-sub old-sub)]))]
+          [<-end 
+            (match newly-added
+              ;;; 1. if unification fails, then inequality is just satisfied 
+              ;;;     st is directly returned
+              [#f   (pure-st '())]
+              ;;; 2. if unification succeeded, this mean the current state cannot
+              ;;;     satisifies the inequality, let's consider the next possible-inequality
+              ['()  (neg-unify*/st rest)]
+              ;;; 3. if unification succeeded with extra condition
+              ;;;     that means inequality should succeed with extra condition
+              ;;;     we lazily put these things together and store into state
+              [(cons _ _) 
+                  (set-st 
+                    (state-diseq-update old-st 
+                      (lambda (x) (cons (append newly-added rest) x))))
+                ])])]))
 
 
 (define (state-sub-update-nofalse st f)
