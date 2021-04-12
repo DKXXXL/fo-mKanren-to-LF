@@ -660,6 +660,54 @@
     infinite-type-checked-state
 )
 
+
+;;; check-as-inf-type-disj: set[inf-type-predicate] x term x state -> state
+;;;  currently it will use predicate as marker
+;;;  precondition: type?* is never #f, st is never #f
+;;;   precondition: type?* \subseteq all-inf-type-label
+(define/contract (check-as-inf-type-disj/st type?* t_)
+  (set? any? . -> . (WithBackgroundOf? (or/c false/c canonicalized-state?)))
+  (assert-or-warn (subset? type?* all-inf-type-label) 
+    "check-as-inf-type-disj cannot handle these type constraints ~a" type?*)
+  ;;; TODO: fixing the case when type?* is actually empty
+  ;;;     if it is empty, then we state that t is of finite type
+  ;;; (assert-or-warn (not (set-empty? type?*) ) 
+  ;;;   "check-as-inf-type-disj cannot handle when type?* is empty")
+  
+  (define inf-type?* type?*)
+  (do 
+    [_ <- (if (set-empty? inf-type?*) failed-current-st (pure-st '()))]
+    [t <- (walk*/st t_)]
+    [<-end 
+      (match t
+        [(? var?)
+            (do [st       <- get-st]
+                [htable            = (state-typercd st)]
+                [before-type-info  = (hash-ref htable v all-inf-type-label)]
+                [intersected-types = (set-intersect type-info inf-type?*)]
+                [<-end 
+                  (cond
+                    [(set-empty? intersected-types)   
+                        failed-current-st]
+                    [(equal? (set pair?) intersected-types)
+                        (do [t1 = (var/fresh 't1)]
+                            [t2 = (var/fresh 't2)]
+                            [current-st <- get-st]
+                            [_ <- (set-st
+                                    (state-typercd-update current-st 
+                                      (λ (htable) (hash-remove htable t))))]
+                            [<-end (unify/st t (cons t1 t2))])]
+                    [#t 
+                        (set-st
+                          (state-typercd-update st 
+                            (λ (x) (hash-set x v intersected-types))))])])]
+        [v 
+          (do 
+            [st <- get-st]
+            [new-st (and (ormap (lambda (x?) (x? v)) (set->list inf-type?*)) st)]
+            [<-end  (if new-st (set-st new-st) failed-current-st)])])]))
+
+
 ;;; check-as-inf-type :: inf-type-label  x term x (state or #f) -> (state or #f)
 ;;;  precondition: type? \in all-inf-type-label 
 ;;;  if type-label = #f, then we will just return st
