@@ -29,7 +29,6 @@
   wrap-state-stream
   check-as-inf-type-disj
   check-as-inf-type
-  type-label-top
   all-inf-type-label
   true?
   false?
@@ -51,6 +50,16 @@
 (require "microk-fo-def.rkt")
 
 
+
+(define (any? _) #t)
+;;; (define type-label-top (set true? false? null? pair? number? string? symbol?))
+(define all-inf-type-label (set pair? number? string? symbol?))
+
+
+
+
+
+
 ;;; we introduce monadic style of coding
 ;;;   as we will need to change state during
 
@@ -70,7 +79,7 @@
                        (values 
                           bgT? 
                           (invariant-assertion 
-                            (bgT? . -> . (pair-of? bgT? any?)) 
+                            (bgT? . -> . (cons/c bgT? any?)) 
                             bgf))]
                       [else (error type-name
                                    "Should be a hashmap")]))
@@ -78,10 +87,13 @@
 )
 
 
-(define (WithBackgroundOf? u?) 
-  (λ (k)
-    (and (WithBackground? k) (u? (WithBackground-bgType k)))))
+;;; (define (WithBackgroundOf? u?) 
+;;;   (λ (k)
+;;;     (and (WithBackground? k) (equal? u? (WithBackground-bgType k)))) )
 
+
+(define (WithBackgroundOf? u?) 
+  WithBackground?)
 
 (define (=== k) (λ (x) (equal? x k)))
 
@@ -91,7 +103,7 @@
   (WithBackground
     (WithBackground-bgType fwb)
     (let*
-      ([isNone? false/c] ;; BUGFIX: adopt to generic later
+      ([isNone? (λ (t) (equal? t #f))] ;; BUGFIX: adopt to generic later
        [fwbdo (WithBackground-bg->front fwb)])
         (λ (bg)
             (if (isNone? bg)
@@ -148,11 +160,12 @@
       (pure-st y))
   ))
 
+(define WB WithBackground)
 
 ;;; can we multi-stage it? I mean partially evaluate monadic style
 ;;; change the following into macro
 (define (get ty) (WB ty (λ (bg) (cons bg bg))))
-(define (set ty) (λ (term) (WB ty (λ (_) (cons term '())))))
+(define (sets ty) (λ (term) (WB ty (λ (_) (cons term '())))))
 (define (pure ty) (λ (term) (WB ty (λ (bg) (cons bg  term)))) )
 (define (run ty)  
   (invariant-assertion
@@ -172,11 +185,11 @@
 
 
 
-(define get-st  (get state-type?))
-(define set-st  (set state-type?))
-(define pure-st (pure state-type?))
-(define run-st  (run state-type?))
-(define modify-st (modify state-type?))
+(define get-st  (get (or/c false/c state?)))
+(define set-st  (sets (or/c false/c state?)))
+(define pure-st (pure (or/c false/c state?)))
+(define run-st  (run (or/c false/c state?)))
+(define modify-st (modify (or/c false/c state?)))
 (define failed-current-st
   (do 
     [_ <- (set-st #f)]
@@ -213,12 +226,6 @@
 
 (define (true? v) (equal? v #t))
 (define (false? v) (equal? v #f))
-
-
-(define type-label-top (set true? false? null? pair? number? string? symbol?))
-(define all-inf-type-label (set pair? number? string? symbol?))
-
-
 
 
 
@@ -291,7 +298,9 @@
 
 
 
-(define (wrap-state-stream st) (and st (cons st #f)))
+(define/contract (wrap-state-stream st)
+  ((or/c false/c state?) . -> . (or/c false/c Stream?))
+  (and st (cons st #f)))
 
 ;;; state x var x (set of/list of) typeinfo -> state
 (define/contract (state-typercd-cst-add st v type-info)
@@ -307,7 +316,6 @@
   (state-typercd-set st new-type-info)
 )
 
-(define (any? _) #t)
 
 ;;; check if a given state has a valid/consistent type constraints
 ;;;   if not, return #f
@@ -323,44 +331,9 @@
 (define/contract (unify u v st)
   (any? any? state? . -> . Stream?)
   ;;; inequality-recheck :: state -> state
-  (define (inequality-recheck st)
-    (define conj-all-diseq (state-diseq st))
-    (define (neg-unify*-on-corner list-u-v st)
-      (and st (neg-unify* list-u-v st))
-    )
-    (foldl neg-unify*-on-corner (state-diseq-set st '()) conj-all-diseq)
-  )
-
-  (let* ([sub (unify/sub u v (state-sub st))]
-         [htable (state-typercd st)])
-    (and sub
-      (let* ([unified-state (state-sub-set st sub)]
-              ;;;  sub : var -> term
-              ;;;   term -> type
-              ;;;  check
-              [new-subst (extract-new sub (state-sub st))]
-              ;;;  extract newly added variables
-              ;;;  [(u v), (j k)]
-              [new-vars (map car new-subst)]
-              ;;; [new-vars-indices (map var-index new-vars)]
-              ;;; TODO: unifies the representation
-              [new-vars-types (map (lambda (x) (hash-ref htable x #f) ) new-vars)]
-              [erased-htable (foldl (lambda (index htable) (hash-remove htable index)) htable new-vars)]
-              [erased-type-state (state-typercd-set unified-state erased-htable)]
-              ;;; TODO: check-as-inf-type-disj might have corner 
-              ;;;   case where first element is null
-              [check-as-inf-type-disj*-c 
-                (lambda (type?* t st) (if (and type?* st) (check-as-inf-type-disj type?* t st) st))]
-              [checked-type-state (foldl check-as-inf-type-disj*-c
-                                         erased-type-state 
-                                         new-vars-types new-vars)]
-              [after-ineq-check-st (and checked-type-state
-                                        (inequality-recheck checked-type-state))]
-              [_ (assert ((or/c false/c canonicalized-state?) after-ineq-check-st))])
-        ;;;  TODO: short-circuit the possible #f appearing inside foldl
-        (wrap-state-stream after-ineq-check-st))
-  
-  )))
+  (wrap-state-stream
+    (car (run-st st (unify/st u v))))
+)
 
 
 (define/contract (unify/st u v)
@@ -371,7 +344,7 @@
     (for/fold 
       ([acc       (pure-st #f)])
       ([each-disj-list conj-disj-pair])
-        ((neg-unify*/state each-disj) . >> . acc)))
+        ((neg-unify*/st each-disj-list) . >> . acc)))
 
   (define/contract (typecst-recheck var-type-pair)
     (list? . -> . (WithBackgroundOf? ?canonicalized-state?))
@@ -381,7 +354,7 @@
       (match-let* 
         ([(cons v cst) each])
         ((if (set? cst)
-             (do [<-end (check-as-inf-type-disj/state v cst)])
+             (do [<-end (check-as-inf-type-disj/st v cst)])
              (pure-st '())) 
          . >> . acc))))
   (do 
@@ -390,6 +363,7 @@
     [old-ineq   = (state-diseq old-st)]
     [old-sub    = (state-sub old-st)]
     [new-sub    = (unify/sub u v old-sub)]
+    [_ <- (if new-sub (pure-st '()) failed-current-st)]
     ;;; [extra-sub  = (extract-new new-sub old-sub)]
     ;;; [new-vars      = (map car new-subst)]
     ;;;   above are for incremental information
@@ -397,23 +371,24 @@
     [rechecking-st = 
         (state-sub-set
           (state-typercd-set 
-            (state-diseq-set old-st '()) (hash)) new-sub)]\
+            (state-diseq-set old-st '()) (hash)) new-sub)]
     [_ <- (set-st rechecking-st)]
     ;;; TODO: Incrementally recheck state information
-    [_ <- (typecst-recheck related-type-csts)]
-    [_ <- (inequality-recheck unified-st-ineq)]
+    [_ <- (typecst-recheck all-type-csts)]
+    [_ <- (inequality-recheck old-ineq)]
     [<-return '()]
   ))
 
 ;; Reification
-(define (walk* tm sub)
+(define/contract (walk* tm sub)
+  (any? list? . -> . any?)
   (let ((tm (walk tm sub)))
     (if (pair? tm)
         `(,(walk* (car tm) sub) .  ,(walk* (cdr tm) sub))
         tm)))
 
 (define/contract (walk*/st tm)
-  (any . -> . (WithBackgroundOf? state?))
+  (any/c . -> . (WithBackgroundOf? state?))
   (do 
     [st  <- get-st]
     [sub =  (state-sub st)]
@@ -500,38 +475,7 @@
 ;;;   return a state that satisifies the disjunction of inequalities
 (define (neg-unify* list-u-v st)
   ((list/c pair?) state? . -> . (or/c false/c canonicalized-state?))
-  (match list-u-v 
-    ['() #f]
-    [(cons (cons u v) rest) 
-        (let* (
-          [subst (state-sub st)]
-          ;;; [old-type-info (state-typercd st)]
-          [unification-info-single-stream (unify u v st)]
-          [unification-info-st 
-            (and unification-info-single-stream 
-                 (car unification-info-single-stream))]
-          [unification-info 
-            (and unification-info-st 
-                 (state-sub unification-info-st))]
-          [newly-added (extract-new unification-info subst)]
-              ;;; I should check unification result
-          )
-    (match newly-added
-      ;;; 1. if unification fails, then inequality is just satisfied 
-      ;;;     st is directly returned
-      [#f st]
-      ;;; 2. if unification succeeded, this mean the current state cannot
-      ;;;     satisifies the inequality, let's consider the next possible-inequality
-      ['() (neg-unify* rest st)]
-      ;;; 3. if unification succeeded with extra condition
-      ;;;     that means inequality should succeed with extra condition
-      ;;;     we lazily put these things together and store into state
-      [(cons _ _) 
-        (state-diseq-update st (lambda (x) (cons (append newly-added rest) x)))
-        ])       
-        )
-      ]
-  )
+  (car (run-st st (neg-unify*/st list-u-v)))
 )
 
 ;;; neg-unify* : given a list of pairs, indicating 
@@ -568,8 +512,7 @@
               [(cons _ _) 
                   (set-st 
                     (state-diseq-update old-st 
-                      (lambda (x) (cons (append newly-added rest) x))))
-                ])])]))
+                      (lambda (x) (cons (append newly-added rest) x))))])])]))
 
 
 (define (state-sub-update-nofalse st f)
@@ -599,66 +542,7 @@
 ;;;   precondition: type?* \subseteq all-inf-type-label
 (define/contract (check-as-inf-type-disj type?* t st)
   (set? any? (or/c false/c canonicalized-state?) . -> . (or/c false/c canonicalized-state?))
-  (assert-or-warn (subset? type?* all-inf-type-label) 
-    "check-as-inf-type-disj cannot handle these type constraints ~a" type?*)
-  ;;; TODO: fixing the case when type?* is actually empty
-  ;;;     if it is empty, then we state that t is of finite type
-  ;;; (assert-or-warn (not (set-empty? type?*) ) 
-  ;;;   "check-as-inf-type-disj cannot handle when type?* is empty")
-  
-  (define inf-type?* type?* )
-
-  (define infinite-type-checked-state ;;; type : state
-    (and 
-      st 
-      (not (set-empty? inf-type?*))
-      ;;; TODO: fixing the case when type?* is actually empty
-      ;;;     if it is empty, then we state that t is of finite type
-      (match (walk* t (state-sub st))
-          ;;; BUGFIX: here we have tp-var as well!!
-          [(var name index) 
-            ;;; check if there is already typercd for index on symbol
-            (let* ([v (var name index)]
-                   [htable (state-typercd st)]
-                   [type-info (hash-ref htable v 'False)])
-              (if (not (equal? type-info 'False))
-                ;;; type-info is a set of predicates
-                ;;;  disjunction of type is conflicting
-                (let* ([intersected (set-intersect type-info inf-type?*)])
-                ;;;  TODO: when intersected result is actually just pair?, 
-                ;;;    we need to make a substitution
-
-                ;;; if it is empty list then we failed
-                  (match intersected
-                    [(? set-empty?) #f]
-                    ;; this part is very weird... as we can see most fresh is not really existential
-                    ;;;   quantifier because they don't specify scope!!
-                    ;;;  here it is even more complicated ... what is the scope of a b?
-                    ;;;    if we don't know the scope, will it cause problem when generating trace?
-                    [(? (λ (the-set) (equal? the-set (set pair?))))
-                      (let* ([t1 (var/fresh 't1)]
-                             [t2 (var/fresh 't2)]
-                             [st-unify-updated 
-                                    (state-sub-update-nofalse st 
-                                      (lambda (sub) (unify/sub t (cons t1 t2) sub)))]
-                             [st-tyrcd-updated
-                                    (state-typercd-update st-unify-updated (lambda (tyrcd) (hash-remove tyrcd t))) ]
-                             )
-                        ;;; TODO: recheck this part 
-                        ;;; 1. these two new vars have no good scope info *
-                        ;;; 2. unify/sub doesn't seem to do more checking? ** 
-                        ;;; 3. then we remove type information
-                        st-tyrcd-updated) ]  
-                    [_   (state-typercd-update st (lambda (x) (hash-set x v intersected)))]
-                    )
-                  
-                )
-                (state-typercd-update st (lambda (x) (hash-set x v type?*)))) ) ]
-
-          [v (and (ormap (lambda (x?) (x? v)) (set->list inf-type?*)) st)]) ))
-    ;;; return the following
-    infinite-type-checked-state
-)
+  (car (run-st st (check-as-inf-type-disj/st type?* t))))
 
 
 ;;; check-as-inf-type-disj: set[inf-type-predicate] x term x state -> state
@@ -683,8 +567,8 @@
         [(? var?)
             (do [st       <- get-st]
                 [htable            = (state-typercd st)]
-                [before-type-info  = (hash-ref htable v all-inf-type-label)]
-                [intersected-types = (set-intersect type-info inf-type?*)]
+                [before-type-info  = (hash-ref htable t all-inf-type-label)]
+                [intersected-types = (set-intersect before-type-info inf-type?*)]
                 [<-end 
                   (cond
                     [(set-empty? intersected-types)   
@@ -700,11 +584,11 @@
                     [#t 
                         (set-st
                           (state-typercd-update st 
-                            (λ (x) (hash-set x v intersected-types))))])])]
+                            (λ (x) (hash-set x t intersected-types))))])])]
         [v 
           (do 
             [st <- get-st]
-            [new-st (and (ormap (lambda (x?) (x? v)) (set->list inf-type?*)) st)]
+            [new-st = (and (ormap (lambda (x?) (x? v)) (set->list inf-type?*)) st)]
             [<-end  (if new-st (set-st new-st) failed-current-st)])])]))
 
 
