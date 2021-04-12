@@ -491,7 +491,6 @@
         ;;;   (syn-solve on g with init-assmpt)
         ;;;   w/-disj will calculate some parts of the above stream again
         ;;;     as we already half way through init-assmpt
-        (fresh-param (lhs rhs split lhs-assmpt rhs-assmpt)
           (let* (
               [split-goal (conj (cimpl a g) (cimpl b g))]
               [st-pf-filled st]
@@ -499,9 +498,9 @@
               [w/-disj  (pause reduced-assmpt st-pf-filled split-goal)]
               [w/o-disj (syn-solve remain-assmpt init-assmpt st g)]    
               )
-            (mplus w/-disj w/o-disj)))]
+            (mplus w/-disj w/o-disj))]
       [(cimpl a b)
-          (fresh-param (applied argument)
+          (fresh-param (applied)
             (let* (
                 [st-pf-filled  st]
                 [reduced-assmpt (filter (lambda (x) (not (equal? top-name-assmpt x))) init-assmpt)]
@@ -517,7 +516,6 @@
       [(ex v t)
       ;;; the key idea is that
       ;;; ((forall v (R . cimpl . g)) and (ex v R)) . cimpl . g
-          (fresh-param (axiom-deconstructor subgoal)
             (let* (
                 [subgoal-ty (for-all (x) ( (t . subst . [x // v]) . cimpl . g ))]
                 [st-pf-filled st]
@@ -529,9 +527,9 @@
                 )
               (mplus 
                 (syn-solve remain-assmpt init-assmpt st g)
-                (pause reduced-assmpt st-pf-filled subgoal-ty))))]
+                (pause reduced-assmpt st-pf-filled subgoal-ty)))]
       [(forall v domain t)
-            (fresh-param (applied-term dp2)
+            (fresh-param (applied-term)
             (let* (
                 [VT (fresh-var VT)]
                 [forall-internal (cimpl domain t)]
@@ -656,8 +654,7 @@
     ((conj g1 g2)
     ;;; will add g1 into assumption when solving g2
     ;;;   different from cimpl that state will be impacted after solving g1
-     (fresh-param (left-v)
-       (let* ([st-pf-filled  st]
+      (let* ([st-pf-filled  st]
               ;;; Note: Also a stupid heurstic
               ;;; Warning!!!: later we will use cons-assmpt to sieve
               ;;;   the valid assumption into assumption base
@@ -667,7 +664,7 @@
               ;;; [new-assmpt (if (relate? g1) (cons-assmpt left-v g1 assmpt) assmpt)]
               [new-assmpt assmpt]
             )
-       (step (bind new-assmpt (pause assmpt st-pf-filled g1) g2)))))
+       (step (bind new-assmpt (pause assmpt st-pf-filled g1) g2))))
     ;;; the real syntactical solving for cimpl
     ((cimpl-syn g1 g2)
       (fresh-param (name-g1)
