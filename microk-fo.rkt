@@ -141,9 +141,24 @@
 ;;; )
 
 
+(define (collect-all-that pred anything)
+  (define result (mutable-set))
+  (define (each-case rec-parent rec g)
+    (match g
+      [(? pred) (begin (set-add! result g) g)] ;; local side-effect
+      [o/w (rec-parent g)]
+    )
+  )
+  (define result-f 
+    (compose-maps (list each-case goal-term-base-map pair-base-map state-base-endo-functor hash-key-value-map identity-endo-functor))
+  )
+  (result-f anything)
+  result
+)
+
 ;;; currently implemented with side-effect,
 ;;;   it is another kind of fold but I am bad at recursion scheme
-;;;   basically return all free-variables appearing inside g
+;;;   basically return all variables appearing inside g
 (define (goal-vars g)
   (define fvs (mutable-set))
   (define (counter rec-parent rec-root g)
@@ -1503,85 +1518,140 @@
         (forall k (Top) (for-bound (x ...) conds g0 gs ... )) )
     )))
 
-
-
 ;;; given a state in unmentioned-exposed-form
-;;;   return a state, where unmentioned-var are replaced as much as possible
-;;;     "as much as" is because there are cases that unmentioned-var
-;;;     has no relationship with other vars, so cannot be eliminated
-;;; precondition: must in field-proj form
-;;; TODO: maybe many more bugs are here
+;;;   return a state, where unmentioned-var are all replaced
+;;;   while the original equality class information is untouched
+;;;   more concretely
+;;;   1. we make sure every equality class takes a mentioned var as representative
+;;;   2. every mentioned-var will be mapped to an equality class representative
+;;;   3. unmentioned var will disappear 
+;;; precondition: in field-proj-form
 (define/contract (unmentioned-substed-form mentioned-vars st)
   (set? state? . -> . state?)
+  (define sub (state-sub st))
+  (define all-terms (collect-all-that (or/c tproj? var?) st))
+  (define (is-mentioned? v)
+    (vars-member? mentioned-vars v))
+  (define (is-unmentioned? v) (not (is-mentioned? v)))
+  (define-values (mentioned-terms unmentioned-terms)
+    (for/fold 
+      ([mentioned (set)] [unmentioned (set)])
+      ([each all-terms])
+      (values
+        (if (is-mentioned? each)
+            (set-add mentioned each)
+            mentioned)
+        (if (is-unmentioned? each)
+            (set-add unmentioned each)
+            unmentioned))))
+  ;;; we get a subst all about mentioned, 
+  ;;;     also can considered as a mapping from eac mentioned term to
+  ;;;     its representative of equality class
+  (define mentioned-subst
+    (map (λ (t) (cons t (walk* t sub))) (set->list mentioned-terms)))
   
-  (define (tproj-or-var? x) (or (var? x) (tproj? x)))
-  ;;; following function will swap lhs and rhs of equation
-  ;;;   if lhs is not unmentioned but rhs is
-  ;;; postcondition: 
-  ;;; 1. the lhs must be a var
-  ;;; 2. if lhs is mentioned, then rhs must be mentioned
-  ;;; 3. unsafe as substitution list as we are doing lhs/rhs swapping
-  ;;;     might causing cycle in subst list, but those have unmentioned will soon removed
-  ;;; 4. if there is unmentioned var, it must appear on the left hand side
-  (define (swap-if-rhs-unmentioned eq)
-    (define lhs (car eq))
-    (define rhs (cdr eq))
-    (define lhs-has-mentioned-var
-      (vars-member? mentioned-vars lhs))
-
-    (define rhs-has-unmentioned-var
-      (vars-missing? mentioned-vars rhs))
-
-    (if (and lhs-has-mentioned-var rhs-has-unmentioned-var)
-      (cons rhs lhs) ;; doing swap
-      eq))
-
-  (define old-eqs (state-sub st))
-  (define (remove-unnecessary-equation eqs)
-    (filter 
-      (λ(t)
-        (and (pair? t)
-          (not (equal? (car t) (cdr t)))))
-      eqs)
-  )
-
-  ;;; precondition: st has empty sub
-  (define (unmention-remove-everywhere eqs0 st)
-    ;;; (define eqs (state-sub st))
-    (define eqs (remove-unnecessary-equation eqs0))
-    (if (equal? eqs '())
-      st
-      (match (swap-if-rhs-unmentioned (car eqs))
-        [(cons lhs rhs)
-          #:when (vars-missing? mentioned-vars lhs) 
-          ; when there is unmentioned var, thus equation needs removed
-          ;;;  this should handle [(a == b, b == c), remove b] -> (a == c)
-          (match-let* 
-            ([new-rhs (walk* rhs (cdr eqs))]
-             [(cons new-st remain-eqs) (literal-replace lhs new-rhs (cons st (cdr eqs)))]
-            ;;;  [k (debug-dump  "\n     unmentioned-subst: ~a -> ~a" lhs rhs)]
-            )
-            (unmention-remove-everywhere remain-eqs new-st))]
-        [(cons v rhs)
-          ;;; BUG: rhs is not rewritten
-          (state-sub-update 
-            (unmention-remove-everywhere (cdr eqs) st)
-            (lambda (eqs-) (cons (cons v rhs) eqs-)))]
+  ;;; we take out all unmentioned-var-representative
+  (define unmention-subst
+    (for/fold
+      ([acc '()])
+      ([each mentioned-subst])
+      (match-let* 
+        ([(cons L R) each])
+        (if (set-member? unmentioned-terms R) (cons (cons R L) acc) acc))))
+  
+  (define unmentioned-mapping (make-immutable-hash unmention-subst))
+  (let* 
+      ([remove-unmentioned 
+          (literal-replace* unmentioned-mapping mentioned-subst)]
+       [new-sub
+          (filter (λ (t) (not (equal? (car t) (cdr t)))) remove-unmentioned)]
+       [st-w/o-sub      (state-sub-set st empty-sub)]
+       [new-st-w/o-sub 
+          (literal-replace* unmentioned-mapping st-w/o-sub)]
+       
+       [new-st (state-sub-set new-st-w/o-sub new-sub)]
       )
-    ))
-  ;;; (define new-eqs (filter (lambda (x) (set-member? mentioned-vars (car x))) old-eqs))
-  
-  (define result-st (unmention-remove-everywhere old-eqs (state-sub-set st '())))
-  ;;; TODO: change to unify-equations
-  (define (swap-to-lhs-var eq)
-    (define lhs (car eq))
-    (define rhs (cdr eq))
-
-    (if (not (tproj-or-var? lhs))
-      (cons rhs lhs) ;; doing swap
-      eq))
-  (state-sub-update result-st (lambda (eqs) (map swap-to-lhs-var eqs)))
+      new-st)
 )
+
+
+;;; ;;; given a state in unmentioned-exposed-form
+;;; ;;;   return a state, where unmentioned-var are replaced as much as possible
+;;; ;;;     "as much as" is because there are cases that unmentioned-var
+;;; ;;;     has no relationship with other vars, so cannot be eliminated
+;;; ;;; precondition: must in field-proj form
+;;; ;;; TODO: maybe many more bugs are here
+;;; (define/contract (unmentioned-substed-form mentioned-vars st)
+;;;   (set? state? . -> . state?)
+  
+;;;   (define (tproj-or-var? x) (or (var? x) (tproj? x)))
+;;;   ;;; following function will swap lhs and rhs of equation
+;;;   ;;;   if lhs is not unmentioned but rhs is
+;;;   ;;; postcondition: 
+;;;   ;;; 1. the lhs must be a var
+;;;   ;;; 2. if lhs is mentioned, then rhs must be mentioned
+;;;   ;;; 3. unsafe as substitution list as we are doing lhs/rhs swapping
+;;;   ;;;     might causing cycle in subst list, but those have unmentioned will soon removed
+;;;   ;;; 4. if there is unmentioned var, it must appear on the left hand side
+;;;   (define (swap-if-rhs-unmentioned eq)
+;;;     (define lhs (car eq))
+;;;     (define rhs (cdr eq))
+;;;     (define lhs-has-mentioned-var
+;;;       (vars-member? mentioned-vars lhs))
+
+;;;     (define rhs-has-unmentioned-var
+;;;       (vars-missing? mentioned-vars rhs))
+
+;;;     (if (and lhs-has-mentioned-var rhs-has-unmentioned-var)
+;;;       (cons rhs lhs) ;; doing swap
+;;;       eq))
+
+;;;   (define old-eqs (state-sub st))
+;;;   (define (remove-unnecessary-equation eqs)
+;;;     (filter 
+;;;       (λ(t)
+;;;         (and (pair? t)
+;;;           (not (equal? (car t) (cdr t)))))
+;;;       eqs)
+;;;   )
+
+;;;   ;;; precondition: st has empty sub
+;;;   (define (unmention-remove-everywhere eqs0 st)
+;;;     ;;; (define eqs (state-sub st))
+;;;     (define eqs (remove-unnecessary-equation eqs0))
+;;;     (if (equal? eqs '())
+;;;       st
+;;;       (match (swap-if-rhs-unmentioned (car eqs))
+;;;         [(cons lhs rhs)
+;;;           #:when (vars-missing? mentioned-vars lhs) 
+;;;           ; when there is unmentioned var, thus equation needs removed
+;;;           ;;;  this should handle [(a == b, b == c), remove b] -> (a == c)
+;;;           (match-let* 
+;;;             ([new-rhs (walk* rhs (cdr eqs))]
+;;;              [(cons new-st remain-eqs) (literal-replace lhs new-rhs (cons st (cdr eqs)))]
+;;;             ;;;  [k (debug-dump  "\n     unmentioned-subst: ~a -> ~a" lhs rhs)]
+;;;             )
+;;;             (unmention-remove-everywhere remain-eqs new-st))]
+;;;         [(cons v rhs)
+;;;           ;;; BUG: rhs is not rewritten
+;;;           (state-sub-update 
+;;;             (unmention-remove-everywhere (cdr eqs) st)
+;;;             (lambda (eqs-) (cons (cons v rhs) eqs-)))]
+;;;       )
+;;;     ))
+;;;   ;;; (define new-eqs (filter (lambda (x) (set-member? mentioned-vars (car x))) old-eqs))
+  
+;;;   (define result-st (unmention-remove-everywhere old-eqs (state-sub-set st '())))
+;;;   ;;; TODO: change to unify-equations
+;;;   (define (swap-to-lhs-var eq)
+;;;     (define lhs (car eq))
+;;;     (define rhs (cdr eq))
+
+;;;     (if (not (tproj-or-var? lhs))
+;;;       (cons rhs lhs) ;; doing swap
+;;;       eq))
+;;;   (state-sub-update result-st (lambda (eqs) (map swap-to-lhs-var eqs)))
+;;; )
 
 ;;; given a state in unmentioned-subst-form and field-projected-form
 ;;;   return a state, where 
@@ -1691,20 +1761,10 @@
 ;;; given compositions of data structure where there is tproj appearances
 ;;;  return a set of all tprojs appear inside
 (define (collect-tprojs anything)
-  (define result (mutable-set))
-  (define (each-case rec-parent rec g)
-    (match g
-      [(tproj _ _) (set-add! result g)] ;; local side-effect
-      [o/w (rec-parent g)]
-    )
-  )
-  (define result-f 
-    (compose-maps (list each-case goal-term-base-map pair-base-map state-base-endo-functor hash-key-value-map identity-endo-functor))
-  )
-  (result-f anything)
-  result
-
+  (collect-all-that tproj? anything)
 )
+
+
 
 (define/contract (eliminate-tproj-in-st st)
   (state? . -> . state?)

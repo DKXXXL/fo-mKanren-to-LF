@@ -410,11 +410,8 @@
   (do 
     [st  <- get-st]
     [sub =  (state-sub st)]
-    [tm  =  (walk tm sub)]
-    [<-return 
-      (if (pair? tm)
-          `(,(walk* (car tm) sub) .  ,(walk* (cdr tm) sub))
-          tm)]))
+    [tm  =  (walk* tm sub)]
+    [<-return tm]))
 
 (define (reified-index index)
   (string->symbol
