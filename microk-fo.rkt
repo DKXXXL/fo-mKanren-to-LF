@@ -875,28 +875,29 @@
                    ;; (x = (cons x y) ) (cons a x) = (cons a y) -> x = y
                   ;;;  (x = (cons a y)) => (a = x.car, y = x.cdr  )
                    [field-projected-st (field-proj-form st)]
-                   [domain-enforced-st (domain-enforcement-st field-projected-st)]
-                   [unmention-substed-st (unmentioned-substed-form mentioned-var domain-enforced-st)]
-                   [relative-complemented-goal-original (relative-complement unmention-substed-st current-vars v)]
+                   
+                   [subst-canonical-st (unmentioned-substed-form mentioned-var field-projected-st)]
+                   [domain-enforced-st (domain-enforcement-st subst-canonical-st)]
+                   [relative-complemented-goal-original (relative-complement domain-enforced-st current-vars v)]
                    [relative-complemented-goal (all-linear-simplify relative-complemented-goal-original)]
                   ;;;  remove more than one variable is good, make state as small as possible
                    
-                   [shrinked-st (shrink-away unmention-substed-st current-vars v)]
-                   [next-domain (simplify-domain-wrt assmpt (valid-type-constraints-check shrinked-st) (conj relative-complemented-goal domain) v)]
-                   [will-next-exit (equal? next-domain (Bottom))]
+                   [shrinked-st (shrink-away subst-canonical-st current-vars v)]
+                  ;;;  [next-domain (simplify-domain-wrt assmpt (valid-type-constraints-check shrinked-st) (conj relative-complemented-goal domain) v)]
+                  ;;;  [will-next-exit (equal? next-domain (Bottom))]
                    [k (begin  
 
-                              (if will-next-exit
+                              (if #t
                                 (begin 
                                   (debug-dump "\n current state initial var: ~v" (reify/initial-var st))
                                   (debug-dump "\n shrinked state initial var: ~v" (reify/initial-var shrinked-st))
                                   (debug-dump "\n current state: ~v" st)
                                   (debug-dump "\n field-projected-st: ~a"  field-projected-st)
                                   ;;; (debug-dump "\n field-projected-st initial var: ~a" (reify/initial-var (eliminate-tproj-in-st field-projected-st)))
+                                  (debug-dump "\n subst-canonical-st: ~a" subst-canonical-st)
+                                  ;;; (debug-dump "\n unmention-substed-st initial var: ~a" (reify/initial-var (eliminate-tproj-in-st unmention-substed-st)))
                                   (debug-dump "\n domain-enforced-st: ~a" domain-enforced-st)
                                   ;;; (debug-dump "\n domain-enforced-st initial var: ~a" (reify/initial-var (eliminate-tproj-in-st domain-enforced-st)))
-                                  (debug-dump "\n unmention-substed-st: ~a" unmention-substed-st)
-                                  ;;; (debug-dump "\n unmention-substed-st initial var: ~a" (reify/initial-var (eliminate-tproj-in-st unmention-substed-st)))
 
                                   (debug-dump "\n relative-complemented-goal: ~v" relative-complemented-goal)
                                   (debug-dump "\n relative-complemented-goal-original: ~v  on ~a" relative-complemented-goal-original v)
@@ -1266,7 +1267,8 @@
   (assumption-base? any? ?state? . -> . Stream?)
   (define (decides-pair-goal v) 
     (disj* 
-       (type-constraint v (set pair?)) 
+      ;;;  (type-constraint v (set pair?))
+       (fresh (va vb) (== v (cons va vb)))  
        (type-constraint v (set-remove all-inf-type-label pair?))
        (is-of-finite-type v)
     ))
@@ -1432,6 +1434,8 @@
   (result-f st)
 )
 
+
+
 ;;; given a set of equation 
 ;;;  return an equivalent set of equation 
 ;;;  s.t. each equation won't have pair inside, and at each side of
@@ -1559,7 +1563,9 @@
   
   (define all-subst
     (map (λ (t) (cons t (walk* t sub))) (set->list all-terms)))
-  
+
+  (debug-dump "     unmentioned-substed-form original sub: ~a \n" sub)
+  (debug-dump "     unmentioned-substed-form after sub: ~a \n" all-subst)
   ;;; we take out all unmentioned-var-representative
   ;;;   find a mapping that will replace them
   (define unmentioned-mapping
@@ -1575,8 +1581,10 @@
   (let* 
       ([remove-unmentioned-repr
           (literal-replace* unmentioned-mapping all-subst)]
+       [all-subst-with-unmentioned-repr-changed
+          (append remove-unmentioned-repr (hash->list unmentioned-mapping))]
        [new-sub
-          (filter (λ (t) (not (equal? (car t) (cdr t)))) remove-unmentioned-repr)]
+          (filter (λ (t) (not (equal? (car t) (cdr t)))) all-subst-with-unmentioned-repr-changed)]
        [st-w/o-sub      (state-sub-set st empty-sub)]
        [new-st-w/o-sub 
           (literal-replace* unmentioned-mapping st-w/o-sub)]
@@ -1777,31 +1785,41 @@
   (define atomics-of-states (conj-state->list-of-goals unmentioned-removed-st))
   (define atomics-of-var-related (filter (lambda (x) (vars-member? (set varx) x)) atomics-of-states))
   (define atomics-of-var-unrelated (filter (lambda (x) (not (vars-member? (set varx) x))) atomics-of-states) )
-  (define complemented-atomics-of-var-related 
-    (map complement atomics-of-var-related))
+
+  ;;; we have proj-free-equations-for-tproj to remove tproj
+  ;;;     in each atom
+  (define/contract (remove-tproj-for-each-rel-atom a)
+    (Goal? . -> . Goal?)
+    (match-let* 
+      ([(cons structure-eqs tproj-hash) (proj-free-equations-for-tproj (set->list (collect-tprojs a)))]
+       [struct-eq (foldl (λ (t acc) (conj acc (== (car t) (cdr t)))) (Top) structure-eqs)]
+       [new-a     (literal-replace* tproj-hash a)]
+      )
+      (conj struct-eq new-a)))
+
+  ;;; for those unrelated, we don't touch them 
+  (define conj-unrelated 
+    (syntactical-simplify 
+      (remove-tproj-for-each-rel-atom 
+        (foldl conj (Top) atomics-of-var-unrelated))))
+
+  ;;; for those related we need to relative complement, proj-remove 
   ;;;  Note: this following re-application of domain-enforcement is necessary
   ;;;     
+
+  (define complemented-atomics-of-var-related 
+    (map complement atomics-of-var-related))
   (define domain-enforced-complemented-atomics-of-var-related 
     (map domain-enforcement-goal complemented-atomics-of-var-related))
-  ;;; we are almost done but we need to remove tproj
-  (define conj-unrelated 
-    (syntactical-simplify (foldl conj (Top) atomics-of-var-unrelated)))
-  (define disj-related 
-    (foldl disj (Bottom) domain-enforced-complemented-atomics-of-var-related))
 
-  (define returned-content (conj conj-unrelated disj-related))
+  (define tproj-removed-domain-enforced-complemented-atomics-of-var-related
+    (map remove-tproj-for-each-rel-atom domain-enforced-complemented-atomics-of-var-related))
   
-  (define tproj-eliminated (eliminate-tproj-return-record returned-content))
-  (define tproj-eliminated-content (car tproj-eliminated))
-  (define tproj-eliminated-evidence (cdr tproj-eliminated))
-  (define tproj-eliminated-evidence-goal
-    (foldl conj (Top)
-      (map (lambda (x) (== (car x) (cdr x))) tproj-eliminated-evidence)
-    )
-  )
 
-  (conj tproj-eliminated-evidence-goal tproj-eliminated-content)
+  (define disj-related 
+    (foldl disj (Bottom) tproj-removed-domain-enforced-complemented-atomics-of-var-related))
 
+  (conj conj-unrelated disj-related)
 )
 
 
@@ -1819,6 +1837,7 @@
   (state? set? var? . -> . state?)
   (define mentioned-vars (set-remove scope var))
   ;;;  we need to do extra unmentioned-substed because here var is considered unmentioned
+  (debug-dump "     shrink-away using unmentioned-subst-form: ~a \n" st)
   (define var-removed-st (unmentioned-substed-form mentioned-vars st))
   ;;; (debug-dump "\n shrinking var: shrink-var-removed-st: ~a" var-removed-st)
   (define domain-enforced-st var-removed-st)
