@@ -872,8 +872,22 @@
 
 ;;; The following is very slow!
 (Test-unification-failed 
-  (run 1 (R) (for-all (y) 
-        (disj* (== y '(1))  (=/= y (list (quote b) (quote c)))  )))
+  (run 1 () (for-all (y) 
+        (disj* (== y (cons 1 '()))  (=/= y (list (quote b) (quote c)))  )))
+. test-reg!=>ND . 'fail
+)
+
+;;; The following is very slow!
+(Test-unification-failed-2 
+  (run 1 () (for-all (y) 
+        (disj* (=/= y (list (quote b) (quote c))) (== y (cons 1 '())) )))
+. test-reg!=>ND . 'fail
+)
+
+
+;;; The following is very slow!
+(Test-unification-failed-3 
+  (run 1 () (for-all (y) (disj* (== y 1) (=/= y (cons 2 3)))))
 . test-reg!=>ND . 'fail
 )
 
