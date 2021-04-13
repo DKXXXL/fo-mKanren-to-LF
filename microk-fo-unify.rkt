@@ -256,6 +256,14 @@
   (define current-scope (state-scope st))
   (define st-without-sub-and-scope 
     (state-scope-set (state-sub-set st empty-sub) '()))
+  (state-scope-set
+    (state-sub-set (canonicalize st-without-sub-and-scope current-sub) current-sub)
+    current-scope
+    ))
+
+;;; return element
+(define/contract (canonicalize x current-sub)
+  (any? list? . -> . any?)
 
   (define (each-case rec-parent rec g)
     (match g
@@ -263,41 +271,38 @@
       [o/w (rec-parent g)]))
   (define result-f 
     (compose-maps (list each-case goal-term-base-map pair-base-map state-base-endo-functor hash-key-value-map identity-endo-functor)))
-  (state-scope-set
-    (state-sub-set (result-f st-without-sub-and-scope) current-sub)
-    current-scope
-    )
+  (result-f x)  
 )
+
 
 ;;; return a state where except for substitution list, 
 ;;;   every variable appearing 
 ;;;     is the representative of the equality class of the variable
 ;;; Note: if st has type-constraint on two var (with same equality class)
 ;;;     this might lead to some problems
-;;; (define/contract (canonicalized-state? st)
-;;;   (state? . -> . boolean?)
-;;;   (define current-sub (state-sub st))
-;;;   (define st-without-sub-and-scope 
-;;;     (state-scope-set (state-sub-set st empty-sub) '()))
+(define/contract (canonicalized-state? st)
+  (state? . -> . boolean?)
+  (define current-sub (state-sub st))
+  (define st-without-sub-and-scope 
+    (state-scope-set (state-sub-set st empty-sub) '()))
 
-;;;   ;;; using visitor + side effect
-;;;   (define there-is-non-canonical-var? #f)
-;;;   (define (each-case rec-parent rec g)
-;;;     (match g
-;;;       [(var _ _)
-;;;           (begin 
-;;;             (if (not (equal? g (walk* g current-sub)))
-;;;                 (set! there-is-non-canonical-var? #t)
-;;;                 (void))
-;;;             g)] 
-;;;       ;;; short-circuit
-;;;       [o/w (if there-is-non-canonical-var? g (rec-parent g))]))
-;;;   (define result-f 
-;;;     (compose-maps (list each-case goal-term-base-map pair-base-map state-base-endo-functor hash-key-value-map identity-endo-functor)))
-;;;   (result-f st-without-sub-and-scope)
-;;;   (not there-is-non-canonical-var?)
-;;; )
-(define canonicalized-state? state?)
+  ;;; using visitor + side effect
+  (define there-is-non-canonical-var? #f)
+  (define (each-case rec-parent rec g)
+    (match g
+      [(var _ _)
+          (begin 
+            (if (not (equal? g (walk* g current-sub)))
+                (set! there-is-non-canonical-var? #t)
+                (void))
+            g)] 
+      ;;; short-circuit
+      [o/w (if there-is-non-canonical-var? g (rec-parent g))]))
+  (define result-f 
+    (compose-maps (list each-case goal-term-base-map pair-base-map state-base-endo-functor hash-key-value-map identity-endo-functor)))
+  (result-f st-without-sub-and-scope)
+  (not there-is-non-canonical-var?)
+)
 
 (define ?canonicalized-state? (or/c false/c canonicalized-state?))
 
@@ -478,7 +483,7 @@
 ;;;   for u =/= v
 ;;;   and return a list of state that satisfies the inequalities between u v
 (define/contract (neg-unify u v st)
-  (any? any? state? . -> . Stream?)
+  (any? any? canonicalized-state? . -> . Stream?)
   (let* ([result (neg-unify* (list `(,u . ,v)) st)])
     (and result (cons result #f)))
 )
@@ -504,13 +509,14 @@
           ;;; run with nested do
           ;;;     because this do is a composition of maybe and state
           ;;;     so we can avoid 
-          [(cons _ newly-added) =
+          [(cons _ newly-added-uncanonical) =
             (run-st old-st
               (do [_ <- (unify/st u v)]
                   [new-st  <- get-st]
                   [old-sub = (state-sub old-st)]
                   [new-sub = (state-sub new-st)]
                   [<-return (extract-new new-sub old-sub)]))]
+          [newly-added = (canonicalize newly-added-uncanonical (state-sub old-st))]
           [<-end 
             (match newly-added
               ;;; 1. if unification fails, then inequality is just satisfied 
