@@ -1523,8 +1523,9 @@
 ;;;   while the original equality class information is untouched
 ;;;   more concretely
 ;;;   1. we make sure every equality class takes a mentioned var as representative
-;;;   2. every mentioned-var will be mapped to an equality class representative
-;;;   3. unmentioned var will disappear 
+;;;   2. every var will be mapped to an equality class representative
+;;;   3. in this case, mentioned-var won't be mapped to unmentioned var
+;;;   4. but all the information will be the same -- we still have unmentioned-var maps to unmentioned-var
 ;;; precondition: in field-proj-form
 (define/contract (unmentioned-substed-form mentioned-vars st)
   (set? state? . -> . state?)
@@ -1550,25 +1551,30 @@
   (define mentioned-subst
     (map (λ (t) (cons t (walk* t sub))) (set->list mentioned-terms)))
   
+  (define all-subst
+    (map (λ (t) (cons t (walk* t sub))) (set->list all-terms)))
+  
   ;;; we take out all unmentioned-var-representative
-  (define unmention-subst
+  ;;;   find a mapping that will replace them
+  (define unmentioned-mapping
     (for/fold
-      ([acc '()])
+      ([acc (hash)])
       ([each mentioned-subst])
       (match-let* 
         ([(cons L R) each])
-        (if (set-member? unmentioned-terms R) (cons (cons R L) acc) acc))))
-  
-  (define unmentioned-mapping (make-immutable-hash unmention-subst))
+        (if (and (set-member? unmentioned-terms R) (not (hash-has-key? acc R))) 
+            (hash-set acc R L) 
+            acc))))
+
   (let* 
-      ([remove-unmentioned 
-          (literal-replace* unmentioned-mapping mentioned-subst)]
+      ([remove-unmentioned-repr
+          (literal-replace* unmentioned-mapping all-subst)]
        [new-sub
-          (filter (λ (t) (not (equal? (car t) (cdr t)))) remove-unmentioned)]
+          (filter (λ (t) (not (equal? (car t) (cdr t)))) remove-unmentioned-repr)]
        [st-w/o-sub      (state-sub-set st empty-sub)]
        [new-st-w/o-sub 
           (literal-replace* unmentioned-mapping st-w/o-sub)]
-       
+      ;;;  then remove any constraint on unmentioned stuff
        [new-st (state-sub-set new-st-w/o-sub new-sub)]
       )
       new-st)
@@ -1664,14 +1670,19 @@
   (set? state? . -> . state?)
   (let* ([domain-enforced-st st]
          [diseqs (state-diseq domain-enforced-st)]
-         [new-diseq (filter (lambda (p) (not (vars-missing? mentioned-vars p))) diseqs)] 
+         [no-unmentioned (lambda (p) (not (vars-missing? mentioned-vars p)))]
+         [new-diseq (filter no-unmentioned diseqs)] 
          ;; diseqs must be list of singleton list of thing
          [type-rcd-lst (hash->list (state-typercd domain-enforced-st))]
-         [new-typercd-lst (filter (lambda (v) (not (vars-missing? mentioned-vars v))) type-rcd-lst)]
-         [new-typercd (make-hash new-typercd-lst)])
-    (state-diseq-set 
-      (state-typercd-set domain-enforced-st new-typercd)
-      new-diseq))
+         [new-typercd-lst (filter no-unmentioned type-rcd-lst)]
+         [new-typercd (make-hash new-typercd-lst)]
+         [new-subst   (filter no-unmentioned (state-sub st))]
+         )
+    (state-sub-set
+      (state-diseq-set 
+        (state-typercd-set domain-enforced-st new-typercd)
+        new-diseq)
+        new-subst) )
 )
 
 

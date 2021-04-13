@@ -208,7 +208,7 @@
 (define (walk t sub)
   ;;; (debug-dump "walk: ~a with ~a \n" t sub)
   (match t
-    [(? var?) 
+    [(? (or/c var? tproj?)) 
       (let ((xt (assf (lambda (x) (equal? t x)) sub)))
         (if xt (walk (cdr xt) sub) t))]
     [_ t]
@@ -376,23 +376,23 @@
     [_          <- (if new-sub (pure-st '()) failed-current-st)]
     
     [_          <- (pure-st '())] ;; a mysterious bug will appear if remove this line
-    [extra-var  = (map car (extract-new new-sub old-sub))]
+    ;;; [extra-var  = (map car (extract-new new-sub old-sub))]
     ;;; [new-vars      = (map car new-subst)]
     ;;;   above are for incremental information
-    ;;; [all-type-csts = (hash->list old-htable)]
-    [new-type-csts = 
-      (map (λ (t) (cons t (hash-ref old-htable t #f))) extra-var)]
-    [related-type-csts =
-      (filter (λ (t) (cdr t)) new-type-csts)]
-    [erased-htable     =
-      (foldl (λ (index htable) (hash-remove htable index)) old-htable extra-var)]
+    [all-type-csts = (hash->list old-htable)]
+    ;;; [new-type-csts = 
+    ;;;   (map (λ (t) (cons t (hash-ref old-htable t #f))) extra-var)]
+    ;;; [related-type-csts =
+    ;;;   (filter (λ (t) (cdr t)) new-type-csts)]
+    ;;; [erased-htable     =
+    ;;;   (foldl (λ (index htable) (hash-remove htable index)) old-htable extra-var)]
     [rechecking-st = 
         (state-sub-set
           (state-typercd-set 
-            (state-diseq-set old-st '()) erased-htable) new-sub)]
+            (state-diseq-set old-st '()) (hash)) new-sub)]
     [_ <- (set-st rechecking-st)]
     ;;; TODO: Incrementally recheck state information
-    [_ <- (typecst-recheck related-type-csts)]
+    [_ <- (typecst-recheck all-type-csts)]
     [_ <- (inequality-recheck old-ineq)]
     [<-return '()]
   ))
