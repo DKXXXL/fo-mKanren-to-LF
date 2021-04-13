@@ -370,8 +370,7 @@
     [new-sub    = (unify/sub u v old-sub)]
     [_          <- (if new-sub (pure-st '()) failed-current-st)]
     
-    [_          <- (begin (debug-dump "new-sub1 :~a \n" new-sub) (pure-st '()))]
-    [_          =  (debug-dump "new-sub2 :~a \n" new-sub)]
+    [_          <- (pure-st '())] ;; a mysterious bug will appear if remove this line
     [extra-var  = (map car (extract-new new-sub old-sub))]
     ;;; [new-vars      = (map car new-subst)]
     ;;;   above are for incremental information
