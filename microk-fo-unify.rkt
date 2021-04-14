@@ -309,35 +309,38 @@
 )
 
 
-;;; return a state where except for substitution list, 
-;;;   every variable appearing 
-;;;     is the representative of the equality class of the variable
-;;; Note: if st has type-constraint on two var (with same equality class)
-;;;     this might lead to some problems
-(define/contract (canonicalized-state? st)
-  (state? . -> . boolean?)
-  (define current-sub (state-sub st))
-  (define st-without-sub-and-scope 
-    (state-scope-set (state-sub-set st empty-sub) '()))
+;;; ;;; return a state where except for substitution list, 
+;;; ;;;   every variable appearing 
+;;; ;;;     is the representative of the equality class of the variable
+;;; ;;; Note: if st has type-constraint on two var (with same equality class)
+;;; ;;;     this might lead to some problems
+;;; (define/contract (canonicalized-state? st)
+;;;   (state? . -> . boolean?)
+;;;   (define current-sub (state-sub st))
+;;;   (define st-without-sub-and-scope 
+;;;     (state-scope-set (state-sub-set st empty-sub) '()))
 
-  ;;; using visitor + side effect
-  (define there-is-non-canonical-var? #f)
-  (define (each-case rec-parent rec g)
-    (match g
-      [(var _ _)
-          (begin 
-            (if (not (equal? g (walk* g current-sub)))
-                (set! there-is-non-canonical-var? #t)
-                (void))
-            g)] 
-      ;;; short-circuit
-      [o/w (if there-is-non-canonical-var? g (rec-parent g))]))
-  (define result-f 
-    (compose-maps (list each-case goal-term-base-map pair-base-map state-base-endo-functor hash-key-value-map identity-endo-functor)))
-  (result-f st-without-sub-and-scope)
-  (not there-is-non-canonical-var?)
+;;;   ;;; using visitor + side effect
+;;;   (define there-is-non-canonical-var? #f)
+;;;   (define (each-case rec-parent rec g)
+;;;     (match g
+;;;       [(var _ _)
+;;;           (begin 
+;;;             (if (not (equal? g (walk* g current-sub)))
+;;;                 (set! there-is-non-canonical-var? #t)
+;;;                 (void))
+;;;             g)] 
+;;;       ;;; short-circuit
+;;;       [o/w (if there-is-non-canonical-var? g (rec-parent g))]))
+;;;   (define result-f 
+;;;     (compose-maps (list each-case goal-term-base-map pair-base-map state-base-endo-functor hash-key-value-map identity-endo-functor)))
+;;;   (result-f st-without-sub-and-scope)
+;;;   (not there-is-non-canonical-var?)
+;;; )
+
+(define (canonicalized-state? st)
+  (state? st)
 )
-
 
 
 (define/contract (wrap-state-stream st)
@@ -408,23 +411,23 @@
     [_          <- (if new-sub (pure-st '()) failed-current-st)]
     
     [_          <- (pure-st '())] ;; a mysterious bug will appear if remove this line
-    ;;; [extra-var  = (map car (extract-new new-sub old-sub))]
+    [extra-var  = (map car (extract-new new-sub old-sub))]
     ;;; [new-vars      = (map car new-subst)]
     ;;;   above are for incremental information
-    [all-type-csts = (hash->list old-htable)]
-    ;;; [new-type-csts = 
-    ;;;   (map (λ (t) (cons t (hash-ref old-htable t #f))) extra-var)]
-    ;;; [related-type-csts =
-    ;;;   (filter (λ (t) (cdr t)) new-type-csts)]
-    ;;; [erased-htable     =
-    ;;;   (foldl (λ (index htable) (hash-remove htable index)) old-htable extra-var)]
+    ;;; [all-type-csts = (hash->list old-htable)]
+    [new-type-csts = 
+      (map (λ (t) (cons t (hash-ref old-htable t #f))) extra-var)]
+    [related-type-csts =
+      (filter (λ (t) (cdr t)) new-type-csts)]
+    [erased-htable     =
+      (foldl (λ (index htable) (hash-remove htable index)) old-htable extra-var)]
     [rechecking-st = 
         (state-sub-set
           (state-typercd-set 
-            (state-diseq-set old-st '()) (hash)) new-sub)]
+            (state-diseq-set old-st '()) erased-htable) new-sub)]
     [_ <- (set-st rechecking-st)]
     ;;; TODO: Incrementally recheck state information
-    [_ <- (typecst-recheck all-type-csts)]
+    [_ <- (typecst-recheck related-type-csts)]
     [_ <- (inequality-recheck old-ineq)]
     [<-return '()]
   ))
