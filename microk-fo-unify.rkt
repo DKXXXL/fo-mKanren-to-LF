@@ -229,8 +229,8 @@
 (define failed-current-st
   (do 
     [_ <- (set-st #f)]
-    [k <- get-st]
-    [_ = (printf "after failing... : ~a" k)]
+    ;;; [k <- get-st]
+    ;;; [_ = (printf "after failing... : ~a" k)]
     [<-return #f]
   ) 
 )
