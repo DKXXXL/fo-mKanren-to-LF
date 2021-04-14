@@ -141,25 +141,59 @@
 ;;; (define-syntax (here stx)
 ;;;     #`(list (quote-line-number #,stx)))
 
-;;; (define-syntax stab-trace
-;;;   (syntax-rules ()
-;;;     ((_ number k)
-;;;        ((λ (_ t) t) "INFO" k) )
-;;;     ((_ k)
-;;;        ((λ (_ __ t) t) "LINE" (here) k) )   ))
+
+;;; (define-syntax do
+;;;   (syntax-rules (<- <-end <-return =)
+;;;     ((_ [ x = y ] sth ...) 
+;;;       (match-let ([x y]) (do sth ...)))
+;;;     ((_ [ x <- y ] sth ...) 
+;;;       (let* ([_ (assert-or-warn (WithBackground? y) "Type Error at :~s\n" #'y)])
+;;;          (>>= y (match-lambda [x (do sth ...)]) #'y)) ) 
+;;;     ((_ [ <-end y ]) 
+;;;       (let* ([_ (assert-or-warn (WithBackground? y) "Type Error at :~s\n" #'y)]) 
+;;;         y))
+;;;     ((_ [ <-return y ]) 
+;;;       (pure-st y))
+;;;   ))
+
+(define (?canonicalized-state? t) (λ (t) (or/c false/c canonicalized-state?)))
+
+
 
 (define-syntax do
+  (syntax-rules ()
+    ((_ k ...) 
+      (do/type ?canonicalized-state? k ...))
+
+  ))
+
+(define-syntax do/type
+  (syntax-rules ()
+    ((_ type-predicate k ...) 
+      (WithBackground type-predicate
+        (λ (bg)
+          (do-on bg type-predicate k ...))))
+  ))
+
+(define-syntax do-on
   (syntax-rules (<- <-end <-return =)
-    ((_ [ x = y ] sth ...) 
-      (match-let ([x y]) (do sth ...)))
-    ((_ [ x <- y ] sth ...) 
-      (let* ([_ (assert-or-warn (WithBackground? y) "Type Error at :~s\n" #'y)])
-         (>>= y (match-lambda [x (do sth ...)]) #'y)) ) 
-    ((_ [ <-end y ]) 
-      (let* ([_ (assert-or-warn (WithBackground? y) "Type Error at :~s\n" #'y)]) 
-        y))
-    ((_ [ <-return y ]) 
-      (pure-st y))
+    ((_ bg type? [ x = y ] sth ...) 
+      (match-let ([x y]) (do-on bg type? sth ...)))
+    ((_ bg type? [ x <- y ] sth ...) 
+      (match-let* 
+            ([_           (assert-or-warn (WithBackground? y) "Type Error at :~s\n" #'y)]
+             [wbƛ         (WithBackground-bg->front y)]
+             [wbguard     (WithBackground-bgType    y)]
+             [(cons bg2 x) (wbƛ bg)]
+             [isNone?     (λ (t) (not t))]
+             [_           (assert-or-warn ((and/c wbguard type?) bg2) "Background Type Error at :~s\n" #'y)])
+           (if (isNone? bg2)
+             (cons bg2 #f)  ;; short circuiting.
+             (do-on bg2 wbguard sth ...)) )) 
+    ((_ bg type? [ <-end y ]) 
+      (do-on bg type? [ y_ <- y ] [ <-return y_]))
+    ((_ bg type? [ <-return y ]) 
+      (cons bg y))
   ))
 
 (define WB WithBackground)
@@ -171,7 +205,7 @@
 (define (pure ty) (λ (term) (WB ty (λ (bg) (cons bg  term)))) )
 (define (run ty)  
   (invariant-assertion
-    (ty (WithBackgroundOf? (=== ty)) . -> . any?)
+    (ty (WithBackgroundOf? (=== ty)) . -> . (cons/c ty any?))
     (λ (st wb)
     (match-let* 
       ([(WithBackground ty? bg->front) wb]
@@ -303,8 +337,6 @@
   (result-f st-without-sub-and-scope)
   (not there-is-non-canonical-var?)
 )
-
-(define ?canonicalized-state? (or/c false/c canonicalized-state?))
 
 
 
