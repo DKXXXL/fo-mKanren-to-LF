@@ -392,8 +392,7 @@
 
 
 ;;; if a stream is WHNF(?)  
-(define/contract (mature? s)
-  (Stream? . -> . boolean?)
+(define (mature? s)
     (or (not s) (pair? s)))
 
 

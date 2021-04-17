@@ -479,8 +479,12 @@
 ;;;   because we have #f as part of stream structure so
 ;;;   we cannot easily use stream-struct?
 (define (Stream? s)
-  (or/c stream-struct?
-        (cons/c (or/c #f state?) Stream?)))
+  (or (stream-struct? s)
+    (match s
+      [#f #t]
+      [(cons k r) (Stream? r)]
+      [o/w #f]
+    )))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
