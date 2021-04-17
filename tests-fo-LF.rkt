@@ -1609,6 +1609,7 @@
 (module+ test
   (require rackunit/text-ui)
   (require errortrace)
+  (require profile)
   (instrumenting-enabled #t)
   (set-debug-info-threshold! 1)
-  (run-tests all-tests))
+  (profile-thunk (thunk (run-tests all-tests))))
