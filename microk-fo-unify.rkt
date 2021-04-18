@@ -101,7 +101,7 @@
 
 ;;; dbginfo
 (define/contract (>>= fwb domap dbginfo)
-  (WithBackground? (any? . -> . WithBackground?) any? . -> . WithBackground?)
+  (WithBackground? procedure? any? . -> . WithBackground?)
   (WithBackground
     (WithBackground-bgType fwb)
     (let*
@@ -385,14 +385,14 @@
   (any? any? . -> . (WithBackgroundOf? ?canonicalized-state?))
   ;;; inequality-recheck :: state -> state
   (define/contract (inequality-recheck conj-disj-pair)
-    (list? . -> . (WithBackgroundOf? ?canonicalized-state?))
+    (any? . -> . (WithBackgroundOf? ?canonicalized-state?))
     (for/fold 
       ([acc       (pure-st #f)])
       ([each-disj-list conj-disj-pair])
         ((neg-unify*/st each-disj-list) . >> . acc)))
 
   (define/contract (typecst-recheck var-type-pair)
-    (list? . -> . (WithBackgroundOf? ?canonicalized-state?))
+    (any? . -> . (WithBackgroundOf? ?canonicalized-state?))
     (for/fold 
       ([acc (pure-st '())])
       ([each var-type-pair])
