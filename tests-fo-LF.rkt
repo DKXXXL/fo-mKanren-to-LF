@@ -3,6 +3,8 @@
 (require "mk-fo.rkt")
 (require racket/format)
 (require errortrace)
+(require profile)
+(require contract-profile)
 ;;; (require "examples-for-test.rkt")
 
 (require rackunit)
@@ -10,6 +12,8 @@
 (provide
   (all-defined-out)
   (all-from-out "mk-fo.rkt")
+  (all-from-out profile)
+  (all-from-out contract-profile)
 )
 
 ;;; (display "Enabling code coverage, might hurt performance \n")
@@ -1610,6 +1614,7 @@
   (require rackunit/text-ui)
   (require errortrace)
   (require profile)
+  (require contract-profile)
   (instrumenting-enabled #t)
   (set-debug-info-threshold! 1)
   (profile-thunk (thunk (run-tests all-tests))))

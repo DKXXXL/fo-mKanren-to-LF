@@ -119,7 +119,10 @@
                    [bg2+fr2 (swbdo bg1)])
                 bg2+fr2))))))
 
-(define (>> a b) (>>= a (λ (_) b) #f))
+;;; (define (>> a b) (>>= a (λ (_) b) #f))
+(define (>> a b) 
+  (do [_ <- a]
+      [<-end b]))
 
 ;;; Recall that
 ;;; get :: (WB state-type state-type)
@@ -156,7 +159,8 @@
 ;;;       (pure-st y))
 ;;;   ))
 
-(define (?canonicalized-state? t) (λ (t) (or/c false/c canonicalized-state?)))
+(define (?canonicalized-state? t) 
+  (or (equal? t #f) (canonicalized-state? t)))
 
 
 
@@ -186,7 +190,9 @@
              [wbguard     (WithBackground-bgType    y)]
              [(cons bg2 x) (wbƛ bg)]
              [isNone?     (λ (t) (not t))]
-             [_           (assert-or-warn ((and/c wbguard type?) bg2) "Background Type Error at :~s\n" #'y)])
+            ;;;  [_           (assert-or-warn ((and/c wbguard type?) bg2) "Background Type Error at :~s\n" #'y)]
+             [_           (assert-or-warn (and (wbguard bg2) (type? bg2)) "Background Type Error at :~s\n" #'y)]
+             )
            (if (isNone? bg2)
              (cons bg2 #f)  ;; short circuiting.
              (do-on bg2 wbguard sth ...)) )) 
@@ -221,11 +227,11 @@
 
 
 
-(define get-st  (get (or/c false/c state?)))
-(define set-st  (sets (or/c false/c state?)))
-(define pure-st (pure (or/c false/c state?)))
-(define run-st  (run (or/c false/c state?)))
-(define modify-st (modify (or/c false/c state?)))
+(define get-st  (get ?state?))
+(define set-st  (sets ?state?))
+(define pure-st (pure ?state?))
+(define run-st  (run ?state?))
+(define modify-st (modify ?state?))
 (define failed-current-st
   (do 
     [_ <- (set-st #f)]
@@ -241,11 +247,11 @@
 ;;; Will totally ignore tproj (doing nothing on them)
 (define (walk t sub)
   ;;; (debug-dump "walk: ~a with ~a \n" t sub)
-  (match t
-    [(? (or/c var? tproj?)) 
+  (cond
+    [(or (var? t) (tproj? t)) 
       (let ((xt (assf (lambda (x) (equal? t x)) sub)))
         (if xt (walk (cdr xt) sub) t))]
-    [_ t]
+    [#t t]
   )
 )
 
@@ -344,7 +350,7 @@
 
 
 (define/contract (wrap-state-stream st)
-  ((or/c false/c state?) . -> . (or/c false/c Stream?))
+  (?state? . -> . Stream?)
   (and st (cons st #f)))
 
 ;;; state x var x (set of/list of) typeinfo -> state
@@ -382,17 +388,17 @@
 
 
 (define/contract (unify/st u v)
-  (any? any? . -> . (WithBackgroundOf? ?canonicalized-state?))
+  (any? any? . -> . WithBackground?)
   ;;; inequality-recheck :: state -> state
   (define/contract (inequality-recheck conj-disj-pair)
-    (any? . -> . (WithBackgroundOf? ?canonicalized-state?))
+    (any? . -> . WithBackground?)
     (for/fold 
       ([acc       (pure-st #f)])
       ([each-disj-list conj-disj-pair])
         ((neg-unify*/st each-disj-list) . >> . acc)))
 
   (define/contract (typecst-recheck var-type-pair)
-    (any? . -> . (WithBackgroundOf? ?canonicalized-state?))
+    (any? . -> . WithBackground?)
     (for/fold 
       ([acc (pure-st '())])
       ([each var-type-pair])
@@ -414,20 +420,20 @@
     [extra-var  = (map car (extract-new new-sub old-sub))]
     ;;; [new-vars      = (map car new-subst)]
     ;;;   above are for incremental information
-    ;;; [all-type-csts = (hash->list old-htable)]
-    [new-type-csts = 
-      (map (λ (t) (cons t (hash-ref old-htable t #f))) extra-var)]
-    [related-type-csts =
-      (filter (λ (t) (cdr t)) new-type-csts)]
-    [erased-htable     =
-      (foldl (λ (index htable) (hash-remove htable index)) old-htable extra-var)]
+    [all-type-csts = (hash->list old-htable)]
+    ;;; [new-type-csts = 
+    ;;;   (map (λ (t) (cons t (hash-ref old-htable t #f))) extra-var)]
+    ;;; [related-type-csts =
+    ;;;   (filter (λ (t) (cdr t)) new-type-csts)]
+    ;;; [erased-htable     =
+    ;;;   (foldl (λ (index htable) (hash-remove htable index)) old-htable extra-var)]
     [rechecking-st = 
         (state-sub-set
           (state-typercd-set 
-            (state-diseq-set old-st '()) erased-htable) new-sub)]
+            (state-diseq-set old-st '()) (hash)) new-sub)]
     [_ <- (set-st rechecking-st)]
     ;;; TODO: Incrementally recheck state information
-    [_ <- (typecst-recheck related-type-csts)]
+    [_ <- (typecst-recheck all-type-csts)]
     [_ <- (inequality-recheck old-ineq)]
     [<-return '()]
   ))
@@ -524,7 +530,7 @@
 ;;;   disjunction of inequality, solve them according to the current state
 ;;;   return a state that satisifies the disjunction of inequalities
 (define (neg-unify* list-u-v st)
-  ((list/c pair?) state? . -> . (or/c false/c canonicalized-state?))
+  ((list/c pair?) state? . -> . ?canonicalized-state?)
   (car (run-st st (neg-unify*/st list-u-v)))
 )
 
@@ -532,7 +538,7 @@
 ;;;   disjunction of inequality, solve them according to the current state
 ;;;   return a state that satisifies the disjunction of inequalities
 (define (neg-unify*/st list-u-v)
-  ((list/c pair?) . -> . (WithBackgroundOf? ?canonicalized-state?))
+  ((list/c pair?) . -> . WithBackground?)
   (match list-u-v 
     ['() failed-current-st]
     [(cons (cons u v) rest) 
@@ -592,7 +598,7 @@
 ;;;  precondition: type?* is never #f, st is never #f
 ;;;   precondition: type?* \subseteq all-inf-type-label
 (define/contract (check-as-inf-type-disj type?* t st)
-  (set? any? (or/c false/c canonicalized-state?) . -> . (or/c false/c canonicalized-state?))
+  (set? any? ?canonicalized-state? . -> . ?canonicalized-state?)
   (car (run-st st (check-as-inf-type-disj/st type?* t))))
 
 
@@ -601,7 +607,7 @@
 ;;;  precondition: type?* is never #f, st is never #f
 ;;;   precondition: type?* \subseteq all-inf-type-label
 (define/contract (check-as-inf-type-disj/st type?* t_)
-  (set? any? . -> . (WithBackgroundOf? (or/c false/c canonicalized-state?)))
+  (set? any? . -> . (WithBackgroundOf? ?canonicalized-state?))
   (assert-or-warn (subset? type?* all-inf-type-label) 
     "check-as-inf-type-disj cannot handle these type constraints ~a" type?*)
   ;;; TODO: fixing the case when type?* is actually empty
