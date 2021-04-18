@@ -56,6 +56,12 @@
 (define all-inf-type-label (set pair? number? string? symbol?))
 
 
+(define-syntax define/contract/optional
+  (syntax-rules ()
+    ((_ paras contract X ...) 
+      (define paras X ...)  ;; turn off
+      ;;; (define/contract paras contract X ...) ;; turn on
+    )))
 
 
 
@@ -100,7 +106,7 @@
 (define (=== k) (λ (x) (equal? x k)))
 
 ;;; dbginfo
-(define/contract (>>= fwb domap dbginfo)
+(define/contract/optional (>>= fwb domap dbginfo)
   (WithBackground? procedure? any? . -> . WithBackground?)
   (WithBackground
     (WithBackground-bgType fwb)
@@ -290,7 +296,7 @@
 ;;;     is the representative of the equality class of the variable
 ;;; Note: if st has type-constraint on two var (with same equality class)
 ;;;     this might lead to some problems
-(define/contract (canonicalize-state st)
+(define/contract/optional (canonicalize-state st)
   (state? . -> . state?)
   (define current-sub (state-sub st))
   (define current-scope (state-scope st))
@@ -302,7 +308,7 @@
     ))
 
 ;;; return element
-(define/contract (canonicalize x current-sub)
+(define/contract/optional (canonicalize x current-sub)
   (any? list? . -> . any?)
 
   (define (each-case rec-parent rec g)
@@ -320,7 +326,7 @@
 ;;; ;;;     is the representative of the equality class of the variable
 ;;; ;;; Note: if st has type-constraint on two var (with same equality class)
 ;;; ;;;     this might lead to some problems
-;;; (define/contract (canonicalized-state? st)
+;;; (define/contract/optional (canonicalized-state? st)
 ;;;   (state? . -> . boolean?)
 ;;;   (define current-sub (state-sub st))
 ;;;   (define st-without-sub-and-scope 
@@ -349,12 +355,12 @@
 )
 
 
-(define/contract (wrap-state-stream st)
+(define/contract/optional (wrap-state-stream st)
   (?state? . -> . Stream?)
   (and st (cons st #f)))
 
 ;;; state x var x (set of/list of) typeinfo -> state
-(define/contract (state-typercd-cst-add st v type-info)
+(define/contract/optional (state-typercd-cst-add st v type-info)
   (state? term? set? . -> . state?)
 
   (define typerc (state-typercd st))
@@ -370,7 +376,7 @@
 
 ;;; check if a given state has a valid/consistent type constraints
 ;;;   if not, return #f
-(define/contract (valid-type-constraints-check st)
+(define/contract/optional (valid-type-constraints-check st)
   (state? . -> . any?)
   (define typecses (state-typercd st))
   (define old-st (state-typercd-set st (hash)))
@@ -379,7 +385,7 @@
     ([each-var-types (hash->list typecses)])
     (check-as-inf-type-disj (cdr each-var-types) (car each-var-types) acc-st)))
 
-(define/contract (unify u v st)
+(define/contract/optional (unify u v st)
   (any? any? state? . -> . Stream?)
   ;;; inequality-recheck :: state -> state
   (wrap-state-stream
@@ -387,17 +393,17 @@
 )
 
 
-(define/contract (unify/st u v)
+(define/contract/optional (unify/st u v)
   (any? any? . -> . WithBackground?)
   ;;; inequality-recheck :: state -> state
-  (define/contract (inequality-recheck conj-disj-pair)
+  (define/contract/optional (inequality-recheck conj-disj-pair)
     (any? . -> . WithBackground?)
     (for/fold 
       ([acc       (pure-st #f)])
       ([each-disj-list conj-disj-pair])
         ((neg-unify*/st each-disj-list) . >> . acc)))
 
-  (define/contract (typecst-recheck var-type-pair)
+  (define/contract/optional (typecst-recheck var-type-pair)
     (any? . -> . WithBackground?)
     (for/fold 
       ([acc (pure-st '())])
@@ -439,14 +445,14 @@
   ))
 
 ;; Reification
-(define/contract (walk* tm sub)
+(define/contract/optional (walk* tm sub)
   (any? list? . -> . any?)
   (let ((tm (walk tm sub)))
     (if (pair? tm)
         `(,(walk* (car tm) sub) .  ,(walk* (cdr tm) sub))
         tm)))
 
-(define/contract (walk*/st tm)
+(define/contract/optional (walk*/st tm)
   (any/c . -> . (WithBackgroundOf? state?))
   (do 
     [st  <- get-st]
@@ -520,7 +526,7 @@
 ;;; dis-unification, we try to find the solution
 ;;;   for u =/= v
 ;;;   and return a list of state that satisfies the inequalities between u v
-(define/contract (neg-unify u v st)
+(define/contract/optional (neg-unify u v st)
   (any? any? canonicalized-state? . -> . Stream?)
   (let* ([result (neg-unify* (list `(,u . ,v)) st)])
     (and result (cons result #f)))
@@ -597,7 +603,7 @@
 ;;;  currently it will use predicate as marker
 ;;;  precondition: type?* is never #f, st is never #f
 ;;;   precondition: type?* \subseteq all-inf-type-label
-(define/contract (check-as-inf-type-disj type?* t st)
+(define/contract/optional (check-as-inf-type-disj type?* t st)
   (set? any? ?canonicalized-state? . -> . ?canonicalized-state?)
   (car (run-st st (check-as-inf-type-disj/st type?* t))))
 
@@ -606,7 +612,7 @@
 ;;;  currently it will use predicate as marker
 ;;;  precondition: type?* is never #f, st is never #f
 ;;;   precondition: type?* \subseteq all-inf-type-label
-(define/contract (check-as-inf-type-disj/st type?* t_)
+(define/contract/optional (check-as-inf-type-disj/st type?* t_)
   (set? any? . -> . (WithBackgroundOf? ?canonicalized-state?))
   (assert-or-warn (subset? type?* all-inf-type-label) 
     "check-as-inf-type-disj cannot handle these type constraints ~a" type?*)
@@ -652,7 +658,7 @@
 ;;; check-as-inf-type :: inf-type-label  x term x (state or #f) -> (state or #f)
 ;;;  precondition: type? \in all-inf-type-label 
 ;;;  if type-label = #f, then we will just return st
-(define/contract (check-as-inf-type type? t st) 
+(define/contract/optional (check-as-inf-type type? t st) 
   (any? any? ?state? . -> . ?state?)
   (if (and type? st)
     (check-as-inf-type-disj (set type?) t st)
