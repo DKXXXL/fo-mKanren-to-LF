@@ -891,6 +891,7 @@
                                   (debug-dump "\n current state initial var: ~v" (reify/initial-var st))
                                   (debug-dump "\n shrinked state initial var: ~v" (reify/initial-var shrinked-st))
                                   (debug-dump "\n current state: ~v" st)
+                                  (debug-dump "\n following stream: ~v" (cdr s))
                                   (debug-dump "\n field-projected-st: ~a"  field-projected-st)
                                   ;;; (debug-dump "\n field-projected-st initial var: ~a" (reify/initial-var (eliminate-tproj-in-st field-projected-st)))
                                   (debug-dump "\n subst-canonical-st: ~a" subst-canonical-st)
@@ -1631,7 +1632,7 @@
   ;;; (tproj v path) x state -> state
   ;;; given a (possibly complicated) tproj, make st enforce on its domain
   ;;;   example, if term = x.car.cdr, then (pair? x), (pair x.car) will both be added
-  (define/contract (force-as-pair term st)
+  (define/contract/optional (force-as-pair term st)
     (tproj? state? . -> . state?)
 
     ;;; return all the term that are typed pair inside a tproj term
@@ -1787,7 +1788,7 @@
 
   ;;; we have proj-free-equations-for-tproj to remove tproj
   ;;;     in each atom
-  (define/contract (remove-tproj-for-each-rel-atom a)
+  (define/contract/optional (remove-tproj-for-each-rel-atom a)
     (Goal? . -> . Goal?)
     (match-let* 
       ([(cons structure-eqs tproj-hash) (proj-free-equations-for-tproj (set->list (collect-tprojs a)))]

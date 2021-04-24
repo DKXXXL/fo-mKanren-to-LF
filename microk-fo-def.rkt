@@ -14,6 +14,14 @@
 (instrumenting-enabled #t)
 
 
+(define-syntax define/contract/optional
+  (syntax-rules ()
+    ((_ paras contract X ...) 
+      (define paras X ...)  ;; turn off
+      ;;; (define/contract paras contract X ...) ;; turn on
+    )))
+
+
 
 ;; Logic variables
 (struct var (name index) ;;;#:prefab

@@ -56,12 +56,6 @@
 (define all-inf-type-label (set pair? number? string? symbol?))
 
 
-(define-syntax define/contract/optional
-  (syntax-rules ()
-    ((_ paras contract X ...) 
-      (define paras X ...)  ;; turn off
-      ;;; (define/contract paras contract X ...) ;; turn on
-    )))
 
 
 
