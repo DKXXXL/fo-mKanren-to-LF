@@ -711,10 +711,13 @@
           ;;; Note: the following decides the soundness of the whole algorithm
           ;;;     because without it, we may not expand the definition of assumption
           ;;;     and really falsifying it
-          (pause assmpt st-~g1ndec (conj g1-dec (cimpl-syn g1-ndec (Bottom)))) 
-          ;;; and syntactical falsifying 
-          (pause assmpt st-g1ndec-g2 (conj g1-dec (cimpl-syn g1-ndec g2))))
-          ;;; and syntactical solving
+          (pause assmpt st-~g1ndec 
+              (conj g1-dec 
+                (disj* 
+                  (cimpl-syn g1-ndec (Bottom)) ;;; and syntactical falsifying 
+                  (cimpl-syn g1-ndec g2)      ;;; and syntactical solving
+                ))) )
+ 
     ))
     ((relate thunk descript)
       (pause assmpt st (thunk)))
@@ -888,6 +891,7 @@
 
                               (if #t
                                 (begin 
+                                  (debug-dump "\n current assumption base: ~v" assmpt)
                                   (debug-dump "\n current state initial var: ~v" (reify/initial-var st))
                                   (debug-dump "\n shrinked state initial var: ~v" (reify/initial-var shrinked-st))
                                   (debug-dump "\n current state: ~v" st)
@@ -1228,29 +1232,40 @@
 (define/contract (record-vars-on-asymmetry-in-diseq st0)
   (state? . -> . any?)
   (define each-asymmetry-record! (mutable-set))
-  (define (each-asymmetry rec-parent rec g)
-    (match g
-      ;;; thiss pattern matching i a bit dangerous
-      ;;; TODO: make equation/inequality into a struct so that pattern-matching can be easier
-      [(? (cons/c var? pair?)) 
-          (let* ([v (car g)])
-              (set-add! each-asymmetry-record! v)
-              g
-                 )]
-      [(? (cons/c pair? var?)) 
-          (let* ([v (cdr g)])
-              (set-add! each-asymmetry-record! v)
-              g)]
-      [_ (rec-parent g)]
+  (define inequalities
+    (foldl append '() (state-diseq st0)))
+  (define recorded-vars
+    (for/fold
+      ([acc (set)])
+      ([each-ineq inequalities])
+      (match-let*
+        ([(cons l r) each-ineq]
+         [acc1 (if (and (var? l) (pair? r)) (set-add acc l) acc)]
+         [acc2 (if (and (var? r) (pair? l)) (set-add acc1 r) acc1)])
+        acc2)))
+  ;;; (define (each-asymmetry rec-parent rec g)
+  ;;;   (match g
+  ;;;     ;;; thiss pattern matching i a bit dangerous
+  ;;;     ;;; TODO: make equation/inequality into a struct so that pattern-matching can be easier
+  ;;;     [(? (cons/c var? pair?)) 
+  ;;;         (let* ([v (car g)])
+  ;;;             (set-add! each-asymmetry-record! v)
+  ;;;             g
+  ;;;                )]
+  ;;;     [(? (cons/c pair? var?)) 
+  ;;;         (let* ([v (cdr g)])
+  ;;;             (set-add! each-asymmetry-record! v)
+  ;;;             g)]
+  ;;;     [_ (rec-parent g)]
 
-    )
-  )
+  ;;;   )
+  ;;; )
 
-  (define each-asymmetry-recorder
-    (compose-maps (list each-asymmetry pair-base-map identity-endo-functor))
-  )
-  (each-asymmetry-recorder (state-diseq st0))
-  (set->list each-asymmetry-record!)
+  ;;; (define each-asymmetry-recorder
+  ;;;   (compose-maps (list each-asymmetry pair-base-map identity-endo-functor))
+  ;;; )
+  ;;; (each-asymmetry-recorder (state-diseq st0))
+  (set->list recorded-vars)
 )
 
 ;;; var -> goal
@@ -1287,7 +1302,7 @@
 ;;;   This is usually where unhalting happening 
 (define (remove-assymetry-in-diseq assmpt st)
   (define asymmetric-vars (record-vars-on-asymmetry-in-diseq st))
-  ;;; (debug-dump "\n assymetric-st:  ~a \n asymmetric-vars: ~a" st asymmetric-vars)
+  (debug-dump "\n assymetric-st:  ~a \n asymmetric-vars: ~a \n" st asymmetric-vars)
   (if (equal? (length asymmetric-vars) 0)
     (wrap-state-stream st)
     (mapped-stream (lambda (st) (remove-assymetry-in-diseq assmpt st)) (pair-or-not-pair-by-axiom assmpt asymmetric-vars st))))
