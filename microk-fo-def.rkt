@@ -237,7 +237,7 @@
      (fprintf output-port "∀~a {~a}. ~a" (forall-varname val) (forall-domain val)  (forall-g val)))]
   #:guard (lambda (varname domain g type-name)
                     (cond
-                      [(Goal? g) 
+                      [(and (var? varname) (Goal? g) (Goal? domain)) 
                        (values varname domain g)]
                       [else (error type-name
                                    "Should be Goal: ~e"
@@ -343,6 +343,22 @@
                                    (list g1 g2))]))
 )
 
+;;; disj-1 will invoke mplus-1
+(struct disj-1 disj   () 
+  #:transparent
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "(~a ∨ ~a)" (disj-g1 val) (disj-g2 val)))]
+  #:guard (lambda (g1 g2 type-name)
+                    (cond
+                      [(andmap Goal? (list g1 g2)) 
+                       (values g1 g2)]
+                      [else (error type-name
+                                   "All should be Goal: ~e"
+                                   (list g1 g2))]))
+)
+
+
 (struct conj  Goal (g1 g2)  
   #:transparent
   #:methods gen:custom-write
@@ -424,6 +440,20 @@
 )
 
 (struct mplus stream-struct (s1 s2) 
+  #:transparent
+  #:guard (lambda (s1 s2 type-name)
+                    (cond
+                      [(and (Stream? s1) 
+                            (Stream? s2))
+                       (values s1 s2)]
+                      [else (error type-name
+                              "Should both be Stream: ~e"
+                              (list s1 s2) )]))
+)
+
+;;; mplus-1 differs from mplus in that
+;;;     it will only endup at most one stream (as the result of disjunction)
+(struct mplus-1 mplus () 
   #:transparent
   #:guard (lambda (s1 s2 type-name)
                     (cond
@@ -546,7 +576,7 @@
     [(disj a b)     (disj (rec a) (rec b))]
     [(conj a b)     (conj (rec a) (rec b))]
     [(ex v g)       (ex v (rec g))]
-    [(forall v b g) (forall v (rec v) (rec g))]
+    [(forall v b g) (forall v (rec b) (rec g))]
     [_ (rec-parent g)] ;; otherwise do nothing
   )
 )
