@@ -642,12 +642,12 @@
   ;;; (debug-dump "  current-solving goal: ~a\n" g)
   (and st ;;; always circuit the st
     (match g
-    ((disj g1 g2)
-     (step (mplus (pause assmpt st g1)
-                  (pause assmpt st g2))))
     ((disj-1 g1 g2)
      (step (mplus-1 (pause assmpt st g1)
                     (pause assmpt st g2))))
+    ((disj g1 g2)
+     (step (mplus (pause assmpt st g1)
+                  (pause assmpt st g2))))
     ((conj g1 g2)
     ;;; will add g1 into assumption when solving g2
     ;;;   different from cimpl that state will be impacted after solving g1
@@ -798,7 +798,9 @@
     ((mplus-1 s1 s2)
      (let ((s1 (if (mature? s1) s1 (step s1))))
        (cond ((not s1) s2)
-             ((pair? s1) s1) ;; differs from mplus, we give up searching s2
+             ((pair? s1) 
+                (if (car s1) s1 (mplus-1 (cdr s1) s2))) 
+                ;; differs from mplus, we give up searching s2 if we find something non-trivial
              (else (mplus-1 s2 s1)))))
     ((mplus s1 s2)
      (let ((s1 (if (mature? s1) s1 (step s1))))
