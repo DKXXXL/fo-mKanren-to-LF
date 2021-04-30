@@ -799,7 +799,7 @@
      (let ((s1 (if (mature? s1) s1 (step s1))))
        (cond ((not s1) s2)
              ((pair? s1) 
-                (if (car s1) s1 (mplus-1 (cdr s1) s2))) 
+                (if (car s1) (wrap-state-stream (car s1)) (mplus-1 (cdr s1) s2))) 
                 ;; differs from mplus, we give up searching s2 if we find something non-trivial
              (else (mplus-1 s2 s1)))))
     ((mplus s1 s2)
