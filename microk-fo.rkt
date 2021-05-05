@@ -40,7 +40,7 @@
 
   syntactical-simplify
   complement
-  forall-into-disj-1
+  ;;; forall-into-disj-1
   ;;; replace-1-to-0
 
   ==
@@ -642,9 +642,9 @@
   ;;; (debug-dump "  current-solving goal: ~a\n" g)
   (and st ;;; always circuit the st
     (match g
-    ((disj-1 g1 g2)
-     (step (mplus-1 (pause assmpt st g1)
-                    (pause assmpt st g2))))
+    ;;; ((disj-1 g1 g2)
+    ;;;  (step (mplus-1 (pause assmpt st g1)
+    ;;;                 (pause assmpt st g2))))
     ((disj g1 g2)
      (step (mplus (pause assmpt st g1)
                   (pause assmpt st g2))))
@@ -795,13 +795,13 @@
   (Stream? . -> . Stream?)
   ;;; (debug-dump "\n       step: I am going through ~a" s)
   (match s
-    ((mplus-1 s1 s2)
-     (let ((s1 (if (mature? s1) s1 (step s1))))
-       (cond ((not s1) s2)
-             ((pair? s1) 
-                (if (car s1) (wrap-state-stream (car s1)) (mplus-1 (cdr s1) s2))) 
-                ;; differs from mplus, we give up searching s2 if we find something non-trivial
-             (else (mplus-1 s2 s1)))))
+    ;;; ((mplus-1 s1 s2)
+    ;;;  (let ((s1 (if (mature? s1) s1 (step s1))))
+    ;;;    (cond ((not s1) s2)
+    ;;;          ((pair? s1) 
+    ;;;             (if (car s1) (wrap-state-stream (car s1)) (mplus-1 (cdr s1) s2))) 
+    ;;;             ;; differs from mplus, we give up searching s2 if we find something non-trivial
+    ;;;          (else (mplus-1 s2 s1)))))
     ((mplus s1 s2)
      (let ((s1 (if (mature? s1) s1 (step s1))))
        (cond ((not s1) s2)
@@ -948,7 +948,7 @@
         (raise-and-warn "User-Relation not supported.")]
       [(== t1 t2) (=/= t1 t2)]
       [(=/= t1 t2) (== t1 t2)]
-      [(ex a gn) (forall-into-disj-1 (forall a (Top) (c gn)))]
+      [(ex a gn)  (forall a (Top) (c gn))]
       [(forall v bound gn) ;; forall v. bound => g
         (ex v (conj bound (complement gn))) ]
       [(numbero t) (not-numbero t)]
@@ -1881,34 +1881,34 @@
   (mapped-stream map-clear-about dnf-sym-stream)
 )
 
-;;; make every disj that directly scoped by forall
-;;;     transformed into disj-1
-(define/contract (forall-into-disj-1 g)
-  (Goal? . -> . Goal?)
+;;; ;;; make every disj that directly scoped by forall
+;;; ;;;     transformed into disj-1
+;;; (define/contract (forall-into-disj-1 g)
+;;;   (Goal? . -> . Goal?)
 
-  (define (case-exist g)
-    (define (each-case-exist rec-parent rec g)
-      (match g
-        [(forall v d b) (forall v d (case-forall b))] 
-        [o/w (rec-parent g)]))
-      (let ([result-f
-            (compose-maps 
-                (list each-case-exist goal-term-base-map pair-base-map identity-endo-functor))])
-        (result-f g)))
+;;;   (define (case-exist g)
+;;;     (define (each-case-exist rec-parent rec g)
+;;;       (match g
+;;;         [(forall v d b) (forall v d (case-forall b))] 
+;;;         [o/w (rec-parent g)]))
+;;;       (let ([result-f
+;;;             (compose-maps 
+;;;                 (list each-case-exist goal-term-base-map pair-base-map identity-endo-functor))])
+;;;         (result-f g)))
 
-  (define (case-forall g)
-    (define (each-case-forall rec-parent rec g)
-      (match g
-        [(disj a b)     (disj-1 (rec a) (rec b))]
-        [(ex v b)       (ex v (case-exist b))] 
-        [o/w (rec-parent g)]))
-      (let ([result-f
-            (compose-maps 
-                (list each-case-forall goal-term-base-map pair-base-map identity-endo-functor))])
-        (result-f g)))
+;;;   (define (case-forall g)
+;;;     (define (each-case-forall rec-parent rec g)
+;;;       (match g
+;;;         [(disj a b)     (disj-1 (rec a) (rec b))]
+;;;         [(ex v b)       (ex v (case-exist b))] 
+;;;         [o/w (rec-parent g)]))
+;;;       (let ([result-f
+;;;             (compose-maps 
+;;;                 (list each-case-forall goal-term-base-map pair-base-map identity-endo-functor))])
+;;;         (result-f g)))
 
-  (case-exist g)
-)
+;;;   (case-exist g)
+;;; )
 
 
 
