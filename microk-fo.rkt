@@ -430,6 +430,10 @@
   ;;;     on which case syntactical solving will happen
   (define heuristic-to-syn-solve
     (and (or (relate? g) (Bottom? g)) 
+          ;;; Note! Here (Bottom? g) is important -- we only invoke syn solve
+          ;;;   if ultimate goal is bottom and relate
+          ;;;   that means when target goal is a simple goal, then we won't invoke
+          ;;;   syn solve and try to falsify the assumption 
          (not (empty-assumption-base? assmpt))))
   
   (if heuristic-to-syn-solve
