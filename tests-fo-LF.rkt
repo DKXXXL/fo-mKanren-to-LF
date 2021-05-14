@@ -943,6 +943,23 @@
   (cimpl (reachable x y) (Bottom))
 )
 
+(define-relation (node z) (disj* (== z 'a) (== z 'b) (== z 'c) (== z 'd)))
+
+(Graph-reachable-1
+  (run 1 () (unreachable 'c 'a))
+. test-reg!=> . 'succeed                              
+)
+
+(Graph-reachable-2
+  (run 1 () (reachable 'c 'a))
+. test-reg!=> . 'fail                              
+)
+
+(Graph-reachable-3
+  (run 1 (z) (unreachable 'c z) (node z))
+. test-reg!=> . 'succeed          
+)
+
 
 
 ;;; currently unhalting
