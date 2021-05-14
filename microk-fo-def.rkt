@@ -566,6 +566,7 @@
   (match g
     [(== x y)        (== (rec x) (rec y))]
     [(=/= x y)       (=/= (rec x) (rec y))]
+    
     [(symbolo x)     (symbolo (rec x))]
     [(not-symbolo x) (not-symbolo (rec x))]
     [(numbero x)     (numbero (rec x))]
@@ -675,8 +676,8 @@
 ;;; the goal is decidable 
 ;;;     iff goal is without any relate/any constructive implication
 ;;;     TODO: make it more relaxed
-(define/contract (decidable-goal? g)
-  (Goal? . -> . boolean?)
+(define (decidable-goal? g)
+  ;;; (Goal? . -> . boolean?)
   (define res #t)
   ;;; side-effect for folding
   ;;;   still using visitor pattern/homomorphism
@@ -684,8 +685,11 @@
     (match g
       [(relate _ _) (begin (set! res #f) g)]
       ;; TODO (greg): if `a` is decidable, the entire implication may still be decidable
-      [(cimpl a b) (begin (set! res #f) g)] ; don't even allow implication to be inside g
-      [(forall _ b g) (rec (cimpl b g))] ; equivalent semantic
+      ;;; [(cimpl a b) (begin (set! res #f) g)] ; don't even allow implication to be inside g
+      [(forall _ b g_) 
+          ;;; (rec (cimpl b g_)) ; equivalent semantic
+          (begin (set! res #f) g) ; more conservative
+          ] 
       [_ (rec-parent g)]
     )
   )

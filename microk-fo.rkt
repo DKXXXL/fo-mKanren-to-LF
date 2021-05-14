@@ -53,6 +53,8 @@
   run/state
   run*
 
+  subst
+
   conj*
   disj*
 
@@ -516,6 +518,7 @@
       ;;; ((forall v (R . cimpl . g)) and (ex v R)) . cimpl . g
             (let* (
                 [subgoal-ty (for-all (x) ( (t . subst . [x // v]) . cimpl . g ))]
+                [k (debug-dump "syn-solve on exists:~a \n" subgoal-ty)]
                 [st-pf-filled st]
             ;;; remove that existential assumption as well
             ;;; TODO: apparently there are some duplicate computation, 
@@ -683,7 +686,7 @@
       ;;; TODO: rewrite the following into ANF-style (the push-let form)
       (match-let* 
             ([(cons g1-dec g1-ndec) (simplify-dec+nondec g1)]
-             [k (debug-dump-off "\n dec comp: ~a \n undec comp ~a \n " g1-dec g1-ndec)]
+             [k (debug-dump "\n dec comp: ~a \n undec comp ~a \n " g1-dec g1-ndec)]
              [~g1-dec-ty (complement g1-dec)]
              [st-to-fill st]
              [st-~g1-dec st-to-fill]

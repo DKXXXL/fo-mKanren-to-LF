@@ -926,6 +926,25 @@
 ) 
 ;; ((a -> b) -> c) =/= (a /\ b -> c)
 
+;;; Reachability example:
+(define-relation (edge x y)
+  (disj* 
+    (== (cons x y)  (cons 'a 'b))
+    (== (cons x y)  (cons 'b 'a))
+    (== (cons x y)  (cons 'b 'c))
+    (== (cons x y)  (cons 'c 'd))))
+
+(define-relation (reachable x y)
+  (disj* 
+    (== x y)
+    (fresh (z) (edge x z) (reachable z y))))
+
+;;; (define-relation (unreachable x y)
+;;;   (cimpl (reachable x y) (Bottom))
+;;; )
+
+
+
 ;;; currently unhalting
 (lengtho-test-2
   (run 1 (L) (for-all (x y) (cimpl (cimpl (== x (cons 'a y))
