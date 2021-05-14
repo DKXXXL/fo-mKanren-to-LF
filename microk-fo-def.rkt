@@ -578,6 +578,7 @@
     [(conj a b)     (conj (rec a) (rec b))]
     [(ex v g)       (ex v (rec g))]
     [(forall v b g) (forall v (rec b) (rec g))]
+    [(relate thunk descript)  (relate thunk (rec descript))] 
     [_ (rec-parent g)] ;; otherwise do nothing
   )
 )

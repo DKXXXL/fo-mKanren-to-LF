@@ -574,7 +574,7 @@
   (Goal? . -> . Goal?)  
   (define (each-case rec-parent rec g)
     (match g
-      [(relate thunk _) (thunk)] 
+      [(relate thunk description) (apply thunk (cdr description))] 
       [o/w (rec-parent g)]
     )
   )
@@ -592,7 +592,7 @@
     (if result
         g
         (match g
-          [(relate thunk _) (begin (set! result #t) g)] 
+          [(relate _ _) (begin (set! result #t) g)] 
           [o/w (rec-parent g)]))
   )
   (define result-f 
@@ -710,7 +710,7 @@
  
     ))
     ((relate thunk descript)
-      (pause assmpt st (thunk)))
+      (pause assmpt st (apply thunk (cdr descript))))
     ((== t1 t2) (unify t1 t2 st))
     ((=/= t1 t2) (neg-unify t1 t2 st))
     ((symbolo t1)  (wrap-state-stream (check-as-inf-type symbol? t1 st)))

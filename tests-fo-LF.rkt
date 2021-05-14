@@ -939,9 +939,9 @@
     (== x y)
     (fresh (z) (edge x z) (reachable z y))))
 
-;;; (define-relation (unreachable x y)
-;;;   (cimpl (reachable x y) (Bottom))
-;;; )
+(define-relation (unreachable x y)
+  (cimpl (reachable x y) (Bottom))
+)
 
 
 
