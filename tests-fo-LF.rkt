@@ -1751,18 +1751,18 @@
   (fresh (x) (== l (list x))))
 
 (CN-ifte-example0
-  (run 1 (q) (fresh (e) (find p e q) ))
+  (run 3 (q) (fresh (e) (find p e q) ))
   . test-reg!=> . 'succeed
 )
 
 
 (CN-ifte-example1
-  (run 1 (q) (fresh (e) (remove p q (list)) ))
+  (run* (q) (fresh (e) (remove p q (list (list))) ))
   . test-reg!=> . 'succeed
 )
 
 (CN-ifte-example2
-  (run 1 (q) (fresh (e) (remove p q q) ))
+  (run 3 (q) (fresh (e) (remove p q q) ))
   . test-reg!=> . 'succeed
 )
 
@@ -1772,7 +1772,7 @@
   . test-reg!=> . 'succeed
 )
 
-
+;;; This case is not halting for some reason. At least not halting in 10 sec.
 (CN-ifte-example4
   (run 1 (q) (filter p q (list 1)))
   . test-reg!=>ND . 'succeed
