@@ -1707,6 +1707,83 @@
   . test-reg!=> . 'succeed
 )
 
+(define-relation (ifte cond brA brB)
+  (disj* 
+    (conj cond brA)
+    (conj (neg cond) brB)))
+
+(define-relation (find p e xs)
+  (fresh (x xs2 ys2)
+    (== xs (cons x xs2))
+    (ifte (p x)
+      (== e x)
+      (find p e xs2)
+    )))
+
+
+(define-relation (remove p xs ys)
+  (disj*
+    (conj*
+      (== xs '())
+      (== ys '()))
+    (fresh (x xs2 ys2)
+      (== xs (cons x xs2))
+      (ifte (p x)
+        (== ys xs2)
+        (conj* (== ys (cons x ys2))
+               (remove p xs2 ys2)))))
+)
+
+(define-relation (filter p xs ys)
+  (disj*
+    (conj*
+      (== xs '())
+      (== ys '()))
+    (fresh (x xs2 ys2)
+      (== xs (cons x xs2))
+      (ifte (p x)
+        (== ys (cons x ys2))
+        (== ys ys2))
+      (filter p xs2 ys2))))
+
+
+(define-relation (p l)
+  (fresh (x) (== l (list x))))
+
+(CN-ifte-example0
+  (run 1 (q) (fresh (e) (find p e q) ))
+  . test-reg!=> . 'succeed
+)
+
+
+(CN-ifte-example1
+  (run 1 (q) (fresh (e) (remove p q (list)) ))
+  . test-reg!=> . 'succeed
+)
+
+(CN-ifte-example2
+  (run 1 (q) (fresh (e) (remove p q q) ))
+  . test-reg!=> . 'succeed
+)
+
+
+(CN-ifte-example3
+  (run 1 (q) (filter p q q))
+  . test-reg!=> . 'succeed
+)
+
+
+(CN-ifte-example4
+  (run 1 (q) (filter p q (list 1)))
+  . test-reg!=>ND . 'succeed
+)
+
+
+(CN-ifte-example5
+  (run 1 (q) (filter p q (list)))
+  . test-reg!=> . 'succeed
+)
+
 (define all-tests
   (test-suite 
     "all"
