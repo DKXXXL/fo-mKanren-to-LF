@@ -1616,6 +1616,97 @@
 )
 
 
+(define-relation (zeros l)
+  (disj 
+    (== l (list 0))
+    (fresh (l2)
+      (== l (cons 0 l2))
+      (zeros l2))))
+
+(define-relation (neg X)
+  (cimpl X (Bottom)))
+
+
+(Zeros-example
+  (run 1 (z) (neg (zeros z)))
+  . test-reg!=> . 'succeed)
+
+(CN-example1
+  (run 1 (q) (for-all (x) (== x q)))
+  . test-reg!=> . 'fail
+)
+
+(CN-example2
+  (run 1 (q) (for-all (x) (fresh (y) (== x y))))
+  . test-reg!=> . 'succeed
+)
+
+(CN-example3
+  (run 1 (q) (for-all (x) (fresh (y) (== x y) (== y q))))
+  . test-reg!=> . 'fail
+)
+
+(CN-example4
+  (run 1 (q) (for-all (x) (== q (cons 1 x))))
+  . test-reg!=> . 'fail
+)
+
+(CN-example5
+  (run 1 (q) (for-all (x) (fresh (y) (== y (cons 1 x)))))
+  . test-reg!=> . 'succeed
+)
+
+
+(CN-example6
+  (run 1 (q) (for-all (x) (fresh (y) (== x (cons 1 y)))))
+  . test-reg!=> . 'fail
+)
+
+(CN-example7
+  (run 1 (q) (for-all (x) (=/= x q)))
+  . test-reg!=> . 'fail
+)
+
+(CN-example8
+  (run 1 (q) (for-all (x) (fresh (y) (=/= x y))))
+  . test-reg!=> . 'succeed
+)
+
+(CN-example9
+  (run 1 (q) (for-all (x) (fresh (y) (=/= x y) (== y q))))
+  . test-reg!=> . 'fail
+)
+
+(CN-example10
+  (run 1 (q) (for-all (x) (=/= q (cons 1 x))))
+  . test-reg!=> . 'succeed
+)
+
+(CN-example11
+  (run 1 (q) (fresh (x) (== q (cons 1 x))) (for-all (x) (=/= q (cons 1 x))))
+  . test-reg!=> . 'fail
+)
+
+(CN-example12
+  (run 1 (q) (for-all (x) (=/= (cons x x) (cons 0 1))))
+  . test-reg!=> . 'succeed
+)
+
+(CN-example13
+  (run 1 (q) (for-all (x) (=/= (cons x x) (cons 1 1))))
+  . test-reg!=> . 'fail
+)
+
+(CN-example14
+  (run 1 (q) (for-all (x) (=/= (cons x x) (cons q 1))))
+  . test-reg!=> . 'succeed
+)
+
+(CN-example15
+  (run 1 (q) (fresh (a b) (== q (cons a b)) (for-all (x) (=/= (cons x x) (cons a b))) ))
+  . test-reg!=> . 'succeed
+)
+
 (define all-tests
   (test-suite 
     "all"
