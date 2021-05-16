@@ -1784,6 +1784,43 @@
   . test-reg!=> . 'succeed
 )
 
+
+(define-relation (move x y)
+  (disj*
+    (== (cons x y) (cons 'a 'b))
+    (== (cons x y) (cons 'b 'a))
+    (== (cons x y) (cons 'b 'c))
+    (== (cons x y) (cons 'c 'd))
+  )
+)
+
+(define-relation (possible-chars x)
+  (disj* (== x 'a) (== x 'b) (== x 'c) (== x 'd))
+)
+
+(define-relation (winning x)
+  (possible-chars x)
+  (fresh (y)
+    (possible-chars y)
+    (move x y) 
+    (neg (winning y))))
+
+
+(Non-stratified-example1
+  (run 1 () (winning 'd))
+  . test-reg!=> . 'fail
+)
+
+(Non-stratified-example2
+  (run 1 () (winning 'c))
+  . test-reg!=> . 'succeed
+)
+
+;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;  Utility
+;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
 (define all-tests
   (test-suite 
     "all"
