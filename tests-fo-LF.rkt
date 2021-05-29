@@ -120,6 +120,8 @@
 (define run-1-succeed (run 1 () (== 1 1)))
 (define run-1-fail (run 1 () (== 1 2)))
 
+
+
 ;;; type constraint sanity check
 
 ((run 1 ()  (fresh (x) (symbolo x)))
@@ -470,15 +472,15 @@
 ((run 1 () (for-all (x) (== x x))) . test-reg!=> . 'succeed)
 (Trivial-Wrong-1
   (run 1 (a) (for-all (x) (== x a))) . test-reg!=> . 'fail)
-((run 1 (a) (for-all (x) (fresh (s) (== a s)))) . test-reg!=> . 'succeed)
-((run 1 (a) (for-all (x) (fresh (s) (== x s)))) . test-reg!=> . 'succeed)
-((run 1 (a) (for-all (x) (fresh (s t) (== s `(,x . ,t))))) . test-reg!=> . 'succeed)
+((run 1 (a) (for-all (x) (fresh (s) (== a s)))) . test-reg!=> . '((_.0)))
+((run 1 (a) (for-all (x) (fresh (s) (== x s)))) . test-reg!=> . '((_.0)))
+((run 1 (a) (for-all (x) (fresh (s t) (== s `(,x . ,t))))) . test-reg!=> . '((_.0)))
 
 
 
 
 ((run 1 (a b) (for-all (x) 
-  (disj (=/= x a) (=/= x b)))) . test-reg!=> . 'succeed)
+  (disj (=/= x a) (=/= x b)))) . test-reg!=> . '((_.0 _.1)))
 ; closed world: removing any of the disjuncts should fail
 (Closed-world-1
   (run 1 () (for-all (x) 
@@ -526,7 +528,7 @@
 ;; a fancy/possibly-slow way of saying (=/= a b)
 ((run 1 (a b)
   (for-all (x) (disj* (=/= a x) (=/= b x))))
-. test-reg!=> . 'succeed  
+. test-reg!=> . '((_.0 _.1))  
 )
 
 
@@ -534,18 +536,18 @@
 ;;;     also inequality information disappear
 (NestedCons-1
   (run 1 (c a b) (for-all (x) (=/= c (cons a (cons b x)))))
-. test-reg!=> . 'succeed)
+. test-reg!=> . '((_.0 _.1 _.2)))
 ;;; this should lead to (((_.0 _.1 . _.2) _.3 _.4)) as result
 
 
 
 (NestedCons-2
   (run 1 (c a b) (for-all (y) (=/= c (cons a (cons b y)))) )
-. test-reg!=> . 'succeed)
+. test-reg!=> . '((_.0 _.1 _.2)))
 ((run 1 () (for-all (x) (=/= x (cons x x))))
 . test-reg!=> . 'succeed)
 ((run 1 (a) (for-all (y) (disj* (numbero a) (stringo a))))
-. test-reg!=> . 'succeed)
+. test-reg!=> . '((_.0)))
 ((run 1 () (for-all (z) (fresh ( r ) (=/= r z) (numbero r))))
 . test-reg!=> . 'succeed)
 (For-bound-Trivial-1
@@ -687,7 +689,7 @@
 
 (Teenage-sort-6
   (run 1 (a) (for-bound (x) [boolo x] (sort-boolo (list #f #f x) (list a #f x))))
-. test-reg!=> . 'succeed
+. test-reg!=> . '((#f))
 )
 
 
@@ -706,7 +708,7 @@
 
 (sort-bool-synthesize-base-0
   (run 1 (o) (sort-boolo-base-case (list #t #f #f #f) (list #f #f #f #t) '()))
-. test-reg!=> . 'succeed 
+. test-reg!=> . '((_.0)) 
 )
 
 
@@ -714,7 +716,7 @@
 ;;;   the type constraint is incorrect
 (sort-bool-synthesize-base
   (run 1 (o) (for-all (x) (sort-boolo-base-case (list x #f #f #f) (list #f #f #f x) o)))
-. test-reg!=> . 'succeed 
+. test-reg!=> . '(((#f #f #f #f)))
 )
 
 (sort-boolo-implies-membero-1
@@ -722,7 +724,7 @@
       (cimpl (sort-boolo lst (cons #f y))
              (membero #f lst))
     )
-. test-reg!=> . 'succeed 
+. test-reg!=> . '((_.0 (#f . _.1)))
 )
 
 ;;; BUGFIX: currently the following is not halting
@@ -839,13 +841,13 @@
 (run 1 (a) (conj 
       (for-all (x) (sort-boolo (list #f #f x) (list a #f x)))
       (== a #f)) )
-. test-reg!=> . 'succeed 
+. test-reg!=> . '((#f))
 )
 
 (sort-boolo-simple-2
 (run 1 (a) 
       (for-all (x) (sort-boolo (list #f #f x) (list a #f x))))
-. test-reg!=> . 'succeed 
+. test-reg!=> . '((#f))
 )
 
 
@@ -957,7 +959,7 @@
 
 (Graph-reachable-3
   (run 1 (z) (unreachable 'c z) (node z))
-. test-reg!=> . 'succeed          
+. test-reg!=> . '((a))         
 )
 
 
@@ -990,7 +992,7 @@
 ;;; 
 
 ((run 1 (x)  (cimpl (== x 1) (=/= x 2)))
-  . test-reg!=> . 'succeed  
+  . test-reg!=> . '((_.0))  
 )
 
 ((run 1 ()  (for-all (x) (cimpl (== x 1) (=/= x 2))))
@@ -998,15 +1000,15 @@
 )
 
 ((run 1 (x a)  (cimpl (== x a) (=/= x 2)))
-  . test-reg!=> . 'succeed  
+  . test-reg!=> . '((_.0 _.1))
 )
 
 ((run 1 (a)  (for-all (x) (cimpl (== x a) (=/= x 2))) )
-  . test-reg!=> . 'succeed  
+  . test-reg!=> . '((_.0))
 )
 
 ((run 1 (x a)  (cimpl (== x a) (=/= x a)))
-  . test-reg!=> . 'succeed  
+  . test-reg!=> . '((_.0 _.1)) 
 )
 
 ((run 1 (a)  (for-all (x) (cimpl (== x a) (=/= x a))) )
@@ -1015,7 +1017,7 @@
 
 
 ((run 1 (a)  (cimpl (stringo a) (symbolo a)))
-  . test-reg!=> . 'succeed  
+  . test-reg!=> . '((_.0)) 
 )
 
 ((run 1 ()  (for-all (a) (cimpl (stringo a) (symbolo a))) )
@@ -1023,7 +1025,7 @@
 )
 
 ((run 1 (a)  (cimpl (== a 1) (symbolo a)))
-  . test-reg!=> . 'succeed  
+  . test-reg!=> . '((_.0)) 
 )
 
 ((run 1 ()  (for-all (a) (cimpl (== a 1) (symbolo a))))
@@ -1036,7 +1038,7 @@
 )
 
 ((run 1 (a)  (cimpl (=/= a 1) (symbolo a)))
-  . test-reg!=> . 'succeed  
+  . test-reg!=> . '((1))
 )
 
 (Cimpl-dec1
@@ -1046,12 +1048,12 @@
 
 
 ((run 1 (a)  (conj (== a 1) (cimpl (=/= a 1) (symbolo a))))
-  . test-reg!=> . 'succeed  
+  . test-reg!=> . '((1)) 
 )
 
 
 ((run 1 (a)  (conj (numbero a) (cimpl (stringo a) (symbolo a))) )
-  . test-reg!=> . 'succeed  
+  . test-reg!=> . '((_.0))
 )
 
 ((run 1 (a)  (conj (== a 1) (cimpl (== a 1) (symbolo a))))
@@ -1077,12 +1079,12 @@
 (Simple-Rewrite-3
   (run 1 (x z)  (conj (== x z) (cimpl (False z)
                                    (False x))))
-  . test-reg!=>ND . 'succeed  
+  . test-reg!=> . '((_.0 _.0))  
 )
 
 (Syn-solve-1
   (run 1 (a)  (cimpl (False a) (False a)))
-  . test-reg!=> . 'succeed  
+  . test-reg!=> . '((_.0))  
 )
 
 (define-relation (Falsew/1 x)
@@ -1090,15 +1092,15 @@
 
 
 ((run 1 (a)  (cimpl (Falsew/1 a) (Falsew/1 a)))
-  . test-reg!=> . 'succeed  
+  . test-reg!=> . '((_.0))
 )
 
 ((run 1 (a)  (cimpl (Falsew/1 a) (== a 1)))
-  . test-reg!=> . 'succeed  
+  . test-reg!=> . '((1))  
 )
 
 ((run 1 (a)  (cimpl (Falsew/1 a) (== a 2)))
-  . test-reg!=> . 'succeed  
+  . test-reg!=> . '((2))
 )
 
 
@@ -1113,25 +1115,25 @@
 
 
 ((run 1 (a)  (conj (cimpl (False1 a) (False2 2)) (== a 2)))
-  . test-reg!=> . 'succeed  
+  . test-reg!=> . '((2)) 
 )
 
 ((run 1 (a)  (conj (cimpl (False2 a) (False1 2)) (== a 2)))
-  . test-reg!=> . 'succeed  
+  . test-reg!=> . '((2))
 )
 
 ((run 1 (a)  (conj (cimpl (False3 a) (False 2)) (== a 2)))
-  . test-reg!=> . 'succeed  
+  . test-reg!=> . '((2))
 )
 
 ((run 1 (a)  (conj (cimpl (False a) (False3 2)) (== a 2)))
-  . test-reg!=> . 'succeed  
+  . test-reg!=> . '((2))
 )
 
 ((run 1 (a)  (cimpl (conj (a . == . 1)  
                           ((a . == . 1) . → . (symbolo a))) 
                     (Bottom)) )
-  . test-reg!=> . 'succeed  
+  . test-reg!=> . '((_.0)) 
 )
 
 (define → cimpl)
@@ -1139,20 +1141,20 @@
 (Syn-solve-cimpl
   (run 1 (a)  (cimpl ((== a 1) . → . (False a)) 
                     (False a)) )
-  . test-reg!=> . 'succeed  
+  . test-reg!=> . '((1)) 
 )
 
 (Syn-solve-lor
   (run 1 (a)  (cimpl ((disj (== a 1) (Bottom)) . → . (False a)) 
                     (False a)) )
-  . test-reg!=> . 'succeed  
+  . test-reg!=> . '((1))
 )
 
 
 (Syn-solve-land
   (run 1 (a)  (cimpl ((conj (== a 1) (Top)) . → . (False a)) 
                     (False a)) )
-  . test-reg!=> . 'succeed  
+  . test-reg!=> . '((1))
 )
 
 ;;; This goal can only be satisfied from outside
@@ -1221,7 +1223,7 @@
                       ((disj A B) . → . C)
                       A) 
                     C) ))
-  . test-reg!=> . 'succeed  
+  . test-reg!=> . '((_.0))  
 )
 
 
@@ -1243,7 +1245,7 @@
                       (for-all (x) ((False x) . → . A))
                       (False y))
                     A)))
-  . test-reg!=> . 'succeed  
+  . test-reg!=> . '((_.0)) 
 )
 
 (Syn-solve-universal-3
@@ -1359,7 +1361,7 @@
         (cimpl (== a (list b b b))
               (disj (=/= b #f)
                     (has-false a))))) 
-  . test-reg!=> . 'succeed  
+  . test-reg!=> . '((_.0))
   )
 
 (Test-has-false-trivial-2
@@ -1381,7 +1383,7 @@
 
 (Test-has-false-0
   (run 1 (x) (for-all (b) (has-false (list b b x)))) 
-  . test-reg!=> . 'succeed  
+  . test-reg!=> . '((#f))
 )
 ;;; '((#f)) as the result
 ; test performance degredation with # of "b"s
@@ -1390,7 +1392,7 @@
 (Test-has-false-1
   (run 1 (x) (cimpl (== x #f)
                  (has-false (list x x))))
-. test-reg!=> . 'succeed                   
+. test-reg!=> . '((_.0))                
 ) 
 ; should get _.0
 
@@ -1399,7 +1401,7 @@
   (run 1 (x y) (cimpl (== x y)
                  (has-false (list x x))))
 
-. test-reg!=> . 'succeed                   
+. test-reg!=> . '((_.0 _.1))               
 ) 
 ; should get (_.0 #f)
 
@@ -1410,7 +1412,7 @@
            (fresh (b)
               (== xs-sorted (cons #f b))
               (sort-boolo xs xs-sorted)))) 
-  . test-reg!=> . 'succeed  )
+  . test-reg!=> . '(((#f) (#f))) )
 ; shold succeed
 
 
@@ -1562,14 +1564,14 @@
 ; this should generate constant functions
 (Evalo-simple-1
   (run 1 (x z) (for-all (y) (evalo `(app ,x (quote ,y)) z)))
-  . test-reg!=> . 'succeed
+  . test-reg!=> . '(('(closure '_.0 _.1) _.0))
 )
 
 ; if (app x y) == z for all y, then (app x 6) == z
 (Evalo-simple-2
   (run 1 (x z) (cimpl (for-all (y) (evalo `(app ,x ,y) z))
                       (evalo `(app ,x (quote 6)) z)))
-  . test-reg!=> . 'succeed
+  . test-reg!=> . '((_.0 _.1))
 )
 
 ;;; the following has bug?
@@ -1591,21 +1593,21 @@
 (Evalo-simple-3-2
   (run 1 (f) 
     (for-all (y) (evalo `(app (lambda (cons ,f ,f)) (quote ,y)) `(,y . ,y)) ))
-  . test-reg!=> . 'succeed
+  . test-reg!=> . '(((var ())))
 )
 
 
 ; this should generate identity functions
 (Evalo-simple-4
   (run 1 (x) (for-all (y) (evalo `(app ,x (quote ,y)) y)))
-  . test-reg!=> . 'succeed  
+  . test-reg!=> . '(('(closure (var ()) _.0))) 
 ) ; quoting issue?
 
 
 (Evalo-simple-5
   (run 1 (q) (cimpl (evalo q q)
                   (fresh (t) (evalo q t) (evalo t q))))
-  . test-reg!=> . 'succeed
+  . test-reg!=> . '((_.0))
 )
 
 (Evalo-simple-6
@@ -1629,7 +1631,7 @@
 
 (Zeros-example
   (run 1 (z) (neg (zeros z)))
-  . test-reg!=> . 'succeed)
+  . test-reg!=> . '((_.0)))
 
 (CN-example1
   (run 1 (q) (for-all (x) (== x q)))
@@ -1638,7 +1640,7 @@
 
 (CN-example2
   (run 1 (q) (for-all (x) (fresh (y) (== x y))))
-  . test-reg!=> . 'succeed
+  . test-reg!=> . '((_.0))
 )
 
 (CN-example3
@@ -1679,7 +1681,7 @@
 
 (CN-example10
   (run 1 (q) (for-all (x) (=/= q (cons 1 x))))
-  . test-reg!=> . 'succeed
+  . test-reg!=> . '((_.0))
 )
 
 (CN-example11
@@ -1699,12 +1701,12 @@
 
 (CN-example14
   (run 1 (q) (for-all (x) (=/= (cons x x) (cons q 1))))
-  . test-reg!=> . 'succeed
+  . test-reg!=> . '((_.0))
 )
 
 (CN-example15
   (run 1 (q) (fresh (a b) (== q (cons a b)) (for-all (x) (=/= (cons x x) (cons a b))) ))
-  . test-reg!=> . 'succeed
+  . test-reg!=> . '(((_.0 . _.1)))
 )
 
 (define-relation (ifte cond brA brB)
@@ -1752,24 +1754,24 @@
 
 (CN-ifte-example0
   (run 3 (q) (fresh (e) (find p e q) ))
-  . test-reg!=> . 'succeed
+  . test-reg!=> . '((((_.0) . _.1)) ((_.0 (_.1) . _.2)) ((_.0 (_.1) . _.2)))
 )
 
 
 (CN-ifte-example1
   (run* (q) (fresh (e) (remove p q (list (list))) ))
-  . test-reg!=> . 'succeed
+  . test-reg!=> . '((((_.0) ())) ((())) ((())) ((() (_.0))) ((() (_.0))))
 )
 
 (CN-ifte-example2
   (run 3 (q) (fresh (e) (remove p q q) ))
-  . test-reg!=> . 'succeed
+  . test-reg!=> . '((()) ((_.0)) ((_.0)))
 )
 
 
 (CN-ifte-example3
   (run 1 (q) (filter p q q))
-  . test-reg!=> . 'succeed
+  . test-reg!=> . '((()))
 )
 
 ;;; This case is not halting for some reason. At least not halting in 10 sec.
@@ -1781,7 +1783,7 @@
 
 (CN-ifte-example5
   (run 1 (q) (filter p q (list)))
-  . test-reg!=> . 'succeed
+  . test-reg!=> . '((()))
 )
 
 
