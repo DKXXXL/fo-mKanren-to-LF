@@ -12,13 +12,8 @@
   (struct-out Top)
   (struct-out Bottom)
 
-  ;;; type constraint, without dual ?
-  (struct-out symbolo)
-  (struct-out numbero)
-  (struct-out stringo)
-  (struct-out not-symbolo)
-  (struct-out not-numbero)
-  (struct-out not-stringo)
+  ;;; no type constraint, only allow (not-)symbolo
+  ;;; (struct-out type-constraint)
   
 
 
@@ -28,6 +23,14 @@
   for-all
   for-bound
   for-bounds
+  symbolo
+  numbero
+  stringo
+  
+  not-symbolo
+  not-numbero
+  not-stringo
+  
   step
   mature
   mature?
@@ -231,18 +234,6 @@
           (lambda (st) (unify/goal b d st))
           (unify/goal a c st)) ; a stream to return
         ]
-      [(cons (symbolo a) (symbolo b))
-        (== a b)]
-      [(cons (not-symbolo a) (not-symbolo b))
-        (== a b)]
-      [(cons (numbero a) (numbero b))
-        (== a b)]
-      [(cons (not-numbero a) (not-numbero b))
-        (== a b)]
-      [(cons (stringo a) (stringo b))
-        (== a b)]
-      [(cons (not-stringo a) (not-stringo b))
-        (== a b)]
       [(cons (type-constraint a T1) (type-constraint b T2))
         (and (equal? T1 T2) (== a b))]
       [_ #f]
@@ -713,22 +704,6 @@
       (pause assmpt st (apply thunk (cdr descript))))
     ((== t1 t2) (unify t1 t2 st))
     ((=/= t1 t2) (neg-unify t1 t2 st))
-    ((symbolo t1)  (wrap-state-stream (check-as-inf-type symbol? t1 st)))
-    ;; TODO (greg): factor out predicates
-    ((not-symbolo t1) 
-      (mplus 
-        (term-finite-type assmpt t1 st)
-        (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label symbol?) t1 st)))) 
-    ((numbero t1) (wrap-state-stream (check-as-inf-type number? t1 st)))
-    ((not-numbero t1)  
-      (mplus 
-        (term-finite-type assmpt t1 st)
-        (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label number?) t1 st)))) 
-    ((stringo t1) (wrap-state-stream (check-as-inf-type string? t1 st)))
-    ((not-stringo t1)  
-      (mplus 
-        (term-finite-type assmpt t1 st)
-        (wrap-state-stream (check-as-inf-type-disj (set-remove all-inf-type-label string?) t1 st))))
 
     ((type-constraint t types)
       (wrap-state-stream (check-as-inf-type-disj types t st)))
@@ -958,12 +933,6 @@
       [(ex a gn)  (forall a (Top) (c gn))]
       [(forall v bound gn) ;; forall v. bound => g
         (ex v (conj bound (complement gn))) ]
-      [(numbero t) (not-numbero t)]
-      [(not-numbero t) (numbero t)]
-      [(stringo t) (not-stringo t)]
-      [(not-stringo t) (stringo t)]
-      [(symbolo t) (not-symbolo t)]
-      [(not-symbolo t) (symbolo t)]
       [(type-constraint t types) 
         (disj (type-constraint t (set-subtract all-inf-type-label types)) (is-of-finite-type t))]
       [(Top) (Bottom)]
@@ -1124,14 +1093,7 @@
 
 
 
-(define type-label-to-type-goal
-  (hash
-    symbol? symbolo
-    pair? (lambda (term) (fresh (y z) (== term (cons y z))))
-    number? numbero
-    string? stringo
-  )
-)
+
 
 ;;; literally replace each x with mapping[x] in state/anything
 ;;;   actually also works for goal
@@ -1917,6 +1879,45 @@
 ;;;   (case-exist g)
 ;;; )
 
+
+(define/contract (symbolo t)
+  (any/c . -> . Goal?)
+  (type-constraint t (set symbol?))
+)
+
+
+(define/contract (numbero t)
+  (any/c . -> . Goal?)
+  (type-constraint t (set number?))
+)
+
+(define/contract (stringo t)
+  (any/c . -> . Goal?)
+  (type-constraint t (set string?))
+)
+
+
+(define/contract (not-symbolo t)
+  (any/c . -> . Goal?)
+  (disj 
+    (type-constraint t (set-remove all-inf-type-label symbol?))
+    (is-of-finite-type t))
+)
+
+
+(define/contract (not-numbero t)
+  (any/c . -> . Goal?)
+  (disj 
+    (type-constraint t (set-remove all-inf-type-label number?))
+    (is-of-finite-type t))
+)
+
+(define/contract (not-stringo t)
+  (any/c . -> . Goal?)
+  (disj 
+    (type-constraint t (set-remove all-inf-type-label string?))
+    (is-of-finite-type t))
+)
 
 
 ;;; include mk-syntax here as we turns out need those things here as well

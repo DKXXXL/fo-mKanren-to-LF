@@ -244,49 +244,6 @@
                                    g)]))
 )
 
-(struct symbolo Goal (t)
-  #:transparent
-  #:methods gen:custom-write
-  [(define (write-proc val output-port output-mode)
-     (fprintf output-port "symbol ~a" (symbolo-t val)))]
-)
-
-(struct not-symbolo Goal (t)
-  #:transparent
-  #:methods gen:custom-write
-  [(define (write-proc val output-port output-mode)
-     (fprintf output-port "not-symbol ~a" (not-symbolo-t val)))]
-)
-
-
-(struct numbero Goal (t)
-  #:transparent
-  #:methods gen:custom-write
-  [(define (write-proc val output-port output-mode)
-     (fprintf output-port "number ~a" (numbero-t val)))]
-)
-
-(struct not-numbero Goal (t)
-  #:transparent
-  #:methods gen:custom-write
-  [(define (write-proc val output-port output-mode)
-     (fprintf output-port "not-number ~a" (not-numbero-t val)))]
-)
-
-
-(struct stringo Goal (t)
-  #:transparent
-  #:methods gen:custom-write
-  [(define (write-proc val output-port output-mode)
-     (fprintf output-port "string ~a" (stringo-t val)))]
-)
-
-(struct not-stringo Goal (t)
-  #:transparent
-  #:methods gen:custom-write
-  [(define (write-proc val output-port output-mode)
-     (fprintf output-port "not-string ~a" (not-stringo-t val)))]
-)
 
 ;;; typeinfo is a set of type-symbol
 ;;; indicating t is union of these type
@@ -306,8 +263,6 @@
                                    "bad typeinfo: ~e"
                                    typeinfo)]))
 )
-
-
 
 
 (struct Top Goal ()
@@ -566,13 +521,6 @@
   (match g
     [(== x y)        (== (rec x) (rec y))]
     [(=/= x y)       (=/= (rec x) (rec y))]
-    
-    [(symbolo x)     (symbolo (rec x))]
-    [(not-symbolo x) (not-symbolo (rec x))]
-    [(numbero x)     (numbero (rec x))]
-    [(not-numbero x) (not-numbero (rec x))]
-    [(stringo x)     (stringo (rec x))]
-    [(not-stringo x) (not-stringo (rec x))]
     [(type-constraint x types) (type-constraint (rec x) types)]
     [(disj a b)     (disj (rec a) (rec b))]
     [(conj a b)     (conj (rec a) (rec b))]
