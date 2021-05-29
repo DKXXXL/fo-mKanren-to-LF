@@ -484,24 +484,23 @@
         ;;;     as we already half way through init-assmpt
           (let* (
               [split-goal (conj (cimpl a g) (cimpl b g))]
-              [st-pf-filled st]
               [reduced-assmpt (filter (lambda (x) (not (equal? top-name-assmpt x))) init-assmpt)]
-              [w/-disj  (pause reduced-assmpt st-pf-filled split-goal)]
+              [w/-disj  (pause reduced-assmpt st split-goal)]
               [w/o-disj (syn-solve remain-assmpt init-assmpt st g)]    
               )
             (mplus w/-disj w/o-disj))]
       [(cimpl a b)
           (fresh-param (applied)
             (let* (
-                [st-pf-filled  st]
+                [st  st]
                 [reduced-assmpt (filter (lambda (x) (not (equal? top-name-assmpt x))) init-assmpt)]
                 [new-assmpt (cons-assmpt applied b reduced-assmpt)]
                 [w/-cimpl
                   (mapped-stream
                     (λ (st) (pause init-assmpt st a))
-                    (pause new-assmpt st-pf-filled g))]
+                    (pause new-assmpt st g))]
                 [w/o-cimpl
-                  (syn-solve remain-assmpt init-assmpt st-pf-filled g)])
+                  (syn-solve remain-assmpt init-assmpt st g)])
               (mplus w/-cimpl w/o-cimpl)
             ))]
       [(ex v t)
@@ -510,7 +509,6 @@
             (let* (
                 [subgoal-ty (for-all (x) ( (t . subst . [x // v]) . cimpl . g ))]
                 [k (debug-dump "syn-solve on exists:~a \n" subgoal-ty)]
-                [st-pf-filled st]
             ;;; remove that existential assumption as well
             ;;; TODO: apparently there are some duplicate computation, 
             ;;;   with these unremoved assumption before top assmpt
@@ -519,14 +517,13 @@
                 )
               (mplus 
                 (syn-solve remain-assmpt init-assmpt st g)
-                (pause reduced-assmpt st-pf-filled subgoal-ty)))]
+                (pause reduced-assmpt st subgoal-ty)))]
       [(forall v domain t)
             (fresh-param (applied-term)
             (let* (
                 [VT (fresh-var VT)]
                 [forall-internal (cimpl domain t)]
                 [applied-type (forall-internal . subst . [VT // v])]
-                [st-pf-filled st]
                 ;;; Note: even though we seem to only allow for-all to be instantiated
                 ;;;     with only one variable
                 ;;;       the second instantiation will happen when our
@@ -534,7 +531,7 @@
                 [new-assmpt (cons-assmpt applied-term applied-type remain-assmpt)]
                     )
                
-                (syn-solve new-assmpt init-assmpt st-pf-filled g)) )]
+                (syn-solve new-assmpt init-assmpt st g)) )]
       ;;; atomic prop! just ignore them
       [o/w (syn-solve remain-assmpt init-assmpt st g)]
     )
@@ -649,22 +646,11 @@
     ((conj g1 g2)
     ;;; will add g1 into assumption when solving g2
     ;;;   different from cimpl that state will be impacted after solving g1
-      (let* ([st-pf-filled  st]
-              ;;; Note: Also a stupid heurstic
-              ;;; Warning!!!: later we will use cons-assmpt to sieve
-              ;;;   the valid assumption into assumption base
-              ;;;   instead of this incomplete relate check
-              ;;;       Trivial assumption doesn't need to be added into assmpt
-              ;;; TODO: to make things more informed 
-              ;;; [new-assmpt (if (relate? g1) (cons-assmpt left-v g1 assmpt) assmpt)]
-              [new-assmpt assmpt]
-            )
-       (step (bind new-assmpt (pause assmpt st-pf-filled g1) g2))))
+       (step (bind assmpt (pause assmpt st g1) g2)))
     ;;; the real syntactical solving for cimpl
     ((cimpl-syn g1 g2)
       (fresh-param (name-g1)
-        (let* ([st-to-fill st])
-          (pause (cons-assmpt name-g1 g1 assmpt) st-to-fill g2))
+          (pause (cons-assmpt name-g1 g1 assmpt) st g2)
       ))
     ((cimpl g1 g2) 
       ;;; semantic solving of implication is 
@@ -679,20 +665,16 @@
             ([(cons g1-dec g1-ndec) (simplify-dec+nondec g1)]
              [k (debug-dump "\n dec comp: ~a \n undec comp ~a \n " g1-dec g1-ndec)]
              [~g1-dec-ty (complement g1-dec)]
-             [st-to-fill st]
-             [st-~g1-dec st-to-fill]
-             [st-~g1ndec st]
              [cimpl-syn-short-circuit 
                 (λ (antc conseq) (if (equal? antc (Top)) conseq (cimpl-syn antc conseq)))]
-             [st-g1ndec-g2 st-to-fill]
             )
         (mplus*
-          (pause assmpt st-~g1-dec ~g1-dec-ty)
+          (pause assmpt st ~g1-dec-ty)
           ;;; A -> bot /\ A
           ;;; Note: the following decides the soundness of the whole algorithm
           ;;;     because without it, we may not expand the definition of assumption
           ;;;     and really falsifying it
-          (pause assmpt st-~g1ndec 
+          (pause assmpt st
               (conj g1-dec 
                 (disj* 
                   (cimpl-syn g1-ndec (Bottom)) ;;; and syntactical falsifying 
@@ -718,15 +700,13 @@
               (wrap-state-stream (state-scope-update st (lambda (scope) (set-remove scope v)) )))]
           [scoped-st (state-scope-update st (lambda (scope) (set-add scope v)))]
           ;;; then we compose new proof-term hole
-          [body-to-fill-scoped-st scoped-st]
-          [solving-gn (pause assmpt body-to-fill-scoped-st gn)]
+          [solving-gn (pause assmpt scoped-st gn)]
           ;;; we pop added scope information
           ;;;  and then make sure v become ground term (by using force-v-ground)
           ;;;  so that proof-term filling can succeed
           [remove-scoped-stream (mapped-stream remove-from-scope-stream solving-gn)]
-          [term-filled-stream remove-scoped-stream]
           )
-         term-filled-stream))
+         remove-scoped-stream))
 
     ((forall var domain goal) 
       ;;; Note: we won't support complicated (like recursive 
