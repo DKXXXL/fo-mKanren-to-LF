@@ -786,7 +786,7 @@
           (match (cons s1 s2)
             [(cons (cons k1 s1r) (cons k2 s2r))
                 (cons 
-                  (conj k1 k2)
+                  (all-linear-simplify (conj k1 k2))
                   (disj-goal-stream* 
                     (conj-goal-stream (wrap-goal-stream k1) s2r)
                     (conj-goal-stream s1r (wrap-goal-stream k2))
@@ -1741,7 +1741,7 @@
 (define (domain-enforcement-goal goal)
   (define all-tprojs (collect-tprojs goal))
   ;;; var x goal -> goal
-  (define (force-as-pair v g) (conj g (type-constraint v (set pair?))))
+  (define (force-as-pair v g) (conj (type-constraint v (set pair?)) g))
   (foldl (lambda (tp g) (force-as-pair (tproj-v tp) g)) goal (set->list all-tprojs))
 )
 
@@ -1951,7 +1951,6 @@
 ;;;     return the result as a GoalStream 
 (define/contract (negate-except-var st-stream scope v)
   (Stream? set? var? . -> . GoalStream?)
-  ;;; TODO: I will just currently make this assumption to empty...
   
   (define dnf-sym-stream (TO-DNF (TO-NON-Asymmetric '() st-stream)))
   ;;; (debug-dump "\n clearing about: input sttate0 ~a" state0)
@@ -1967,9 +1966,15 @@
         [unmentioned-removed-st (unmentioned-totally-removed mentioned-var var-removed-st)])
       unmentioned-removed-st))
   (define clear-var-stream (mapped-stream map-clear-about-in-field-proj dnf-sym-stream))
+
+  (debug-dump "   clear-var-stream: ~a \n" (all-mature-to-list clear-var-stream))
+
   (define negate-goals (negate-stream clear-var-stream))
+  
+  (debug-dump "   negating-goals result ~a \n" (all-mature-to-list negate-goals))
   (define negate-goal-stream (goal-stream-as-disj empty-assumption-base negate-goals empty-state))
   
+  (debug-dump "   negating-goals-to-states result ~a \n" (all-mature-to-list negate-goal-stream))  
   ;;; remove field projection form
   (define negate-goal-stream-fpfree
     (mapped-stream
@@ -1983,9 +1988,6 @@
         (wrap-goal-stream (state->goal st))) 
       negate-goal-stream-fpfree))
 
-  (debug-dump "   clear-var-stream: ~a \n" (all-mature-to-list clear-var-stream))
-  (debug-dump "   negating-goals result ~a \n" (all-mature-to-list negate-goals))
-  (debug-dump "   negating-goals-to-states result ~a \n" (all-mature-to-list negate-goal-stream))
   (debug-dump "   negating-goals final result ~a \n" (all-mature-to-list result))
   result
   

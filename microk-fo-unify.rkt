@@ -248,7 +248,7 @@
 (define (walk t sub)
   ;;; (debug-dump "walk: ~a with ~a \n" t sub)
   (cond
-    [(or (var? t) (tproj? t)) 
+    [(or (tvar? t) (tproj? t)) 
       (let ((xt (assf (lambda (x) (equal? t x)) sub)))
         (if xt (walk (cdr xt) sub) t))]
     [#t t]
@@ -260,7 +260,7 @@
 (define (occurs? x t sub)
   (cond ((pair? t) (or (occurs? x (walk (car t) sub) sub)
                        (occurs? x (walk (cdr t) sub) sub)))
-        ((var? t)  (equal? x t))
+        ((tvar? t)  (equal? x t))
         (else      #f)))
 
 (define (extend-sub x t sub)
@@ -277,9 +277,9 @@
 (define (unify/sub u v sub)
   (let ((u (walk u sub)) (v (walk v sub)))
     (cond
-      ((and (var? u) (var? v) (equal? u v)) sub)
-      ((var? u)                            (extend-sub u v sub))
-      ((var? v)                            (extend-sub v u sub))
+      ((and (tvar? u) (tvar? v) (equal? u v)) sub)
+      ((tvar? u)                            (extend-sub u v sub))
+      ((tvar? v)                            (extend-sub v u sub))
       ((and (pair? u) (pair? v))           (let ((sub (unify/sub (car u) (car v) sub)))
                                              (and sub (unify/sub (cdr u) (cdr v) sub))))
       (else                                (and (eqv? u v) sub)))))
@@ -327,21 +327,21 @@
 ;;;     (state-scope-set (state-sub-set st empty-sub) '()))
 
 ;;;   ;;; using visitor + side effect
-;;;   (define there-is-non-canonical-var? #f)
+;;;   (define there-is-non-canonical-tvar? #f)
 ;;;   (define (each-case rec-parent rec g)
 ;;;     (match g
 ;;;       [(var _ _)
 ;;;           (begin 
 ;;;             (if (not (equal? g (walk* g current-sub)))
-;;;                 (set! there-is-non-canonical-var? #t)
+;;;                 (set! there-is-non-canonical-tvar? #t)
 ;;;                 (void))
 ;;;             g)] 
 ;;;       ;;; short-circuit
-;;;       [o/w (if there-is-non-canonical-var? g (rec-parent g))]))
+;;;       [o/w (if there-is-non-canonical-tvar? g (rec-parent g))]))
 ;;;   (define result-f 
 ;;;     (compose-maps (list each-case goal-term-base-map pair-base-map state-base-endo-functor hash-key-value-map identity-endo-functor)))
 ;;;   (result-f st-without-sub-and-scope)
-;;;   (not there-is-non-canonical-var?)
+;;;   (not there-is-non-canonical-tvar?)
 ;;; )
 
 (define (canonicalized-state? st)
@@ -465,7 +465,7 @@
   (walk* tm (let loop ((tm tm) (sub (state-sub st)))
               (define t (walk tm sub))
               (cond ((pair? t) (loop (cdr t) (loop (car t) sub)))
-                    ((var? t)  (set! index (+ 1 index))
+                    ((tvar? t)  (set! index (+ 1 index))
                                (extend-sub t (reified-index index) sub))
                     (else      sub)))))
 
@@ -483,7 +483,7 @@
     (let loop ((tm everything-to-print) (sub (state-sub st)))
         (define t (walk tm sub))
         (cond ((pair? t) (loop (cdr t) (loop (car t) sub)))
-              ((var? t)  (set! index (+ 1 index))
+              ((tvar? t)  (set! index (+ 1 index))
                           (extend-sub t (reified-index index) sub))
               (else      sub))))
   (define tm-result (walk* tm full-sub))
@@ -622,7 +622,7 @@
     [t <- (walk*/st t_)]
     [<-end 
       (match t
-        [(? var?)
+        [(? tvar?)
             (do [st       <- get-st]
                 [htable            = (state-typercd st)]
                 [before-type-info  = (hash-ref htable t all-inf-type-label)]
