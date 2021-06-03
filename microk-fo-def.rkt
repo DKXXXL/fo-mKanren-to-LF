@@ -31,6 +31,11 @@
      (fprintf output-port "~a#~a" (var-name val) (var-index val)))]
 )
 
+;;; unifiable term?
+(define (tvar? t)
+  (or (var? t) (tproj? t))
+)
+
 ;;; making part of tproj as var, 
 (struct tp-var var ()
   #:transparent
@@ -383,6 +388,45 @@
 ;;; stream-struct is the parent of all streams
 (struct stream-struct () #:prefab)
 
+(struct goal-stream-struct () #:prefab)
+
+
+(struct negate-st goal-stream-struct (st)
+  #:transparent
+  #:guard (lambda (st type-name)
+                    (cond
+                      [(state? st)
+                       (values st)]
+                      [else (error type-name)]))
+)
+
+(struct negate-stream goal-stream-struct (s)
+  #:transparent
+  #:guard (lambda (s type-name)
+                    (cond
+                      [(Stream? s)
+                       (values s)]
+                      [else (error type-name)]))
+)
+
+(struct conj-goal-stream goal-stream-struct (gs1 gs2)
+  #:transparent
+  #:guard (lambda (gs1 gs2 type-name)
+                    (cond
+                      [(andmap GoalStream? (list gs1 gs2))
+                       (values gs1 gs2)]
+                      [else (error type-name)]))
+)
+
+(struct disj-goal-stream goal-stream-struct (gs1 gs2)
+  #:transparent
+  #:guard (lambda (gs1 gs2 type-name)
+                    (cond
+                      [(andmap GoalStream? (list gs1 gs2))
+                       (values gs1 gs2)]
+                      [else (error type-name)]))
+)
+
 (struct bind  stream-struct (assmpt s g)   
   #:transparent
   #:guard (lambda (assmpt s g type-name)
@@ -393,6 +437,7 @@
                        (values assmpt s g)]
                       [else (error type-name)]))
 )
+
 
 (struct mplus stream-struct (s1 s2) 
   #:transparent
@@ -426,6 +471,11 @@
     ((_ x y ...) 
       (mplus x (mplus* y ...)))))
 
+(define-syntax disj-goal-stream*
+  (syntax-rules ()
+    ((_ x) x)
+    ((_ x y ...) 
+      (disj-goal-stream x (disj-goal-stream* y ...)))))
 ;;; (pause st g) will fill the generated proof term into st
 ;;; it has the same specification as (start st g)
 ;;; (pause st g) has same specification as (start st g)
@@ -438,6 +488,19 @@
 ;;;   in a lazy fashion
 (struct mapped-stream stream-struct (f stream) #:prefab)
 
+(struct mapped-stream-goal goal-stream-struct (f gstream) #:prefab)
+
+(struct goal-stream-as-disj stream-struct (assmpt gstream st)
+  #:transparent
+  #:guard (lambda (assmpt gstream st type-name)
+                    (cond
+                      [(and (assumption-base? assmpt)
+                            (GoalStream? gstream) 
+                            (state? st))
+                       (values assmpt gstream st)]
+                      [else (error type-name
+                              "Type Incorrect" )]))
+)
 
 ;;; semantically there is or in the "state"
 ;;;   this will lift the "or"s into stream
@@ -479,7 +542,22 @@
       [o/w #f]
     )))
 
+;;; (lazily) detect stream or not
+;;;   because we have #f as part of stream structure so
+;;;   we cannot easily use stream-struct?
+(define (GoalStream? s)
+  (or (goal-stream-struct? s)
+    (match s
+      [#f #t]
+      [(cons k r) (and (Goal? k) (GoalStream? r))]
+      [o/w #f]
+    )))
 
+
+
+(define/contract/optional (wrap-goal-stream g)
+  (any? . -> . GoalStream?)
+  (and g (cons g #f)))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -571,6 +649,8 @@
     ((compose-maps-with-extf maps resultf) g) )
   resultf
 )
+
+
 ;;; Example Usage: 
 ;;; not-symbolo will be translated into (numbero v stringo v pairo v boolo)
 ;;; (define remove-neg-by-decidability
@@ -647,3 +727,8 @@
   res
 )
 
+
+(define (conj-only-state? st)
+  (define length-of-disjunction
+    (map length (state-diseq st)))
+  (<= (max length-of-disjunction) 1))

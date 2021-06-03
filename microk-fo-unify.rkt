@@ -353,6 +353,7 @@
   (?state? . -> . Stream?)
   (and st (cons st #f)))
 
+
 ;;; state x var x (set of/list of) typeinfo -> state
 (define/contract/optional (state-typercd-cst-add st v type-info)
   (state? term? set? . -> . state?)

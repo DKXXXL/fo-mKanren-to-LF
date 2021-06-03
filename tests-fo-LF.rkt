@@ -1748,6 +1748,12 @@
         (== ys ys2))
       (filter p xs2 ys2))))
 
+(define-relation (actually-equal x y)
+  (for-all (z) (disj (== x z) (=/= x y))))
+
+(define-relation (actually-not-equal x y)
+  (fresh (z) (conj (== x z) (=/= x y))))
+
 
 (define-relation (p l)
   (fresh (x) (== l (list x))))
@@ -1860,4 +1866,6 @@
   (require contract-profile)
   (instrumenting-enabled #t)
   (set-debug-info-threshold! 1)
-  (profile-thunk (thunk (run-tests all-tests))))
+  (run-tests all-tests)
+  ;;; (profile-thunk (thunk (run-tests all-tests)))
+)
