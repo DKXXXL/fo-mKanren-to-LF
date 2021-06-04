@@ -11,7 +11,7 @@
   (struct-out forall)
   (struct-out Top)
   (struct-out Bottom)
-
+  (struct-out type-constraint)
   ;;; no type constraint, only allow (not-)symbolo
   ;;; (struct-out type-constraint)
   
@@ -2081,7 +2081,7 @@
   
   (define cst-st (state-sub-set st empty-sub))
   (define printing-st (literal-replace* var-mapping cst-st))
-  (define printing-cst (state->goal printing-st))
+  (define printing-cst (syntactical-simplify (state->goal printing-st)))
   (cons eq-result printing-cst)
 )
 

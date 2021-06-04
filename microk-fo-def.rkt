@@ -205,7 +205,7 @@
   #:transparent               
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "~a =ᴸ ~a" (==-t1 val) (==-t2 val)))]
+     (fprintf output-port "(== ~V ~V)" (==-t1 val) (==-t2 val)))]
      ;;; L stands for Lisp Elements
 )
 
@@ -230,7 +230,7 @@
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "~a ≠ᴸ ~a" (=/=-t1 val) (=/=-t2 val)))]
+     (fprintf output-port "(=/= ~V ~V)" (=/=-t1 val) (=/=-t2 val)))]
 )
 
 ;;; universal quantifier,
@@ -259,7 +259,7 @@
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "type-constraint ~V ~V" (type-constraint-t val) (type-constraint-typeinfo val)))]
+     (fprintf output-port "(type-constraint ~V ~V)" (type-constraint-t val) (type-constraint-typeinfo val)))]
   #:guard (lambda (t typeinfo type-name)
                     (cond
                       [(set? typeinfo) 
@@ -274,7 +274,7 @@
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "T" ))]
+     (fprintf output-port "(Top)" ))]
 )
 
 
@@ -282,7 +282,7 @@
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "⊥" ))]
+     (fprintf output-port "(Bottom)" ))]
 )
 
 
@@ -293,7 +293,7 @@
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "(~a ∨ ~a)" (disj-g1 val) (disj-g2 val)))]
+     (fprintf output-port "(disj ~V ~V)" (disj-g1 val) (disj-g2 val)))]
   #:guard (lambda (g1 g2 type-name)
                     (cond
                       [(andmap Goal? (list g1 g2)) 
@@ -323,7 +323,7 @@
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "(~a ∧ ~a)" (conj-g1 val) (conj-g2 val)))]
+     (fprintf output-port "(conj ~V ~V)" (conj-g1 val) (conj-g2 val)))]
   #:guard (lambda (g1 g2 type-name)
                     (cond
                       [(andmap Goal? (list g1 g2)) 
@@ -342,7 +342,7 @@
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "(~a => ~a)" (cimpl-g1 val) (cimpl-g2 val)))]
+     (fprintf output-port "(~a ⟶ ~a)" (cimpl-g1 val) (cimpl-g2 val)))]
   #:guard (lambda (g1 g2 type-name)
                     (cond
                       [(andmap Goal? (list g1 g2)) 

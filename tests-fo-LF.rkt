@@ -46,6 +46,7 @@
 )
 
 (define all-tests-table (make-hash))
+(define all-tests-in-order (list))
 ;;; global mutable-context for hashing
 ;;; hash : maps symbol to (closure of) test-cases
 
@@ -86,7 +87,8 @@
     ((_ name e-actual e-expected)
      (define name
           (let* ([x (lambda () (test 'name e-actual e-expected))]
-                 [reg! (hash-set! all-tests-table 'name x)])
+                 [reg! (hash-set! all-tests-table 'name x)]
+                 [reg! (set! all-tests-in-order (append all-tests-in-order (list x)))])
             'name)))
     ((_ JUST-DECL name e-actual e-expected)
      (define name
@@ -95,7 +97,9 @@
     ((_ e-actual e-expected)
           (let* ([name 'e-actual]
                  [x (lambda () (test name e-actual e-expected))]
-                 [reg! (hash-set! all-tests-table name x)])
+                 [reg! (hash-set! all-tests-table name x)]
+                 [reg! (set! all-tests-in-order (append all-tests-in-order (list x)))]
+                 )
             reg!))
   
  ))
@@ -173,9 +177,14 @@
 )
 
 
-(test-reg! NEQPair
+(NEQPair
   (run 1 () (fresh (y) (for-all (x) (=/= y (cons x 3)))))
-  run-1-succeed
+. test-reg!=> . 
+  
+  `((()
+     .
+     ,(type-constraint '_.0 (set string? number? symbol?))))
+
 )
 
 (test-reg! NEQAll
@@ -472,15 +481,22 @@
 ((run 1 () (for-all (x) (== x x))) . test-reg!=> . 'succeed)
 (Trivial-Wrong-1
   (run 1 (a) (for-all (x) (== x a))) . test-reg!=> . 'fail)
-((run 1 (a) (for-all (x) (fresh (s) (== a s)))) . test-reg!=> . '((_.0)))
-((run 1 (a) (for-all (x) (fresh (s) (== x s)))) . test-reg!=> . '((_.0)))
-((run 1 (a) (for-all (x) (fresh (s t) (== s `(,x . ,t))))) . test-reg!=> . '((_.0)))
+((run 1 (a) (for-all (x) (fresh (s) (== a s)))) . test-reg!=> . 
+`(((_.0) . ,(Top))))
+((run 1 (a) (for-all (x) (fresh (s) (== x s)))) . test-reg!=> . 
+`(((_.0) . ,(Top)))
+)
+((run 1 (a) (for-all (x) (fresh (s t) (== s `(,x . ,t))))) . test-reg!=> . 
+`(((_.0) . ,(Top)))
+)
 
 
 
 
 ((run 1 (a b) (for-all (x) 
-  (disj (=/= x a) (=/= x b)))) . test-reg!=> . '((_.0 _.1)))
+  (disj (=/= x a) (=/= x b)))) . test-reg!=> . 
+`(((_.0 _.1) . ,(=/= '_.0 '_.1)))
+)
 ; closed world: removing any of the disjuncts should fail
 (Closed-world-1
   (run 1 () (for-all (x) 
@@ -528,7 +544,8 @@
 ;; a fancy/possibly-slow way of saying (=/= a b)
 ((run 1 (a b)
   (for-all (x) (disj* (=/= a x) (=/= b x))))
-. test-reg!=> . '((_.0 _.1))  
+. test-reg!=> . 
+`(((_.0 _.1) . ,(=/= '_.1 '_.0)))  
 )
 
 
@@ -536,18 +553,31 @@
 ;;;     also inequality information disappear
 (NestedCons-1
   (run 1 (c a b) (for-all (x) (=/= c (cons a (cons b x)))))
-. test-reg!=> . '((_.0 _.1 _.2)))
-;;; this should lead to (((_.0 _.1 . _.2) _.3 _.4)) as result
+. test-reg!=> . 
+
+`(((_.0 _.1 _.2)
+     .
+     ,(type-constraint '_.0 (set string? symbol? number?))))
+
+)
 
 
 
 (NestedCons-2
   (run 1 (c a b) (for-all (y) (=/= c (cons a (cons b y)))) )
-. test-reg!=> . '((_.0 _.1 _.2)))
+. test-reg!=> . 
+  `(((_.0 _.1 _.2)
+     .
+     ,(type-constraint '_.0 (set string? symbol? number?))))
+
+
+)
 ((run 1 () (for-all (x) (=/= x (cons x x))))
 . test-reg!=> . 'succeed)
 ((run 1 (a) (for-all (y) (disj* (numbero a) (stringo a))))
-. test-reg!=> . '((_.0)))
+. test-reg!=> . 
+`(((_.0) . ,(type-constraint '_.0 (set number?))))
+)
 ((run 1 () (for-all (z) (fresh ( r ) (=/= r z) (numbero r))))
 . test-reg!=> . 'succeed)
 (For-bound-Trivial-1
@@ -689,7 +719,8 @@
 
 (Teenage-sort-6
   (run 1 (a) (for-bound (x) [boolo x] (sort-boolo (list #f #f x) (list a #f x))))
-. test-reg!=> . '((#f))
+. test-reg!=> . 
+`(((#f) . ,(Top)))
 )
 
 
@@ -708,7 +739,8 @@
 
 (sort-bool-synthesize-base-0
   (run 1 (o) (sort-boolo-base-case (list #t #f #f #f) (list #f #f #f #t) '()))
-. test-reg!=> . '((_.0)) 
+. test-reg!=> . 
+`(((_.0) . ,(Top)))
 )
 
 
@@ -716,7 +748,8 @@
 ;;;   the type constraint is incorrect
 (sort-bool-synthesize-base
   (run 1 (o) (for-all (x) (sort-boolo-base-case (list x #f #f #f) (list #f #f #f x) o)))
-. test-reg!=> . '(((#f #f #f #f)))
+. test-reg!=> . 
+`((((#f #f #f #f)) . ,(Top)))
 )
 
 (sort-boolo-implies-membero-1
@@ -724,7 +757,9 @@
       (cimpl (sort-boolo lst (cons #f y))
              (membero #f lst))
     )
-. test-reg!=> . '((_.0 (#f . _.1)))
+. test-reg!=> . 
+
+`(((_.0 (#f . _.1)) . ,(Top)))
 )
 
 ;;; BUGFIX: currently the following is not halting
@@ -841,13 +876,15 @@
 (run 1 (a) (conj 
       (for-all (x) (sort-boolo (list #f #f x) (list a #f x)))
       (== a #f)) )
-. test-reg!=> . '((#f))
+. test-reg!=> . 
+`(((#f) . ,(Top)))
 )
 
 (sort-boolo-simple-2
 (run 1 (a) 
       (for-all (x) (sort-boolo (list #f #f x) (list a #f x))))
-. test-reg!=> . '((#f))
+. test-reg!=> . 
+`(((#f) . ,(Top)))
 )
 
 
@@ -959,7 +996,8 @@
 
 (Graph-reachable-3
   (run 1 (z) (unreachable 'c z) (node z))
-. test-reg!=> . '((a))         
+. test-reg!=> . 
+`(((a) . ,(Top)))         
 )
 
 
@@ -992,7 +1030,8 @@
 ;;; 
 
 ((run 1 (x)  (cimpl (== x 1) (=/= x 2)))
-  . test-reg!=> . '((_.0))  
+  . test-reg!=> . 
+`(((_.0) . ,(=/= '_.0 1)))
 )
 
 ((run 1 ()  (for-all (x) (cimpl (== x 1) (=/= x 2))))
@@ -1000,15 +1039,18 @@
 )
 
 ((run 1 (x a)  (cimpl (== x a) (=/= x 2)))
-  . test-reg!=> . '((_.0 _.1))
+  . test-reg!=> . 
+`(((_.0 _.1) . ,(=/= '_.0 '_.1)))
 )
 
 ((run 1 (a)  (for-all (x) (cimpl (== x a) (=/= x 2))) )
-  . test-reg!=> . '((_.0))
+  . test-reg!=> . 
+`(((_.0) . ,(=/= '_.0 2)))
 )
 
 ((run 1 (x a)  (cimpl (== x a) (=/= x a)))
-  . test-reg!=> . '((_.0 _.1)) 
+  . test-reg!=> . 
+`(((_.0 _.1) . ,(=/= '_.0 '_.1))) 
 )
 
 ((run 1 (a)  (for-all (x) (cimpl (== x a) (=/= x a))) )
@@ -1017,7 +1059,12 @@
 
 
 ((run 1 (a)  (cimpl (stringo a) (symbolo a)))
-  . test-reg!=> . '((_.0)) 
+  . test-reg!=> . 
+
+  `(((_.0)
+     .
+     ,(type-constraint '_.0 (set symbol? number? pair?))))
+
 )
 
 ((run 1 ()  (for-all (a) (cimpl (stringo a) (symbolo a))) )
@@ -1025,7 +1072,8 @@
 )
 
 ((run 1 (a)  (cimpl (== a 1) (symbolo a)))
-  . test-reg!=> . '((_.0)) 
+  . test-reg!=> . 
+`(((_.0) . ,(=/= '_.0 1))) 
 )
 
 ((run 1 ()  (for-all (a) (cimpl (== a 1) (symbolo a))))
@@ -1038,7 +1086,8 @@
 )
 
 ((run 1 (a)  (cimpl (=/= a 1) (symbolo a)))
-  . test-reg!=> . '((1))
+  . test-reg!=> . 
+`(((1) . ,(Top)))
 )
 
 (Cimpl-dec1
@@ -1048,12 +1097,14 @@
 
 
 ((run 1 (a)  (conj (== a 1) (cimpl (=/= a 1) (symbolo a))))
-  . test-reg!=> . '((1)) 
+  . test-reg!=> . 
+`(((1) . ,(Top)))
 )
 
 
 ((run 1 (a)  (conj (numbero a) (cimpl (stringo a) (symbolo a))) )
-  . test-reg!=> . '((_.0))
+  . test-reg!=> . 
+`(((_.0) . ,(type-constraint '_.0 (set number?))))
 )
 
 ((run 1 (a)  (conj (== a 1) (cimpl (== a 1) (symbolo a))))
@@ -1079,12 +1130,15 @@
 (Simple-Rewrite-3
   (run 1 (x z)  (conj (== x z) (cimpl (False z)
                                    (False x))))
-  . test-reg!=> . '((_.0 _.0))  
+  . test-reg!=> . 
+
+`(((_.0 _.0) . ,(Top)))  
 )
 
 (Syn-solve-1
   (run 1 (a)  (cimpl (False a) (False a)))
-  . test-reg!=> . '((_.0))  
+  . test-reg!=> . 
+`(((_.0) . ,(Top)))  
 )
 
 (define-relation (Falsew/1 x)
@@ -1092,15 +1146,18 @@
 
 
 ((run 1 (a)  (cimpl (Falsew/1 a) (Falsew/1 a)))
-  . test-reg!=> . '((_.0))
+  . test-reg!=> . 
+`(((_.0) . ,(Top)))
 )
 
 ((run 1 (a)  (cimpl (Falsew/1 a) (== a 1)))
-  . test-reg!=> . '((1))  
+  . test-reg!=> . 
+`(((1) . ,(Top)))
 )
 
 ((run 1 (a)  (cimpl (Falsew/1 a) (== a 2)))
-  . test-reg!=> . '((2))
+  . test-reg!=> .  
+`(((2) . ,(Top)))
 )
 
 
@@ -1115,25 +1172,30 @@
 
 
 ((run 1 (a)  (conj (cimpl (False1 a) (False2 2)) (== a 2)))
-  . test-reg!=> . '((2)) 
+  . test-reg!=> .  
+`(((2) . ,(Top)))
 )
 
 ((run 1 (a)  (conj (cimpl (False2 a) (False1 2)) (== a 2)))
-  . test-reg!=> . '((2))
+  . test-reg!=> .  
+`(((2) . ,(Top)))
 )
 
 ((run 1 (a)  (conj (cimpl (False3 a) (False 2)) (== a 2)))
-  . test-reg!=> . '((2))
+  . test-reg!=> .  
+`(((2) . ,(Top)))
 )
 
 ((run 1 (a)  (conj (cimpl (False a) (False3 2)) (== a 2)))
-  . test-reg!=> . '((2))
+  . test-reg!=> .  
+`(((2) . ,(Top)))
 )
 
 ((run 1 (a)  (cimpl (conj (a . == . 1)  
                           ((a . == . 1) . → . (symbolo a))) 
                     (Bottom)) )
-  . test-reg!=> . '((_.0)) 
+  . test-reg!=> .  
+`(((_.0) . ,(Top)))
 )
 
 (define → cimpl)
@@ -1141,20 +1203,23 @@
 (Syn-solve-cimpl
   (run 1 (a)  (cimpl ((== a 1) . → . (False a)) 
                     (False a)) )
-  . test-reg!=> . '((1)) 
+  . test-reg!=> . 
+`(((1) . ,(Top))) 
 )
 
 (Syn-solve-lor
   (run 1 (a)  (cimpl ((disj (== a 1) (Bottom)) . → . (False a)) 
                     (False a)) )
-  . test-reg!=> . '((1))
+  . test-reg!=> . 
+`(((1) . ,(Top)))
 )
 
 
 (Syn-solve-land
   (run 1 (a)  (cimpl ((conj (== a 1) (Top)) . → . (False a)) 
                     (False a)) )
-  . test-reg!=> . '((1))
+  . test-reg!=> . 
+`(((1) . ,(Top)))
 )
 
 ;;; This goal can only be satisfied from outside
@@ -1223,7 +1288,8 @@
                       ((disj A B) . → . C)
                       A) 
                     C) ))
-  . test-reg!=> . '((_.0))  
+  . test-reg!=> . 
+`(((_.0) . ,(Top)))  
 )
 
 
@@ -1245,7 +1311,8 @@
                       (for-all (x) ((False x) . → . A))
                       (False y))
                     A)))
-  . test-reg!=> . '((_.0)) 
+  . test-reg!=> . 
+`(((_.0) . ,(Top))) 
 )
 
 (Syn-solve-universal-3
@@ -1361,8 +1428,13 @@
         (cimpl (== a (list b b b))
               (disj (=/= b #f)
                     (has-false a))))) 
-  . test-reg!=> . '((_.0))
-  )
+  . test-reg!=> . 
+`(((_.0)
+     .
+     ,(type-constraint '_.0 (set string? symbol? number?))))
+
+
+)
 
 (Test-has-false-trivial-2
   (run 1 ()
@@ -1383,7 +1455,8 @@
 
 (Test-has-false-0
   (run 1 (x) (for-all (b) (has-false (list b b x)))) 
-  . test-reg!=> . '((#f))
+  . test-reg!=> . 
+`(((#f) . ,(Top)))
 )
 ;;; '((#f)) as the result
 ; test performance degredation with # of "b"s
@@ -1392,7 +1465,8 @@
 (Test-has-false-1
   (run 1 (x) (cimpl (== x #f)
                  (has-false (list x x))))
-. test-reg!=> . '((_.0))                
+. test-reg!=> . 
+`(((_.0) . ,(=/= '_.0 #f)))               
 ) 
 ; should get _.0
 
@@ -1401,7 +1475,8 @@
   (run 1 (x y) (cimpl (== x y)
                  (has-false (list x x))))
 
-. test-reg!=> . '((_.0 _.1))               
+. test-reg!=> . 
+`(((_.0 _.1) . ,(=/= '_.0 '_.1)))
 ) 
 ; should get (_.0 #f)
 
@@ -1412,7 +1487,9 @@
            (fresh (b)
               (== xs-sorted (cons #f b))
               (sort-boolo xs xs-sorted)))) 
-  . test-reg!=> . '(((#f) (#f))) )
+  . test-reg!=> . 
+`((((#f) (#f)) . ,(Top)))
+)
 ; shold succeed
 
 
@@ -1564,14 +1641,17 @@
 ; this should generate constant functions
 (Evalo-simple-1
   (run 1 (x z) (for-all (y) (evalo `(app ,x (quote ,y)) z)))
-  . test-reg!=> . '(('(closure '_.0 _.1) _.0))
+  . test-reg!=> . 
+
+`((('(closure '_.0 _.1) _.0) . ,(Top)))
 )
 
 ; if (app x y) == z for all y, then (app x 6) == z
 (Evalo-simple-2
   (run 1 (x z) (cimpl (for-all (y) (evalo `(app ,x ,y) z))
                       (evalo `(app ,x (quote 6)) z)))
-  . test-reg!=> . '((_.0 _.1))
+  . test-reg!=> . 
+`(((_.0 _.1) . ,(Top)))
 )
 
 ;;; the following has bug?
@@ -1593,21 +1673,25 @@
 (Evalo-simple-3-2
   (run 1 (f) 
     (for-all (y) (evalo `(app (lambda (cons ,f ,f)) (quote ,y)) `(,y . ,y)) ))
-  . test-reg!=> . '(((var ())))
+  . test-reg!=> . 
+`((((var ())) . ,(Top)))
 )
 
 
 ; this should generate identity functions
 (Evalo-simple-4
   (run 1 (x) (for-all (y) (evalo `(app ,x (quote ,y)) y)))
-  . test-reg!=> . '(('(closure (var ()) _.0))) 
+  . test-reg!=> . 
+
+`((('(closure (var ()) _.0)) . ,(Top))) 
 ) ; quoting issue?
 
 
 (Evalo-simple-5
   (run 1 (q) (cimpl (evalo q q)
                   (fresh (t) (evalo q t) (evalo t q))))
-  . test-reg!=> . '((_.0))
+  . test-reg!=> . 
+`(((_.0) . ,(Top)))
 )
 
 (Evalo-simple-6
@@ -1631,7 +1715,11 @@
 
 (Zeros-example
   (run 1 (z) (neg (zeros z)))
-  . test-reg!=> . '((_.0)))
+  . test-reg!=> . 
+`(((_.0)
+     .
+     ,(type-constraint '_.0 (set string? symbol? number?))))
+)
 
 (CN-example1
   (run 1 (q) (for-all (x) (== x q)))
@@ -1640,7 +1728,8 @@
 
 (CN-example2
   (run 1 (q) (for-all (x) (fresh (y) (== x y))))
-  . test-reg!=> . '((_.0))
+  . test-reg!=> . 
+`(((_.0) . ,(Top)))
 )
 
 (CN-example3
@@ -1681,7 +1770,11 @@
 
 (CN-example10
   (run 1 (q) (for-all (x) (=/= q (cons 1 x))))
-  . test-reg!=> . '((_.0))
+  . test-reg!=> . 
+  
+ `(((_.0)
+     .
+     ,(type-constraint '_.0 (set string? symbol? number?))))
 )
 
 (CN-example11
@@ -1701,12 +1794,15 @@
 
 (CN-example14
   (run 1 (q) (for-all (x) (=/= (cons x x) (cons q 1))))
-  . test-reg!=> . '((_.0))
+  . test-reg!=> . 
+`(((_.0) . ,(=/= '_.0 1)))
 )
 
 (CN-example15
   (run 1 (q) (fresh (a b) (== q (cons a b)) (for-all (x) (=/= (cons x x) (cons a b))) ))
-  . test-reg!=> . '(((_.0 . _.1)))
+  . test-reg!=> . 
+`((((_.0 . _.1)) . ,(=/= '_.0 '_.1)))
+
 )
 
 (define-relation (ifte cond brA brB)
@@ -1760,24 +1856,46 @@
 
 (CN-ifte-example0
   (run 3 (q) (fresh (e) (find p e q) ))
-  . test-reg!=> . '((((_.0) . _.1)) ((_.0 (_.1) . _.2)) ((_.0 (_.1) . _.2)))
+  . test-reg!=> . 
+  `(((((_.0) . _.1)) . ,(Top))
+    (((_.0 (_.1) . _.2))
+     .
+     ,(type-constraint '_.0 (set string? symbol? number?)))
+    (((_.0 (_.1) . _.2))
+     .
+     ,(type-constraint '_.0 (set string? symbol? number?))))
+
 )
 
 
 (CN-ifte-example1
   (run* (q) (fresh (e) (remove p q (list (list))) ))
-  . test-reg!=> . '((((_.0) ())) ((())) ((())) ((() (_.0))) ((() (_.0))))
+  . test-reg!=> . 
+  `(((((_.0) ())) . ,(Top))
+    (((())) . ,(Top))
+    (((())) . ,(Top))
+    (((() (_.0))) . ,(Top))
+    (((() (_.0))) . ,(Top)))
 )
 
 (CN-ifte-example2
   (run 3 (q) (fresh (e) (remove p q q) ))
-  . test-reg!=> . '((()) ((_.0)) ((_.0)))
+  . test-reg!=> . 
+  `(((()) . ,(Top))
+    (((_.0))
+     .
+     ,(type-constraint '_.0 (set string? symbol? number?)))
+    (((_.0))
+     .
+     ,(type-constraint '_.0 (set string? symbol? number?))))
+
 )
 
 
 (CN-ifte-example3
   (run 1 (q) (filter p q q))
-  . test-reg!=> . '((()))
+  . test-reg!=> . 
+`(((()) . ,(Top)))
 )
 
 ;;; This case is not halting for some reason. At least not halting in 10 sec.
@@ -1789,7 +1907,8 @@
 
 (CN-ifte-example5
   (run 1 (q) (filter p q (list)))
-  . test-reg!=> . '((()))
+  . test-reg!=> . 
+`(((()) . ,(Top)))
 )
 
 
@@ -1837,6 +1956,14 @@
   )
 )
 
+(define in-order-all-tests
+  (test-suite 
+    "all"
+    (for ([each all-tests-in-order])
+      (each))
+  )
+)
+
 ;;; (define (run-all-tests)
 ;;;   (hash-for-each all-tests-table 
 ;;;     (lambda (key value) (value)))
@@ -1866,6 +1993,7 @@
   (require contract-profile)
   (instrumenting-enabled #t)
   (set-debug-info-threshold! 1)
-  (run-tests all-tests)
+  ;;; (run-tests all-tests)
+  (run-tests in-order-all-tests)
   ;;; (profile-thunk (thunk (run-tests all-tests)))
 )
