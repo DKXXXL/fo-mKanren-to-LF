@@ -279,7 +279,10 @@
     (disj* (not-pairo a) (fresh (z) (== a (cons z z))))))
 
 ;;; ((not-pairo a) (_.0 . _0) ...)
-. test-reg!=> . 'succeed
+. test-reg!=> . 
+`(((_.0)
+   .
+   ,(type-constraint '_.0 (set string? symbol? number?))))
 )
 
 ((run 1 (a) 
@@ -289,7 +292,10 @@
     ))
 
 ;;; ((not-pairo a) [(_.0 . _.1) where (=/= _.0 _.1)] …)
-. test-reg!=> . 'succeed
+. test-reg!=> . 
+`(((_.0)
+   .
+   ,(type-constraint '_.0 (set string? symbol? number?))))
 )
 
 
@@ -304,7 +310,10 @@
            (fresh (m n) (not-symbolo m) (== a (cons m n)) ))
            ))
 ;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
-. test-reg!=> . 'succeed 
+. test-reg!=> . 
+`(((_.0)
+   .
+   ,(type-constraint '_.0 (set string? symbol? number?))))
 )
 
 ;;; this unhalt even set to 1
@@ -319,7 +328,10 @@
     (disj* (not-pairo a) (not-symbolo a)))
 
 ;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
-. test-reg!=> . 'succeed
+. test-reg!=> . 
+`(((_.0)
+   .
+   ,(type-constraint '_.0 (set string? number?))))
 )
 
 (Complicated-4
@@ -334,7 +346,10 @@
                    )
             )) )
 ;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
-. test-reg!=> . 'succeed 
+. test-reg!=> . 
+`(((_.0)
+   .
+   ,(type-constraint '_.0 (set string? symbol? number?))))
 )
 
 (Complicated-4-1
@@ -349,7 +364,10 @@
                    )
             )) )
 ;;; ((not-pairo a) [(_.0 . _.1) where (not-symbolo _.0)] …)
-. test-reg!=> . 'succeed 
+. test-reg!=> . 
+`(((_.0)
+   .
+   ,(type-constraint '_.0 (set string? symbol? number?))))
 )
 
 
