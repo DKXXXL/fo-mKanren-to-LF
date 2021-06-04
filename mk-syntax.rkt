@@ -55,7 +55,7 @@
 
 (define-syntax run
   (syntax-rules ()
-    ((_ n body ...) (map reify/initial-var (run/state n body ...)))))
+    ((_ n body ...) (map reify/initial-var/state (run/state n body ...)))))
 
 (define-syntax run/state
   (syntax-rules ()

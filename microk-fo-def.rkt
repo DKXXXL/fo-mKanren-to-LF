@@ -259,7 +259,7 @@
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "type-constraint ~a ~a" (type-constraint-t val) (type-constraint-typeinfo val)))]
+     (fprintf output-port "type-constraint ~V ~V" (type-constraint-t val) (type-constraint-typeinfo val)))]
   #:guard (lambda (t typeinfo type-name)
                     (cond
                       [(set? typeinfo) 

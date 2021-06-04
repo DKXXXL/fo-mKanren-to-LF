@@ -63,6 +63,8 @@
 
   simplify-dec+nondec
   decidable-goal?
+
+  reify/initial-var/state
   )
 
 (require "microk-fo-unify.rkt")
@@ -2062,6 +2064,25 @@
   (disj 
     (type-constraint t (set-remove all-inf-type-label string?))
     (is-of-finite-type t))
+)
+
+;;; reify state
+
+(define (reify/initial-var/state st)
+  
+  (define everything-related 
+    (list initial-var (state-diseq st) (hash-keys (state-typercd st))))
+
+  (match-define (cons var-mapping full-sub)
+      (get-sub-for-reify everything-related st))
+
+
+  (define eq-result (walk* initial-var full-sub))
+  
+  (define cst-st (state-sub-set st empty-sub))
+  (define printing-st (literal-replace* var-mapping cst-st))
+  (define printing-cst (state->goal printing-st))
+  (cons eq-result printing-cst)
 )
 
 

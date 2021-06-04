@@ -25,6 +25,7 @@
   term?
   reify
   reify/initial-var
+  get-sub-for-reify
   neg-unify
   wrap-state-stream
   check-as-inf-type-disj
@@ -467,33 +468,16 @@
               (cond ((pair? t) (loop (cdr t) (loop (car t) sub)))
                     ((tvar? t)  (set! index (+ 1 index))
                                (extend-sub t (reified-index index) sub))
-                    (else      sub)))))
+                    (else      sub)))
+                    
+  ))
+
+
 
 ;;; TODO: make constraint information printed, just for debugging purpose
 ;;;       make it an option
 
-(define (reify-cst tm st)
-  (define index -1)
-  (define everything-to-print 
-    (list tm (state-diseq st)))
-  ;;; we need to fill in the un-restricted value, for example, (== x x)
-  ;;;   it means no restriction is required, and for them, _.0 as value will be ok
-  ;;;   the complicated loop below is to fill-in those un-restricted value
-  (define full-sub 
-    (let loop ((tm everything-to-print) (sub (state-sub st)))
-        (define t (walk tm sub))
-        (cond ((pair? t) (loop (cdr t) (loop (car t) sub)))
-              ((tvar? t)  (set! index (+ 1 index))
-                          (extend-sub t (reified-index index) sub))
-              (else      sub))))
-  (define tm-result (walk* tm full-sub))
-  (define conj-disj-diseqs 
-    ;;; TODO: pretty print it! 
-    (walk* (state-diseq st) full-sub)
-    )
-  
-  `(,tm-result : ≠ ,conj-disj-diseqs )
-  )           
+           
 (define (reify/initial-var st)
   ;;; (debug-dump "\n reify with state: ~a" st)
   (reify initial-var st))
@@ -502,6 +486,24 @@
 ;;; 
 (define (reify/initial-var/csts st)
   (reify/initial-var st)
+)
+
+
+;;; return a pair of varmapping and substitution
+;;;     that is helpful for reification
+(define/contract (get-sub-for-reify tm st)
+  (any/c state? . -> . (cons/c hash? list?))
+  (define index -1)
+  (define var-mapping (make-hash))
+  (define full-sub 
+    (let loop ((tm tm) (sub (state-sub st)))
+        (define t (walk tm sub))
+        (cond ((pair? t) (loop (cdr t) (loop (car t) sub)))
+              ((tvar? t)  (set! index (+ 1 index))
+                          (hash-set! var-mapping t (reified-index index))
+                          (extend-sub t (reified-index index) sub))
+              (else      sub))))
+  (cons var-mapping full-sub)
 )
 
 
