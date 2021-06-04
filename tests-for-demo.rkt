@@ -21,7 +21,7 @@
         (list-reflective x ...)
       ))))
 
-
+;;; each test suite
 (define test-cases-graph-reachable
   (list-reflective
     (run 1 () (unreachable 'c 'a))
@@ -29,6 +29,8 @@
     (run 1 (z) (unreachable 'c z) (node z))
   ))
 
+
+;;; make test-suite into one general
 (define all-demos
   (append 
     test-cases-graph-reachable
@@ -54,7 +56,9 @@ result
   (require rackunit/text-ui)
   (set-debug-info-threshold! 1)
   ;;; (run-tests all-tests)
-  (print-simple-table (run-demos all-demos))
+  (print-table (run-demos all-demos)
+      #:border-style 'latex 
+  )
   ;;; (profile-thunk (thunk (run-tests all-tests)))
 )
 
