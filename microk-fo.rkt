@@ -236,6 +236,8 @@
           (lambda (st) (unify/goal b d st))
           (unify/goal a c st)) ; a stream to return
         ]
+      [(cons (Bottom) (Bottom))
+        (wrap-state-stream st)]
       [(cons (type-constraint a T1) (type-constraint b T2))
         (and (equal? T1 T2) (== a b))]
       [_ #f]
@@ -456,8 +458,7 @@
 ;;;       and thus invoke a new "pause/start" (so that new possible sem-solving can be proceeded)
 (define/contract (syn-solving assmpt init-assmpt st g)
   (assumption-base? assumption-base? ?state? Goal? . -> . Stream?)
-  ;;; (debug-dump "\n syn-solving assmpt: ~a" assmpt)
-  ;;; (debug-dump "\n syn-solving goal: ~a" g)
+  
   ;;; first we look at top-level assumption to see if unification can succeed
   ;;; then we need to deconstruct the (top)-assumption base
   ;;;   to syntactical pattern match on all the sub-assumption
@@ -529,6 +530,7 @@
                 [VT (fresh-var VT)]
                 [forall-internal (cimpl domain t)]
                 [applied-type (forall-internal . subst . [VT // v])]
+                [k (debug-dump "\n syn-solve on forall:~a \n" applied-type)]
                 ;;; Note: even though we seem to only allow for-all to be instantiated
                 ;;;     with only one variable
                 ;;;       the second instantiation will happen when our
@@ -538,7 +540,11 @@
                
                 (syn-solve new-assmpt init-assmpt st g)) )]
       ;;; atomic prop! just ignore them
-      [o/w (syn-solve remain-assmpt init-assmpt st g)]
+      [o/w 
+
+        (begin
+          (debug-dump-off "\n Fail To Destruct Assumption ~a \n" top-assmpt)
+          (syn-solve remain-assmpt init-assmpt st g))]
     )
   )
 
@@ -554,9 +560,17 @@
          [if-top-level-match-filled if-top-level-match];;; fill the current proof term
         )
       (if if-top-level-match
-          (mplus if-top-level-match-filled
-                (traversal-on-assmpt term-name ag remain-assmpt))
-          (traversal-on-assmpt term-name ag remain-assmpt))
+          (begin
+            (debug-dump "\n syn-solving assmpt: ~a" assmpt)
+            (debug-dump "\n syn-solving goal: ~a" g)
+            (debug-dump "\n Extra Matching: ~a ~a" ag g)
+            (mplus if-top-level-match-filled
+                (traversal-on-assmpt term-name ag remain-assmpt)))
+          (begin
+            (debug-dump "\n syn-solving assmpt: ~a" assmpt)
+            (debug-dump "\n syn-solving goal: ~a" g)
+            (debug-dump "\n Failed Matching: ~a ~a" ag g)
+            (traversal-on-assmpt term-name ag remain-assmpt)))
     )
   )
 )
@@ -611,11 +625,12 @@
   
   (define conj-assumpt-ty (foldl conj (Top) (all-assumption-goals assmpt)))
   (define conj-assumpt-term (foldl LFpair (LFaxiom (Top)) (all-assumption-terms assmpt)))
-  
+  (debug-dump " \n Before Unfold Assumption : ~a \n" conj-assumpt-ty)
   (define unfold-conj-assumpt-ty (unfold-one-level-relate conj-assumpt-ty))
   (define s-unfold-conj-assmpt-ty (all-linear-simplify unfold-conj-assumpt-ty))
 
   (define unfolded-goal (cimpl s-unfold-conj-assmpt-ty goal)) 
+  (debug-dump " \n After Unfold Assumption : ~a \n" s-unfold-conj-assmpt-ty)
   ;;; use cimpl here to allow newly unfolded assumption processed by sem-solving
   ;;; (match-let*
   ;;;    ([(cons st all-assmpt-term) (push-lflet st conj-assumpt-term : conj-assumpt-ty)]
