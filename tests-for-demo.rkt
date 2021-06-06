@@ -21,6 +21,8 @@
         (list-reflective x ...)
       ))))
 
+;;; 5.1 basic test -- (forall (x) (disj (== x 1) (=/= x 1)))
+
 ;;; 
 (define test-cases-graph-reachable
   (list-reflective
@@ -36,6 +38,7 @@
 
 (define test-cases-evalo
   (list-reflective
+    ;;; eigen cannot do this!
     (run 1 ()
      (cimpl 
       (evalo '6 5)
@@ -47,6 +50,10 @@
     
     (run 1 (q) (cimpl (evalo q q)
                   (fresh (t) (evalo q t) (evalo t q))))
+    
+    ;;; type constraint, disequality
+    ;;;   we want more forall example that eigen cannot do
+    ;;;  
 
   ))
 

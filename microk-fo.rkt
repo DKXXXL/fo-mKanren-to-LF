@@ -1114,6 +1114,12 @@
       [(cons sth #f) sth]
       [#f #f]))
 
+  (define (disj-merge-st st1 st2 orgst)
+    (cond 
+      [(not st1) st2]
+      [(not st2) st1]
+      [#t orgst]))
+
   (define result
     (if (not st)
       (cons (Bottom) #f)
@@ -1128,28 +1134,18 @@
           (match-let* 
             ([(cons new-a st-l) (est-eval a st)]
              [(cons new-b st-r) (est-eval b st)]
-             [resulting-st      (and (or st-l st-r) st)] ; merge to top of all the state
+             [resulting-st      (disj-merge-st st-l st-r st)] ; merge to top of all the state
              [final-goal        (disj new-a new-b)])
             (cons final-goal resulting-st))]
-        [(cimpl-syn a b)
-          (match-let* 
-            ([(cons new-a st-l) (est-eval a st)]
-             [(cons new-b st-r) (est-eval b st)]
-            ;;;  we only make resulting-st false if st-r is false and st-l = st
-             [cond-failing      (and (equal? st-l st) (not st-r))]
-             [resulting-st      (if cond-failing #f st)]
-             [final-goal        (cimpl-syn new-a new-b)]
-             )
-            (cons final-goal resulting-st))]
         [(cimpl a b)
-          (match-let* 
-            ([(cons new-a st-l) (est-eval a st)]
-             [(cons new-b st-r) (est-eval b st)]
-            ;;;  we only make resulting-st false if st-r is false and st-l = st
-             [cond-failing      (and (equal? st-l st) (not st-r))]
-             [resulting-st      (if cond-failing #f st)]
-             [final-goal        (cimpl new-a new-b)])
-            (cons final-goal resulting-st))]
+          (if (decidable-goal? a)
+              (match-let* 
+                ([(cons new-not-a st-l) (est-eval (complement a) st)]
+                [(cons new-b st-r) (est-eval b st)]
+                [resulting-st      (disj-merge-st st-l st-r st)] ; merge to top of all the state
+                [final-goal        (cimpl (complement new-not-a) new-b)])
+                (cons final-goal resulting-st))
+              (cons goal st))]
         [(relate _ _) ; do nothing, otherwise how to terminate
           (cons goal st)]
         [(ex v g)
