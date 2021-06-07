@@ -513,7 +513,7 @@
       ;;; ((forall v (R . cimpl . g)) and (ex v R)) . cimpl . g
             (let* (
                 [subgoal-ty (for-all (x) ( (t . subst . [x // v]) . cimpl . g ))]
-                [k (debug-dump "\n syn-solve on exists: Before ~a \n                    After ~a \n" top-assmpt subgoal-ty)]
+                [k (debug-dump-off "\n syn-solve on exists: Before ~a \n                    After ~a \n" top-assmpt subgoal-ty)]
             ;;; remove that existential assumption as well
             ;;; TODO: apparently there are some duplicate computation, 
             ;;;   with these unremoved assumption before top assmpt
@@ -1142,6 +1142,7 @@
       (cons (Bottom) #f)
       (match goal
         [(Top) (cons goal st)]
+        [(Bottom) (cons goal #f)]
         [(conj a b) 
           (match-let* 
             ([(cons new-a st1) (est-eval a st)]
@@ -1179,9 +1180,23 @@
         [_
           (let*
             ([k (debug-dump-off "  est-simplify on : ~a \n" goal)]
-             [all-states   (all-mature (pause '() st goal))]
+              ;;; since it is over estimation, we use equality rewrite here
+            ;;;  [sub (state-sub st)]
+            ;;;  [all-appearing-vars (goal-vars goal)]
+            ;;;  [var-mapping 
+            ;;;     (for/fold
+            ;;;       ([acc (hash)])
+            ;;;       ([each all-appearing-vars])
+            ;;;       (let ([eachto (walk* each sub)])
+            ;;;         (if (equal? each eachto)
+            ;;;           acc
+            ;;;           (hash-set acc each eachto))))]
+            ;;;  [new-goal (literal-replace* var-mapping goal)]
+            ;;;   why above is unsound?
+             [new-goal goal]
+             [all-states   (all-mature (pause '() st new-goal))]
              [actually-one (get-state-out-of-at-most-singleton-stream all-states)])
-            (cons goal actually-one))]
+            (cons new-goal actually-one))]
         )
     ))
     ;;;  we make sure returns bottom if returning state is #f
