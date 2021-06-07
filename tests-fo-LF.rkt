@@ -2,7 +2,7 @@
 
 (require "mk-fo.rkt")
 (require racket/format)
-(require errortrace)
+;;; (require errortrace)
 (require profile)
 (require contract-profile)
 ;;; (require "examples-for-test.rkt")
@@ -17,7 +17,7 @@
 )
 
 ;;; (display "Enabling code coverage, might hurt performance \n")
-(instrumenting-enabled #t)
+;;; (instrumenting-enabled #t)
 ;;; (profiling-enabled (make-parameter #t))
 ;;; (profiling-record-enabled (make-parameter #t))
 ;;; (execute-counts-enabled (make-parameter #t))
@@ -1213,7 +1213,7 @@
                           ((a . == . 1) . → . (symbolo a))) 
                     (Bottom)) )
   . test-reg!=> .  
-`(((_.0) . ,(Top)))
+`(((_.0) . ,(=/= '_.0 1)))
 )
 
 (define → cimpl)
@@ -1863,10 +1863,10 @@
       (filter p xs2 ys2))))
 
 (define-relation (actually-equal x y)
-  (for-all (z) (disj (== x z) (=/= x y))))
+  (for-all (z) (disj (== x z) (=/= z y))))
 
 (define-relation (actually-not-equal x y)
-  (fresh (z) (conj (== x z) (=/= x y))))
+  (fresh (z) (conj (== x z) (=/= z y))))
 
 
 (define-relation (p l)
@@ -1939,16 +1939,124 @@
   )
 )
 
-(define-relation (possible-chars x)
-  (disj* (== x 'a) (== x 'b) (== x 'c) (== x 'd))
+(define-relation (move2 x y)
+  (disj*
+    (== (cons x y) (cons 'c 'd))
+  )
 )
 
+
+;;; (define-relation (possible-chars x)
+;;;   (disj* (== x 'c) 
+;;;          (== x 'd))
+;;; )
+
 (define-relation (winning x)
-  (possible-chars x)
+  ;;; (possible-chars x)
   (fresh (y)
-    (possible-chars y)
+    ;;; (possible-chars y)
     (move x y) 
     (neg (winning y))))
+
+(define-relation (winning2 x)
+  ;;; (possible-chars x)
+  (fresh (y)
+    ;;; (possible-chars y)
+    (move2 x y) 
+    (neg (winning2 y))))
+
+(define-relation (k x)
+  ;;; (possible-chars x)
+    ;;; (possible-chars y)
+    (=/= x '()) 
+    (fresh (y ys)
+      (== x (cons y ys))
+      (neg (k ys))))
+
+(Easy-Stratification-0
+  (run 1 (q) (k '()))
+  . test-reg!=> . 
+'fail
+)
+
+(Easy-Stratification-1
+  (run 1 (q) (k '(1)))
+  . test-reg!=> . 
+'succeed
+)
+
+
+;;; k '(1) =
+;;; (conj (=/= '(1) '()) 
+;;;       (fresh (y ys)
+;;;         (== x (cons y ys))
+;;;         (cimpl 
+;;;           (conj (=/= ys '())
+;;;                 (fresh (y1 ys1)
+;;;                   (== ys (cons y1 ys1))
+;;;                   (neg (k ys1))))
+;;;           (Bottom))
+;;;           ))
+
+;;; (neg (k '(1))) ;=
+;;; (cimpl (conj (=/= '(1) '()) 
+;;;       (fresh (y ys)
+;;;         (== '(1) (cons y ys))
+;;;         (cimpl 
+;;;           (conj (=/= ys '())
+;;;                 (fresh (y1 ys1)
+;;;                   (== ys (cons y1 ys1))
+;;;                   (neg (k ys1))
+;;;                   ))
+;;;           (Bottom))
+;;;           )) (Bottom)) ;=
+
+;;; (cimpl (conj (=/= '(1) '()) 
+;;;       (fresh (y ys)
+;;;         (== '(1) (cons y ys))
+;;;         (neg (k ys))
+;;;           )) (Bottom))
+
+;;; (cimpl (conj (=/= '(1) '()) 
+;;;       (fresh (y ys)
+;;;         (== '(1) (cons y '()))
+;;;         (cimpl 
+;;;           (conj (=/= '() '())
+;;;                 (fresh (y1 ys1)
+;;;                   (== '() (cons y1 ys1))
+;;;                   (neg (k ys1))
+;;;                   ))
+;;;           (Bottom))
+;;;           )) (Bottom)) ;=
+
+;;; (cimpl (conj (=/= '(1) '()) 
+;;;       (fresh (y ys)
+;;;         (== '(1) (cons y '()))
+;;;         (cimpl 
+;;;           (Bottom)
+;;;           (Bottom))
+;;;           )) (Bottom))
+
+;;; The following case should be 
+;;; (run 1 () 
+;;;   (cimpl (fresh (y ys) (== '() ys) (neg (k '()))) 
+;;;          (Bottom)))
+
+;;; (cimpl (fresh (y ys) (== '() ys) (neg (k '())) ) 
+;;;          (Bottom))
+;;; (for-all (y ys) (cimpl (conj* (== '() ys) (neg (k '()))) (Bottom) ))
+
+;;; (winning 'c) 
+;;; = (for-all (y) (cimpl (conj (move 'c y) (neg (winning y))) (Bottom)) )
+;;; -> (cimpl (conj (move 'c 'd) (neg (winning 'd))) (Bottom))
+;;; -> (neg (neg (winning 'd)))
+;;; (define-relation (neg-winning x)
+;;;   (possible-chars x)
+;;;   (for-all (y)
+;;;     (possible-chars y)
+;;;     (disj*
+;;;       (=/= (cons x y) (cons 'c 'd)) 
+;;;       (neg-winning y))) )
 
 
 (Non-stratified-example1
@@ -1959,6 +2067,27 @@
 (Non-stratified-example2
   (run 1 () (winning 'c))
   . test-reg!=> . 'succeed
+)
+
+(Non-stratified-example3
+  (run 1 () (winning2 'd))
+  . test-reg!=> . 'fail
+)
+
+(Non-stratified-example4
+  (run 1 () (neg (winning2 'd)))
+  . test-reg!=> . 'succeed
+)
+
+
+(Non-stratified-example5
+  (run 1 () (winning2 'c))
+  . test-reg!=> . 'succeed
+)
+
+(Non-stratified-example6
+  (run 1 () (neg (winning2 'c)))
+  . test-reg!=> . 'fail
 )
 
 ;;; ;;;;;;;;;;;;;;;;;;;;;;;;;;
