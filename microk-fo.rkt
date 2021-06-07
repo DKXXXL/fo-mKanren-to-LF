@@ -1,4 +1,4 @@
-#lang errortrace racket
+#lang racket
 (provide
   (all-from-out "microk-fo-unify.rkt")
   (struct-out disj)
@@ -70,12 +70,12 @@
 (require "microk-fo-unify.rkt")
 (require "microk-fo-def.rkt")
 (require "proof-term.rkt")
-(require errortrace)
+;;; (require errortrace)
 
 
 ;;; The following are for functionality of error-trace
 
-(instrumenting-enabled #t)
+;;; (instrumenting-enabled #t)
 ;;; (profiling-enabled #t)
 ;;; (profiling-record-enabled #t)
 ;;; (execute-counts-enabled #t)
@@ -117,7 +117,6 @@
 )
 
 ;;; The above are interfaces for assumption-base
-
 
 
 
@@ -379,7 +378,7 @@
 (define (mature s)
     ;;; (Stream? . -> . Stream?)
     ;;; (assert-or-warn (not-state? s) "It is not supposed to be a state here")
-    ;;; (debug-dump "\n maturing: ~a" s)
+    ;;; (debug-dump-off "\n maturing: ~a" s)
     (cond
       [(Stream? s)     (if (mature? s) s (mature (step s)))]
       [(GoalStream? s) (if (mature? s) s (mature (step-goal-stream s)))])
@@ -393,7 +392,7 @@
 ;;;  semantic of to-dnf
 (define/contract (TO-DNF stream)
   (Stream? . -> . Stream?)
-  ;;; (debug-dump "TO-DNF computing \n")
+  ;;; (debug-dump-off "TO-DNF computing \n")
   (mapped-stream (lambda (st) (to-dnf st (get-state-DNF-initial-index st))) stream))
 
 
@@ -405,7 +404,7 @@
 ;;;       of course together with the stream y is not even a pair
 (define/contract (TO-NON-Asymmetric assmpt stream)
   (assumption-base? Stream? . -> . Stream?)
-  ;;; (debug-dump "TO-NON-Asymmetric computing \n")
+  ;;; (debug-dump-off "TO-NON-Asymmetric computing \n")
   (mapped-stream (λ (st) (remove-assymetry-in-diseq assmpt st)) stream)
 )
 
@@ -514,7 +513,7 @@
       ;;; ((forall v (R . cimpl . g)) and (ex v R)) . cimpl . g
             (let* (
                 [subgoal-ty (for-all (x) ( (t . subst . [x // v]) . cimpl . g ))]
-                [k (debug-dump "syn-solve on exists:~a \n" subgoal-ty)]
+                [k (debug-dump "\n syn-solve on exists: Before ~a \n                    After ~a \n" top-assmpt subgoal-ty)]
             ;;; remove that existential assumption as well
             ;;; TODO: apparently there are some duplicate computation, 
             ;;;   with these unremoved assumption before top assmpt
@@ -530,7 +529,7 @@
                 [VT (fresh-var VT)]
                 [forall-internal (cimpl domain t)]
                 [applied-type (forall-internal . subst . [VT // v])]
-                [k (debug-dump "\n syn-solve on forall:~a \n" applied-type)]
+                [k (debug-dump-off "\n syn-solve on forall:~a \n" applied-type)]
                 ;;; Note: even though we seem to only allow for-all to be instantiated
                 ;;;     with only one variable
                 ;;;       the second instantiation will happen when our
@@ -561,15 +560,15 @@
         )
       (if if-top-level-match
           (begin
-            (debug-dump "\n syn-solving assmpt: ~a" assmpt)
-            (debug-dump "\n syn-solving goal: ~a" g)
-            (debug-dump "\n Extra Matching: ~a ~a" ag g)
+            (debug-dump-off "\n syn-solving assmpt: ~a" assmpt)
+            (debug-dump-off "\n syn-solving goal: ~a" g)
+            (debug-dump-off "\n Extra Matching: ~a ~a" ag g)
             (mplus if-top-level-match-filled
                 (traversal-on-assmpt term-name ag remain-assmpt)))
           (begin
-            (debug-dump "\n syn-solving assmpt: ~a" assmpt)
-            (debug-dump "\n syn-solving goal: ~a" g)
-            (debug-dump "\n Failed Matching: ~a ~a" ag g)
+            (debug-dump-off "\n syn-solving assmpt: ~a" assmpt)
+            (debug-dump-off "\n syn-solving goal: ~a" g)
+            (debug-dump-off "\n Failed Matching: ~a ~a" ag g)
             (traversal-on-assmpt term-name ag remain-assmpt)))
     )
   )
@@ -581,7 +580,10 @@
   (Goal? . -> . Goal?)  
   (define (each-case rec-parent rec g)
     (match g
-      [(relate thunk description) (apply thunk (cdr description))] 
+      [(relate thunk description) 
+        (begin 
+          (debug-dump-off "  Before Unfold : ~a \n After Unfold ~a \n" g (apply thunk (cdr description)))
+          (apply thunk (cdr description)))] 
       [o/w (rec-parent g)]
     )
   )
@@ -625,12 +627,12 @@
   
   (define conj-assumpt-ty (foldl conj (Top) (all-assumption-goals assmpt)))
   (define conj-assumpt-term (foldl LFpair (LFaxiom (Top)) (all-assumption-terms assmpt)))
-  (debug-dump " \n Before Unfold Assumption : ~a \n" conj-assumpt-ty)
+  (debug-dump-off " \n Before Unfold Assumption : ~a \n" conj-assumpt-ty)
   (define unfold-conj-assumpt-ty (unfold-one-level-relate conj-assumpt-ty))
   (define s-unfold-conj-assmpt-ty (all-linear-simplify unfold-conj-assumpt-ty))
 
   (define unfolded-goal (cimpl s-unfold-conj-assmpt-ty goal)) 
-  (debug-dump " \n After Unfold Assumption : ~a \n" s-unfold-conj-assmpt-ty)
+  (debug-dump-off " \n After Unfold Assumption : ~a \n" s-unfold-conj-assmpt-ty)
   ;;; use cimpl here to allow newly unfolded assumption processed by sem-solving
   ;;; (match-let*
   ;;;    ([(cons st all-assmpt-term) (push-lflet st conj-assumpt-term : conj-assumpt-ty)]
@@ -654,7 +656,7 @@
 (define/contract (sem-solving assmpt st g)
   (assumption-base? ?state? Goal? . -> . Stream?)
   ;;; the following used when primitive goal is to fill in the
-  ;;; (debug-dump "  current-solving goal: ~a\n" g)
+  (debug-dump-off "  semantic-solving goal: ~a\n" (syntactical-simplify g))
   (and st ;;; always circuit the st
     (match g
     ;;; ((disj-1 g1 g2)
@@ -683,7 +685,7 @@
       ;;; TODO: rewrite the following into ANF-style (the push-let form)
       (match-let* 
             ([(cons g1-dec g1-ndec) (simplify-dec+nondec g1)]
-             [k (debug-dump "\n dec comp: ~a \n undec comp ~a \n " g1-dec g1-ndec)]
+             [k (debug-dump-off "\n dec comp: ~a \n undec comp ~a \n " g1-dec g1-ndec)]
              [~g1-dec-ty (complement g1-dec)]
              [cimpl-syn-short-circuit 
                 (λ (antc conseq) (if (equal? antc (Top)) conseq (cimpl-syn antc conseq)))]
@@ -741,7 +743,7 @@
       ;;; TODO: add syntactical solving (i.e. put domain_ into the assumption but never solve it)
       ;;;         as now we know domain is always decidable so we just need to solve it (to add into state)
       (let* [(domain_ (simplify-domain-wrt assmpt st domain var))  
-            ;;;  (k (begin (debug-dump "\n ~a : domain_ : ~a " var domain_)))
+            ;;;  (k (begin (debug-dump-off "\n ~a : domain_ : ~a " var domain_)))
              ] 
 
         (match domain_
@@ -855,7 +857,7 @@
 
 (define/contract (step s)
   (Stream? . -> . Stream?)
-  ;;; (debug-dump "\n       step: I am going through ~a" s)
+  ;;; (debug-dump-off "\n       step: I am going through ~a" s)
   (match s
     ;;; ((mplus-1 s1 s2)
     ;;;  (let ((s1 (if (mature? s1) s1 (step s1))))
@@ -956,21 +958,21 @@
 
                   ;;;             (if #t
                   ;;;               (begin 
-                  ;;;                 (debug-dump "\n current assumption base: ~v" assmpt)
-                  ;;;                 (debug-dump "\n current state initial var: ~v" (reify/initial-var st))
-                  ;;;                 (debug-dump "\n shrinked state initial var: ~v" (reify/initial-var shrinked-st))
-                  ;;;                 (debug-dump "\n current state: ~v" st)
-                  ;;;                 (debug-dump "\n following stream: ~v" (cdr s))
-                  ;;;                 (debug-dump "\n field-projected-st: ~a"  field-projected-st)
-                  ;;;                 ;;; (debug-dump "\n field-projected-st initial var: ~a" (reify/initial-var (eliminate-tproj-in-st field-projected-st)))
-                  ;;;                 (debug-dump "\n subst-canonical-st: ~a" subst-canonical-st)
-                  ;;;                 ;;; (debug-dump "\n unmention-substed-st initial var: ~a" (reify/initial-var (eliminate-tproj-in-st unmention-substed-st)))
-                  ;;;                 (debug-dump "\n domain-enforced-st: ~a" domain-enforced-st)
-                  ;;;                 ;;; (debug-dump "\n domain-enforced-st initial var: ~a" (reify/initial-var (eliminate-tproj-in-st domain-enforced-st)))
+                  ;;;                 (debug-dump-off "\n current assumption base: ~v" assmpt)
+                  ;;;                 (debug-dump-off "\n current state initial var: ~v" (reify/initial-var st))
+                  ;;;                 (debug-dump-off "\n shrinked state initial var: ~v" (reify/initial-var shrinked-st))
+                  ;;;                 (debug-dump-off "\n current state: ~v" st)
+                  ;;;                 (debug-dump-off "\n following stream: ~v" (cdr s))
+                  ;;;                 (debug-dump-off "\n field-projected-st: ~a"  field-projected-st)
+                  ;;;                 ;;; (debug-dump-off "\n field-projected-st initial var: ~a" (reify/initial-var (eliminate-tproj-in-st field-projected-st)))
+                  ;;;                 (debug-dump-off "\n subst-canonical-st: ~a" subst-canonical-st)
+                  ;;;                 ;;; (debug-dump-off "\n unmention-substed-st initial var: ~a" (reify/initial-var (eliminate-tproj-in-st unmention-substed-st)))
+                  ;;;                 (debug-dump-off "\n domain-enforced-st: ~a" domain-enforced-st)
+                  ;;;                 ;;; (debug-dump-off "\n domain-enforced-st initial var: ~a" (reify/initial-var (eliminate-tproj-in-st domain-enforced-st)))
 
-                  ;;;                 (debug-dump "\n relative-complemented-goal: ~v" relative-complemented-goal)
-                  ;;;                 (debug-dump "\n relative-complemented-goal-original: ~v  on ~a" relative-complemented-goal-original v)
-                  ;;;                 (debug-dump "\n shrinked-st on ~s: ~v \n \n" v shrinked-st) 
+                  ;;;                 (debug-dump-off "\n relative-complemented-goal: ~v" relative-complemented-goal)
+                  ;;;                 (debug-dump-off "\n relative-complemented-goal-original: ~v  on ~a" relative-complemented-goal-original v)
+                  ;;;                 (debug-dump-off "\n shrinked-st on ~s: ~v \n \n" v shrinked-st) 
                   ;;;               )
                   ;;;               '()
                   ;;;             )
@@ -1036,13 +1038,13 @@
 ;;;  s.t. goal is unsatisfiable for arbitrary var 
 (define/contract (unsatisfiable-wrt assmpt var goal st)
   (assumption-base? var? decidable-goal? state? . -> . Stream?)
-  (debug-dump "  unsatisfiable-wrt ~a ~a \n unsatisfiable-wrt ~a \n" var goal st)
+  (debug-dump-off "  unsatisfiable-wrt ~a ~a \n unsatisfiable-wrt ~a \n" var goal st)
 
   (define current-scope (set-remove (list->set (state-scope st)) var))
   ;;; transform goal into canonical states
   ;;;  also in DNF form
   (define goal-as-stream (pause empty-assumption-base empty-state (all-linear-simplify goal)))
-  (debug-dump "  unsatisfiable-wrt negating: ~a \n" (all-mature-to-list goal-as-stream))
+  (debug-dump-off "  unsatisfiable-wrt negating: ~a \n" (all-mature-to-list goal-as-stream))
   (define negated-goal-as-stream-except-v (negate-except-var goal-as-stream current-scope var))
 
   (goal-stream-as-disj assmpt negated-goal-as-stream-except-v st)
@@ -1139,6 +1141,7 @@
     (if (not st)
       (cons (Bottom) #f)
       (match goal
+        [(Top) (cons goal st)]
         [(conj a b) 
           (match-let* 
             ([(cons new-a st1) (est-eval a st)]
@@ -1153,14 +1156,12 @@
              [final-goal        (disj new-a new-b)])
             (cons final-goal resulting-st))]
         [(cimpl a b)
-          (if (decidable-goal? a)
-              (match-let* 
-                ([(cons new-not-a st-l) (est-eval (complement a) st)]
-                [(cons new-b st-r) (est-eval b st)]
-                [resulting-st      (disj-merge-st st-l st-r st)] ; merge to top of all the state
-                [final-goal        (cimpl (complement new-not-a) new-b)])
-                (cons final-goal resulting-st))
-              (cons goal st))]
+          (match-let* 
+            ([(cons new-a _) (est-eval a st)]
+             [(cons new-b _) (est-eval b st)]
+             [resulting-st      st] ; merge to top of all the state
+             [final-goal        (cimpl new-a new-b)])
+            (cons final-goal resulting-st))]
         [(relate _ _) ; do nothing, otherwise how to terminate
           (cons goal st)]
         [(ex v g)
@@ -1172,10 +1173,13 @@
           (match-let* 
             ([(cons (cimpl new-d new-g) new-st) (est-eval (cimpl d g) st)]
              [resulting-st (and new-st st)])
-            (cons (forall v new-d new-g) resulting-st))]
+            (cons (forall v new-d new-g) resulting-st))
+          ;;; (cons goal st)
+          ]
         [_
           (let*
-            ([all-states   (all-mature (pause '() st goal))]
+            ([k (debug-dump-off "  est-simplify on : ~a \n" goal)]
+             [all-states   (all-mature (pause '() st goal))]
              [actually-one (get-state-out-of-at-most-singleton-stream all-states)])
             (cons goal actually-one))]
         )
@@ -1192,6 +1196,7 @@
 (define/contract (all-linear-simplify g)
   (Goal? . -> . Goal?)
   (syntactical-simplify (est-simplify g))
+  ;;; (syntactical-simplify g)
 )
 
 (define/contract (est-simplify goal)
@@ -1709,7 +1714,7 @@
 ;;;     then x is of type pair ((has-type x pair) will appear)
 (define (domain-enforcement-st st) ;; (tproj x car.cdr.car) (typeconstant x car) pair
   (define all-tprojs (collect-tprojs st))
-  ;;; (debug-dump "\n    inside domain-enforcement-st all-tprojs: ~a" all-tprojs)
+  ;;; (debug-dump-off "\n    inside domain-enforcement-st all-tprojs: ~a" all-tprojs)
   (define sub (state-sub st))
   ;;; (tproj v path) x state -> state
   ;;; given a (possibly complicated) tproj, make st enforce on its domain
@@ -1919,15 +1924,15 @@
   (state? set? var? . -> . state?)
   (define mentioned-vars (set-remove scope var))
   ;;;  we need to do extra unmentioned-substed because here var is considered unmentioned
-  (debug-dump "     shrink-away using unmentioned-subst-form: ~a \n" st)
+  (debug-dump-off "     shrink-away using unmentioned-subst-form: ~a \n" st)
   (define var-removed-st (unmentioned-substed-form mentioned-vars st))
-  ;;; (debug-dump "\n shrinking var: shrink-var-removed-st: ~a" var-removed-st)
+  ;;; (debug-dump-off "\n shrinking var: shrink-var-removed-st: ~a" var-removed-st)
   (define domain-enforced-st var-removed-st)
   ;;;  we remove none-substed appearances of unmentioned var
   ;;; TODO : abstract this part away -- 
   ;;;   "unmentioned-totally-removed" replace those constraints into True
   (define unmentioned-removed-st (unmentioned-totally-removed mentioned-vars domain-enforced-st))
-  ;;; (debug-dump "\n shrinking var: remove unmention in type/ineq-cst: ~a" unmentioned-removed-st)
+  ;;; (debug-dump-off "\n shrinking var: remove unmention in type/ineq-cst: ~a" unmentioned-removed-st)
   ;;; then we eliminate tproj
   (let* ([eliminated-tproj-st (eliminate-tproj-in-st unmentioned-removed-st)])
     (valid-type-constraints-check eliminated-tproj-st))
@@ -1943,7 +1948,7 @@
   ;;; TODO: I will just currently make this assumption to empty...
   
   (define dnf-sym-stream (TO-DNF (TO-NON-Asymmetric '() (wrap-state-stream state0))))
-  ;;; (debug-dump "\n clearing about: input sttate0 ~a" state0)
+  ;;; (debug-dump-off "\n clearing about: input sttate0 ~a" state0)
   (define mentioned-var (set-remove scope v))
   (define (map-clear-about st)
     (let* (
@@ -1953,8 +1958,8 @@
         [unmention-substed-st  domain-enforced-st]
         [shrinked-st (shrink-away domain-enforced-st current-vars v)]
         [valid-shrinked-st (valid-type-constraints-check shrinked-st)] ;;; remove unnecessary information
-        [k (debug-dump "      clearing-about ~a ~a  \n" v state0)]
-        [k (debug-dump "      clearing-about-result ~a \n" valid-shrinked-st)]
+        [k (debug-dump-off "      clearing-about ~a ~a  \n" v state0)]
+        [k (debug-dump-off "      clearing-about-result ~a \n" valid-shrinked-st)]
         )
       (wrap-state-stream valid-shrinked-st)))
   (mapped-stream map-clear-about dnf-sym-stream)
@@ -1966,7 +1971,7 @@
   (Stream? set? var? . -> . GoalStream?)
   
   (define dnf-sym-stream (TO-DNF (TO-NON-Asymmetric '() st-stream)))
-  ;;; (debug-dump "\n clearing about: input sttate0 ~a" state0)
+  ;;; (debug-dump-off "\n clearing about: input sttate0 ~a" state0)
   (define mentioned-var (set-remove scope v))
   (define (map-clear-about-in-field-proj st)
     (let* (
@@ -1980,14 +1985,14 @@
       unmentioned-removed-st))
   (define clear-var-stream (mapped-stream map-clear-about-in-field-proj dnf-sym-stream))
 
-  (debug-dump "   clear-var-stream: ~a \n" (all-mature-to-list clear-var-stream))
+  (debug-dump-off "   clear-var-stream: ~a \n" (all-mature-to-list clear-var-stream))
 
   (define negate-goals (negate-stream clear-var-stream))
   
-  (debug-dump "   negating-goals result ~a \n" (all-mature-to-list negate-goals))
+  (debug-dump-off "   negating-goals result ~a \n" (all-mature-to-list negate-goals))
   (define negate-goal-stream (goal-stream-as-disj empty-assumption-base negate-goals empty-state))
   
-  (debug-dump "   negating-goals-to-states result ~a \n" (all-mature-to-list negate-goal-stream))  
+  (debug-dump-off "   negating-goals-to-states result ~a \n" (all-mature-to-list negate-goal-stream))  
   ;;; remove field projection form
   (define negate-goal-stream-fpfree
     (mapped-stream
@@ -2001,7 +2006,7 @@
         (wrap-goal-stream (state->goal st))) 
       negate-goal-stream-fpfree))
 
-  (debug-dump "   negating-goals final result ~a \n" (all-mature-to-list result))
+  (debug-dump-off "   negating-goals final result ~a \n" (all-mature-to-list result))
   result
   
 )

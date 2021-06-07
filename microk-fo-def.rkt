@@ -598,10 +598,12 @@
   ;;; (define rec extended-f)
   (match g
     [(== x y)        (== (rec x) (rec y))]
+    [(cons x y)      (cons (rec x) (rec y))]
     [(=/= x y)       (=/= (rec x) (rec y))]
     [(type-constraint x types) (type-constraint (rec x) types)]
     [(disj a b)     (disj (rec a) (rec b))]
     [(conj a b)     (conj (rec a) (rec b))]
+    [(cimpl x y)     (cimpl (rec x) (rec y))]
     [(ex v g)       (ex v (rec g))]
     [(forall v b g) (forall v (rec b) (rec g))]
     [(relate thunk descript)  (relate thunk (rec descript))] 
