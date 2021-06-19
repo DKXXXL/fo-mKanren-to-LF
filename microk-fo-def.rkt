@@ -718,8 +718,8 @@
       ;; TODO (greg): if `a` is decidable, the entire implication may still be decidable
       ;;; [(cimpl a b) (begin (set! res #f) g)] ; don't even allow implication to be inside g
       [(forall _ b g_) 
-          ;;; (rec (cimpl b g_)) ; equivalent semantic
-          (begin (set! res #f) g) ; more conservative
+          (rec (cimpl b g_)) ; equivalent semantic
+          ;;; (begin (set! res #f) g) ; more conservative
           ] 
       [_ (rec-parent g)]
     )

@@ -1732,13 +1732,13 @@
 (define-relation (bar x) (foo x))
 
 ((run 1 () 
-  (implies (foo 1) (bar (cons 1 1)))
+  (cimpl (foo 1) (bar (cons 1 1)))
 )
 . test-reg!=> . 'succeed
 )
 
 ((run 1 () 
-  (implies (bar (cons 1 1)) (foo 1))
+  (cimpl (bar (cons 1 1)) (foo 1))
 )
 . test-reg!=> . 'succeed
 )
