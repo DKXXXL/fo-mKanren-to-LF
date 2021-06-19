@@ -916,7 +916,7 @@
 . test-reg!=>ND . 'succeed
 )
 
-;;; but this one is also failing
+;;; Slow!
 (Test-unification-cimpl-1
   (run 1 (R)
     (for-all (x y)
@@ -1135,14 +1135,14 @@
 (Simple-Rewrite-1
   (run 1 ()  (for-all (x z) (cimpl (conj (== x z)(False z)) 
                                    (False x))))
-  . test-reg!=>ND . 'succeed  
+  . test-reg!=> . 'succeed  
 )
 
 
 (Simple-Rewrite-2
   (run 1 ()  (for-all (x z) (cimpl (conj (== z x)(False z)) 
                                    (False x))))
-  . test-reg!=>ND . 'succeed  
+  . test-reg!=> . 'succeed  
 )
 
 (Simple-Rewrite-3
