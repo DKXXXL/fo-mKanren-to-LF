@@ -1727,6 +1727,24 @@
       (== l (cons 0 l2))
       (zeros l2))))
 
+
+(define-relation (foo x) (foo (cons 1 x)))
+(define-relation (bar x) (foo x))
+
+((run 1 () 
+  (implies (foo 1) (bar (cons 1 1)))
+)
+. test-reg!=> . 'succeed
+)
+
+((run 1 () 
+  (implies (bar (cons 1 1)) (foo 1))
+)
+. test-reg!=> . 'succeed
+)
+
+;(implies (bar (cons 1 1)) (foo 1))
+
 (define-relation (neg X)
   (cimpl X (Bottom)))
 
