@@ -356,6 +356,7 @@
 ;;;   what's different is that it will not deal with the antec
 ;;;     and directly consider every antec as part of assumption
 ;;;     (no semantic solving on assumption at all)
+;;; loop invariant : antecedent is always non-simply-decidable
 (struct cimpl-syn  cimpl ()  
   #:transparent
   #:methods gen:custom-write
@@ -370,6 +371,24 @@
                                    (list g1 g2))]))
 )
 
+
+;;; constructive implication, 
+;;; difference is that, cimpl will create a new branch of stream
+;;;    that falsifying the goal
+;;; this one won't
+(struct cimpl-no-falsification  cimpl ()  
+  #:transparent
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "(~a ⟶ ~a)" (cimpl-g1 val) (cimpl-g2 val)))]
+  #:guard (lambda (g1 g2 type-name)
+                    (cond
+                      [(andmap Goal? (list g1 g2)) 
+                       (values g1 g2)]
+                      [else (error type-name
+                                   "All should be Goal: ~e"
+                                   (list g1 g2))]))
+)
 
 ;; TODO (greg): consider using sets
 ;;; The following are a incomplete interfaces for assumption-base

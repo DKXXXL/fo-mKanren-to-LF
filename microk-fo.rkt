@@ -631,7 +631,7 @@
   (define unfold-conj-assumpt-ty (unfold-one-level-relate conj-assumpt-ty))
   (define s-unfold-conj-assmpt-ty (all-linear-simplify unfold-conj-assumpt-ty))
 
-  (define unfolded-goal (cimpl s-unfold-conj-assmpt-ty goal)) 
+  (define unfolded-goal (cimpl-no-falsification s-unfold-conj-assmpt-ty goal)) 
   (debug-dump-off " \n After Unfold Assumption : ~a \n" s-unfold-conj-assmpt-ty)
   ;;; use cimpl here to allow newly unfolded assumption processed by sem-solving
   ;;; (match-let*
@@ -689,6 +689,10 @@
              [~g1-dec-ty (complement g1-dec)]
              [cimpl-syn-short-circuit 
                 (λ (antc conseq) (if (equal? antc (Top)) conseq (cimpl-syn antc conseq)))]
+             [try-falsification-goal 
+                (if (cimpl-no-falsification? g) 
+                    (Bottom)
+                    (cimpl-syn g1-ndec (Bottom)))]
             )
         (mplus*
           (pause assmpt st ~g1-dec-ty)
@@ -699,11 +703,12 @@
           (pause assmpt st
               (conj g1-dec 
                 (disj* 
-                  (cimpl-syn g1-ndec (Bottom)) ;;; and syntactical falsifying 
+                  try-falsification-goal ;;; and syntactical falsifying 
                   (cimpl-syn g1-ndec g2)      ;;; and syntactical solving
                 ))) )
  
     ))
+    
     ((relate thunk descript)
       (pause assmpt st (apply thunk (cdr descript))))
     ((== t1 t2) (unify t1 t2 st))
