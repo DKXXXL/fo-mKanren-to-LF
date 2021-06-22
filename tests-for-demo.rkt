@@ -48,23 +48,23 @@
     (random-goal (A B C D E X Z)
       (run 1 ()  (cimpl 
                       (conj* 
-                        (A . → . B)
-                        (B . → . C)
-                        (C . → . D)
-                        (Z . → . D)
-                        (D . → . E) 
-                        (X . → . E))
-                      (A . → . E)) ))
+                        (A . cimpl . B)
+                        (B . cimpl . C)
+                        (C . cimpl . D)
+                        (Z . cimpl . D)
+                        (D . cimpl . E) 
+                        (X . cimpl . E))
+                      (A . cimpl . E)) ))
     (random-goal (A)
       (run 1 ()  (cimpl 
                       (conj* 
-                        (for-all (x) ((False x) . → . A))
+                        (for-all (x) ((False x) . cimpl . A))
                         (False 1))
                       A)))
     (random-goal (A)
       (run 1 ()  (cimpl 
                       (conj* 
-                        (for-all (x) ((False x) . → . A))
+                        (for-all (x) ((False x) . cimpl . A))
                         (fresh (k) (False k)))
                       A)))
 
@@ -167,13 +167,14 @@
   
   (printf "Evalo Demos\n")
   (print-table (run-demos test-cases-evalo)
+    #:border-style 'latex )
 
   (printf "Graph Reachability Demos\n")
   (print-table (run-demos test-cases-graph-reachable)
       #:border-style 'latex )
 
   (printf "Other Customized Relation Demos\n")
-  (print-table (run-demos test-cases-evalo)
+  (print-table (run-demos customized-relate-cases)
       #:border-style 'latex )
 )
 
