@@ -23,11 +23,18 @@
         (λ (x) (curry-λ (y ...) body)))))
 
 
+(struct grk    (t1)
+  #:transparent               
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "~a" (grk-t1 val)))]
+     ;;; L stands for Lisp Elements
+)
 
 
 (define query-var
   (let* ([c 0]
-        [greeks '(ɩ ɑ β ɣ θ ɛ)]
+        [greeks (map grk '("\\gamma" "\\alpha" "\\beta"))]
         [l (length greeks)]
         [query-by-index (λ (t) (list-ref greeks (modulo c l)))])
     (λ ()
@@ -187,12 +194,16 @@
           ([acc '()])
           ([each-demo ds])
       (match-let* 
-        ([(cons content thunk) each-demo])
+        ([(cons content thunk) each-demo]
+         [latex-content (format "$~a$" content)])
           (match-let*-values
-            ([((cons result _) _ realtime _) (time-apply thunk '())])
-            (cons (list content result realtime) acc))
+            ([((cons result _) _ realtime _) (time-apply thunk '())]
+             [(latex-result) (format "$~a$" result)]
+             [(latex-result-excape-underscore) (string-replace latex-result "_" "\\_")]
+             )
+            (cons (list latex-content latex-result-excape-underscore realtime) acc))
   )))
-(cons (list 'Query 'Result 'Time-in-ms) (reverse result))
+(cons (list 'Query 'Result "Time (ms)") (reverse result))
 )
 
 
