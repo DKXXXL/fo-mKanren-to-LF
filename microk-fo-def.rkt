@@ -199,7 +199,7 @@
   (define (add-list-decor y)
     (if (list? y) (cons 'list y) y))
   (cons 
-    (object-name (car (relate-description x)))
+    (possible-obj-name (car (relate-description x)))
     (map add-list-decor 
       (cdr (relate-description x))
     )
@@ -210,7 +210,7 @@
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "{~a}" (print-relate-descr val)))]
+     (fprintf output-port "\\textcode{~a}" (print-relate-descr val)))]
 )
 (struct == Goal    (t1 t2)
   #:transparent               
@@ -241,7 +241,7 @@
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "(~s \\neq ~s)" (=/=-t1 val) (=/=-t2 val)))]
+     (fprintf output-port "(~V \\neq ~V)" (=/=-t1 val) (=/=-t2 val)))]
 )
 
 ;;; universal quantifier,
@@ -250,7 +250,9 @@
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "\\forall ~a. {~a} \\rightarrow ~a" (forall-varname val) (forall-domain val)  (forall-g val)))]
+    (if (equal? (forall-domain val) (Top))
+      (fprintf output-port "\\forall ~a. ~a" (forall-varname val) (forall-g val))
+      (fprintf output-port "\\forall ~a. {~a} \\rightarrow ~a" (forall-varname val) (forall-domain val)  (forall-g val))))]
   #:guard (lambda (varname domain g type-name)
                     (cond
                       [(and (var? varname) (Goal? g) (Goal? domain)) 
@@ -260,7 +262,8 @@
                                    g)]))
 )
 
-
+(define (possible-obj-name x)
+  (or (object-name x) x))
 ;;; typeinfo is a set of type-symbol
 ;;; indicating t is union of these type
 ;;; Note: this goal is not part of exposed interface 
@@ -270,7 +273,7 @@
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "(~V \\in ~V)" 
+     (fprintf output-port "(~V \\in \\textcode{~V} )" 
         (type-constraint-t val) 
         (map object-name (set->list (type-constraint-typeinfo val)))))]
   #:guard (lambda (t typeinfo type-name)

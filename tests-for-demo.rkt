@@ -1,6 +1,7 @@
 #lang errortrace racket
 
 (require "tests-fo-LF.rkt")
+(require "microk-fo-def.rkt")
 
 (require rackunit)
 
@@ -41,6 +42,31 @@
       (set! c (+ c 1))
       (query-by-index c))))
 
+(struct ppair    (a b)
+  #:transparent               
+  #:methods gen:custom-write
+  [(define (write-proc val output-port output-mode)
+     (fprintf output-port "(~a,~a)" (ppair-a val) (ppair-b val)))]
+     ;;; L stands for Lisp Elements
+)
+
+
+(define/contract (hijack-ppair goal)
+  (Goal? . -> . Goal?)
+  (define (each-case rec-parent rec g)
+    (match g
+      [(relate _ _) g] 
+      [(cons a b) (ppair (rec a) (rec b))]
+      [o/w (rec-parent g)]
+    )
+  )
+  (define result-f 
+    (compose-maps (list each-case goal-term-base-map pair-base-map state-base-endo-functor hash-key-value-map identity-endo-functor))
+  )
+  (result-f goal)
+)
+
+
 (define (into-goal goal-or-procedure)
   (if (procedure? goal-or-procedure)
     (into-goal (goal-or-procedure (query-var)))
@@ -57,7 +83,7 @@
 
 (define-syntax demo-run
   (syntax-rules ()
-    ((_ n body ...) (cons (into-goal (curry-λ body ...)) (thunk (run n body ...))))))
+    ((_ n body ...) (cons (hijack-ppair (into-goal (curry-λ body ...))) (thunk (run n body ...))))))
 
 
 ;;; 5.1 basic test -- (forall (x) (disj (== x 1) (=/= x 1)))
@@ -85,6 +111,26 @@
                (for-all (x) (=/= (cons x x) (cons a b))) ))
 
   ))
+
+;;; This goal can only be satisfied from outside
+;;; Opaque-Goal = False
+(define Opaque-Goal
+  (let* ([c 0])
+    (λ ()
+    (let* ([k (string->symbol (format "Loop~a" c))]
+           [_ (set! c (+ c 1))])
+    (letrec ([g (λ () (relate (λ () (fresh () (g)) ) `(,k))) ])
+      (g)
+    )
+  )))
+)
+
+(define (ciff X Y) (conj (cimpl X Y) (cimpl Y X)))
+
+(define-syntax random-goal
+  (syntax-rules ()
+    ((_ (x ...) g0 gs ...)
+     (let ((x (Opaque-Goal)) ...)  (conj* g0 gs ...)))))
 
 ;;; 5.2 Basic Implication Test
 (define basic-implication
@@ -188,6 +234,19 @@
     test-cases-graph-reachable
   ))
 
+
+(define/contract (escape-latex s)
+  (string? . -> . string?)
+  (define specials `("#" "_"))
+  
+  (for/fold 
+    ([acc s])
+    ([each specials])
+    (string-replace acc each (string-append "\\" each))
+  )
+
+)
+
 (define (run-demos ds)
   (define result 
     (for/fold 
@@ -195,13 +254,13 @@
           ([each-demo ds])
       (match-let* 
         ([(cons content thunk) each-demo]
-         [latex-content (format "$~a$" content)])
+         [latex-content (escape-latex (format "$~a$" content))])
           (match-let*-values
             ([((cons result _) _ realtime _) (time-apply thunk '())]
              [(latex-result) (format "$~a$" result)]
-             [(latex-result-excape-underscore) (string-replace latex-result "_" "\\_")]
+             [(latex-result-escape) (escape-latex latex-result)]
              )
-            (cons (list latex-content latex-result-excape-underscore realtime) acc))
+            (cons (list latex-content latex-result-escape realtime) acc))
   )))
 (cons (list 'Query 'Result "Time (ms)") (reverse result))
 )
