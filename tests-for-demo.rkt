@@ -89,7 +89,7 @@
   (syntax-rules ()
     ((_ n body ...) 
     (cons (hijack-ppair (into-goal (curry-λ body ...) 0)) 
-          (thunk 'TOO-LONG )))))
+          (thunk 'TOO-MUCH-TIME )))))
 
 
 ;;; 5.1 basic test -- (forall (x) (disj (== x 1) (=/= x 1)))
@@ -134,7 +134,7 @@
     (demo-unhalt 1 () (winning 'a))
     (demo-unhalt 1 () (winning 'b))
 
-    (demo-unhalt 1 (q) (filter p q (list 1)))
+    (demo-unhalt 1 (q) (filter-singleton q (list 1)))
     
   ))
 
@@ -207,6 +207,7 @@
                         (fresh (k) (False k)))
                       A)))
     (demo-run 1 () (cimpl (neg (winning 'a)) (winning 'b)))
+    (demo-run 1 () (cimpl (cimpl (winning 'd) (Bottom)) (Bottom) ))
     (demo-unhalt 1 () (cimpl (winning 'c) (Bottom)))
     
   ))
@@ -217,17 +218,18 @@
   (list-reflective
     ;;; (demo-run 1 (x) (for-all (b) (has-false (list b b x)))) 
 
-    (demo-run 1 () (for-bound (x) [boolo x] (sort-boolo (list #f x #f) (list #f #f x))))    
-    (demo-run 1 (a) 
-      (for-all (x) (sort-boolo (list #f #f x) (list a #f x))))
-
-    (demo-run 1 ()  (for-all (x) (sort-boolo (list x #f) (list x #f))))
+    (demo-run 1 () (for-all (x) (sort-boolo (list #f x #f) (list #f #f x))))   
     (demo-run 1 () (cimpl (for-all (x) (sort-boolo (list x #f) (list x #f))) (Bottom)))
+    ;;; (demo-run 1 (x) (cimpl (sort-boolo (list x #f) (list x #f)) (Bottom)))
+
+    ;;; (demo-run 1 () (for-all (x) (sort-boolo (list #f x #f #f) (list #f #f #f x))))   
+    ;;; (demo-run 1 () (cimpl (for-all (x) (sort-boolo (list x #f #f) (list x #f #f))) (Bottom)))
+
     ;;; (demo-run 1 () (for-all (a) 
     ;;;   (cimpl (membero #f (list a)) 
     ;;;          (== a #f))
     ;;; ))
-    (demo-run 1 (o) (for-all (x) (sort-boolo-base-case (list x #f #f #f) (list #f #f #f x) o)))
+    ;;; (demo-run 1 (o) (for-all (x) (sort-boolo-base-case (list x #f #f #f) (list #f #f #f x) o)))
   ;;; (demo-run 1 () (for-all (x1 x2) 
   ;;;   (fresh (r1 r2)
   ;;;     (sort-two-boolo (list x1 x2) (list r1 r2))
@@ -289,10 +291,11 @@
           ([each-demo ds])
       (match-let* 
         ([(cons content thunk) each-demo]
+        ;;;  [_ (printf "~a\n" content)]
          [latex-content (escape-latex (format "$~a$" content))])
           (match-let*-values
             ([((cons result _) _ realtime _) (time-apply thunk '())]
-             [(realtime) (if (equal? result 'TOO-LONG) 'N/A realtime)]
+             [(realtime) (if (equal? result 'TOO-MUCH-TIME) 'N/A realtime)]
              [(latex-result) (format "$~a$" result)]
              [(latex-result-escape) (escape-latex latex-result)]
              )

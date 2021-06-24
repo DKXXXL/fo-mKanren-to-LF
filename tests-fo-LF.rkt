@@ -1902,6 +1902,19 @@
         (== ys ys2))
       (filter p xs2 ys2))))
 
+
+(define-relation (filter-singleton xs ys)
+  (disj*
+    (conj*
+      (== xs '())
+      (== ys '()))
+    (fresh (x xs2 ys2)
+      (== xs (cons x xs2))
+      (ifte (fresh (y) (== (list y) x))
+        (== ys (cons x ys2))
+        (== ys ys2))
+      (filter-singleton xs2 ys2))))
+
 (define-relation (actually-equal x y)
   (for-all (z) (disj (== x z) (=/= z y))))
 
