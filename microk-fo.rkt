@@ -560,15 +560,15 @@
         )
       (if if-top-level-match
           (begin
-            (debug-dump-off "\n syn-solving assmpt: ~a" assmpt)
-            (debug-dump-off "\n syn-solving goal: ~a" g)
-            (debug-dump-off "\n Extra Matching: ~a ~a" ag g)
+            (debug-dump "\n syn-solving assmpt: ~a" assmpt)
+            (debug-dump "\n syn-solving goal: ~a" g)
+            (debug-dump "\n Extra Matching: ~a ~a" ag g)
             (mplus if-top-level-match-filled
                 (traversal-on-assmpt term-name ag remain-assmpt)))
           (begin
-            (debug-dump-off "\n syn-solving assmpt: ~a" assmpt)
-            (debug-dump-off "\n syn-solving goal: ~a" g)
-            (debug-dump-off "\n Failed Matching: ~a ~a" ag g)
+            (debug-dump "\n syn-solving assmpt: ~a" assmpt)
+            (debug-dump "\n syn-solving goal: ~a" g)
+            (debug-dump "\n Failed Matching: ~a ~a" ag g)
             (traversal-on-assmpt term-name ag remain-assmpt)))
     )
   )
@@ -672,7 +672,7 @@
     ;;; the real syntactical solving for cimpl
     ((cimpl-syn g1 g2)
       (fresh-param (name-g1)
-          (pause (cons-assmpt name-g1 g1 assmpt) st g2)
+            (pause (cons-assmpt name-g1 g1 assmpt) st g2)
       ))
     ((cimpl g1 g2) 
       ;;; semantic solving of implication is 
@@ -701,11 +701,11 @@
           ;;;     because without it, we may not expand the definition of assumption
           ;;;     and really falsifying it
           (pause assmpt st
-              (conj g1-dec 
-                (disj* 
-                  try-falsification-goal ;;; and syntactical falsifying 
-                  (cimpl-syn g1-ndec g2)      ;;; and syntactical solving
-                ))) )
+                (conj g1-dec 
+                      (disj* 
+                        try-falsification-goal ;;; and syntactical falsifying 
+                        (cimpl-syn g1-ndec g2)      ;;; and syntactical solving
+                        )))) 
  
     ))
     

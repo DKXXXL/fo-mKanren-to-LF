@@ -298,7 +298,7 @@
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "(\\bottom)" ))]
+     (fprintf output-port "(\\bot)" ))]
 )
 
 
