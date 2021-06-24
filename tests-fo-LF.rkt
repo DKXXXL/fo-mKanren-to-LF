@@ -1615,8 +1615,13 @@
 
 
 
+(define omegaf
+  '(lambda (app (var ()) (var ()))))
+
+
 (define omega
   '(app (lambda (app (var ()) (var ()))) (lambda (app (var ()) (var ())))))
+
 
 
 (Evalo-trivial-1

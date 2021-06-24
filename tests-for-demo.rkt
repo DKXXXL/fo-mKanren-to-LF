@@ -215,14 +215,18 @@
 (define customized-relate-cases
   (list-reflective
     ;;; (demo-run 1 (x) (for-all (b) (has-false (list b b x)))) 
+
+    (demo-run 1 () (for-bound (x) [boolo x] (sort-boolo (list #f x #f) (list #f #f x))))    
     (demo-run 1 (a) 
       (for-all (x) (sort-boolo (list #f #f x) (list a #f x))))
+
+    (demo-run 1 ()  (for-all (x) (sort-boolo (list x #f) (list x #f))))
+    (demo-run 1 () (cimpl (for-all (x) (sort-boolo (list x #f) (list x #f))) (Bottom)))
     ;;; (demo-run 1 () (for-all (a) 
     ;;;   (cimpl (membero #f (list a)) 
     ;;;          (== a #f))
     ;;; ))
     (demo-run 1 (o) (for-all (x) (sort-boolo-base-case (list x #f #f #f) (list #f #f #f x) o)))
-    (demo-run 1 () (for-bound (x) [boolo x] (sort-boolo (list #f x #f) (list #f #f x))))
   ;;; (demo-run 1 () (for-all (x1 x2) 
   ;;;   (fresh (r1 r2)
   ;;;     (sort-two-boolo (list x1 x2) (list r1 r2))
@@ -232,7 +236,7 @@
   ;;; (demo-run 1 (z) (neg (zeros z)))
   ))
 
-
+(define idf (caaar (run 1 (z) (evalo `(lambda (var ())) z))))
 
 (define test-cases-evalo
   (list-reflective
@@ -243,13 +247,9 @@
     (demo-run 1 (x) (for-all (y) (evalo `(app ,x (quote ,y)) y)))
     
 
-    (demo-run 4 (x) (cimpl (evalo omega 5)
-                           (cimpl (evalo omega 6) 
-                                  (evalo `(cons ,omega ,omega) x))))
+    (demo-run 4 (x) (cimpl (evalo omega id)
+                           (evalo `(app ,omega ,omega) x)))
 
-    (demo-run 4 (x) (cimpl (evalo omega '())
-                           (cimpl (evalo omega (cons 1 omega)) 
-                                  (evalo `(cons ,omega ,omega) x))))
     ;;; (demo-run 1 (q) (cimpl (evalo q q)
     ;;;               (fresh (t) (evalo q t) (evalo t q))))
     
