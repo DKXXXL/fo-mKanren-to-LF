@@ -33,14 +33,13 @@
 )
 
 
-(define query-var
-  (let* ([c 0]
-        [greeks (map grk '("\\gamma" "\\alpha" "\\beta"))]
+(define query-var 
+  (let* (
+         [greeks (map grk '("\\alpha" "\\beta" "\\gamma" "\\delta" "\\epsilon"))]
         [l (length greeks)]
-        [query-by-index (λ (t) (list-ref greeks (modulo c l)))])
-    (λ ()
-      (set! c (+ c 1))
-      (query-by-index c))))
+        [query-by-index (λ (t) (list-ref greeks (modulo t l)))])
+    (λ (i)
+      (query-by-index i))))
 
 (struct ppair    (a b)
   #:transparent               
@@ -67,9 +66,9 @@
 )
 
 
-(define (into-goal goal-or-procedure)
+(define (into-goal goal-or-procedure i)
   (if (procedure? goal-or-procedure)
-    (into-goal (goal-or-procedure (query-var)))
+    (into-goal (goal-or-procedure (query-var i)) (+ i 1))
     goal-or-procedure
     ))
 
@@ -83,32 +82,76 @@
 
 (define-syntax demo-run
   (syntax-rules ()
-    ((_ n body ...) (cons (hijack-ppair (into-goal (curry-λ body ...))) (thunk (run n body ...))))))
+    ((_ n body ...) (cons (hijack-ppair (into-goal (curry-λ body ...) 0)) (thunk (run n body ...))))))
+
+
+(define-syntax demo-unhalt
+  (syntax-rules ()
+    ((_ n body ...) 
+    (cons (hijack-ppair (into-goal (curry-λ body ...) 0)) 
+          (thunk 'TOO-LONG )))))
 
 
 ;;; 5.1 basic test -- (forall (x) (disj (== x 1) (=/= x 1)))
+(define constructive-negation-tests-1
+  (list-reflective
+      (demo-run 1 (q) (for-all (x) (== x q)))
+      (demo-run 1 (q) (for-all (x) (fresh (y) (== x y))))
+      (demo-run 1 (q) (for-all (x) (fresh (y) (== x y) (== y q))))
+      (demo-run 1 (q) (for-all (x) (== q (cons 1 x))))
+      (demo-run 1 (q) (for-all (x) (fresh (y) (== y (cons 1 x)))))
+      (demo-run 1 (q) (for-all (x) (fresh (y) (== x (cons 1 y)))))
+      (demo-run 1 (q) (for-all (x) (=/= x q)))
+      (demo-run 1 (q) (for-all (x) (fresh (y) (=/= x y))))
+      (demo-run 1 (q) (for-all (x) (fresh (y) (=/= x y) (== y q))))
+      (demo-run 1 (q) (for-all (x) (=/= q (cons 1 x))))
+      (demo-run 1 (q) (conj* (fresh (x) (== q (cons 1 x))) (for-all (x) (=/= q (cons 1 x)))))
+      (demo-run 1 (q) (for-all (x) (=/= (cons x x) (cons 0 1))))
+      (demo-run 1 (q) (for-all (x) (=/= (cons x x) (cons 1 1))))
+      (demo-run 1 (q) (for-all (x) (=/= (cons x x) (cons q 1))))
+      (demo-run 1 (q) (fresh (a b) (== q (cons a b)) (for-all (x) (=/= (cons x x) (cons a b))) ))
+;;; Above From Constructive Negation Test
+    ;;; unhalting
+      
+  )
+
+)
+
+
+;;; 
+(define test-cases-constructive-negation-others
+  (list-reflective
+    (demo-run 1 () (unreachable 'c 'a))
+    (demo-run 1 () (reachable 'c 'a))
+    (demo-run 1 (z) (unreachable 'c z))
+    (demo-run 1 (z) (unreachable 'd z))
+    (demo-run 1 (z) (unreachable z 'a))
+    (demo-run 1 (z) (unreachable z 'b))
+    (demo-run 1 (z) (unreachable z 'c))
+
+    (demo-run 1 () (winning 'c))
+    (demo-run 1 () (winning 'd))
+    (demo-unhalt 1 () (winning 'a))
+    (demo-unhalt 1 () (winning 'b))
+
+    (demo-unhalt 1 (q) (filter p q (list 1)))
+    
+  ))
+
+
 (define basic-test-cases
   (list-reflective
-    (demo-run 1 (a) (for-all (z) (== z a)))
-    (demo-run 1 ()  (for-all (z) (fresh (x) (== z x))))
-    (demo-run 1 ()  (for-all (z) (fresh (x y) (== (cons z y) x))))
 
 
-    (demo-run 1 () (for-all (v) (disj* (== v 1) (=/= v 1) (== v 2))))
-    (demo-run 1 () (fresh (a b) (for-all (v)  (disj* (== v a) (=/= v b)))))
-    ;;; (exists (a b) (for-all (v) (conj (== v a) (=/= v b)) (=/= v)))
-
-    (demo-run 1 (q) (for-all (x) (=/= q (cons 1 x))))
-
-    (demo-run 1 (a) (conj* (stringo a) (for-all (z) (not-stringo a))))
-    (demo-run 1 () (for-all (v) (disj* (== v 1) (=/= v 1) (== v 2))))
-    (demo-run 1 (a b) (for-all (z) (disj* (== z a) (=/= z b))))
+      (demo-run 1 ()  (for-all (z) (fresh (x y) (== (cons z y) x))))
+      (demo-run 1 () (for-all (v) (disj* (== v 1) (=/= v 1) (== v 2))))
+      (demo-run 1 () (fresh (a b) (for-all (v)  (disj* (== v a) (=/= v b)))))
+      (demo-run 1 () (fresh (a b) (for-all (v) (conj (== v a) (=/= v b)) (=/= v v))))
+      (demo-run 1 (a) (conj* (stringo a) (for-all (z) (not-stringo a))))
+      (demo-run 1 () (for-all (v) (disj* (== v 1) (=/= v 1) (== v 2))))
+      (demo-run 1 (a b) (for-all (z) (disj* (== z a) (=/= z b))))
     
-    
-
-
-    (demo-run 1 (q) (fresh (a b) (== q (cons a b)) 
-               (for-all (x) (=/= (cons x x) (cons a b))) ))
+  
 
   ))
 
@@ -135,9 +178,12 @@
 ;;; 5.2 Basic Implication Test
 (define basic-implication
   (list-reflective
+    (demo-run 1 (a b)  (cimpl (== a 1) (== a b)))
     (demo-run 1 ()  (for-all (a b) (cimpl (conj* (== b a) (symbolo a)) (=/= b 1))) )
+    (demo-run 1 ()  (for-all (a) (cimpl (== a 1) (symbolo a))))
     (demo-run 1 ()  (for-all (x z) (cimpl (conj (== x z)(False z)) 
-                                   (False x))))
+                                   (False x))))   
+    (demo-run 1 (R) (for-all (x y) (cimpl (conj (== y (cons 'a 'b)) (== x y) ) (== y R ))))
     (random-goal (A)
       (demo-run 1 ()  (cimpl 
                     (fresh (x) (disj A (=/= x x)))
@@ -152,19 +198,15 @@
                         (D . cimpl . E) 
                         (X . cimpl . E))
                       (A . cimpl . E)) ))
-    (random-goal (A)
-      (demo-run 1 ()  (cimpl 
-                      (conj* 
-                        (for-all (x) ((False x) . cimpl . A))
-                        (False 1))
-                      A)))
+
     (random-goal (A)
       (demo-run 1 ()  (cimpl 
                       (conj* 
                         (for-all (x) ((False x) . cimpl . A))
                         (fresh (k) (False k)))
                       A)))
-
+    (demo-run 1 () (cimpl (neg (winning 'a)) (winning 'b)))
+    (demo-unhalt 1 () (cimpl (winning 'c) (Bottom)))
     
   ))
 
@@ -172,53 +214,44 @@
 ;;; 5.5 other tests
 (define customized-relate-cases
   (list-reflective
-    (demo-run 1 (x) (for-all (b) (has-false (list b b x)))) 
+    ;;; (demo-run 1 (x) (for-all (b) (has-false (list b b x)))) 
     (demo-run 1 (a) 
       (for-all (x) (sort-boolo (list #f #f x) (list a #f x))))
-    (demo-run 1 () (for-all (a) 
-      (cimpl (membero #f (list a)) 
-             (== a #f))
-    ))
-    (demo-run 3 (o) (for-all (x) (sort-boolo-base-case (list x #f #f #f) (list #f #f #f x) o)))
+    ;;; (demo-run 1 () (for-all (a) 
+    ;;;   (cimpl (membero #f (list a)) 
+    ;;;          (== a #f))
+    ;;; ))
+    (demo-run 1 (o) (for-all (x) (sort-boolo-base-case (list x #f #f #f) (list #f #f #f x) o)))
     (demo-run 1 () (for-bound (x) [boolo x] (sort-boolo (list #f x #f) (list #f #f x))))
-  (demo-run 1 () (for-all (x1 x2) 
-    (fresh (r1 r2)
-      (sort-two-boolo (list x1 x2) (list r1 r2))
-      (disj* (conj* (=/= x1 #f) (=/= x2 #f))
-             (== r2 #f)))))
-  (demo-run 1 (q) (filter p q (list)))
-  (demo-run 1 (z) (neg (zeros z)))
+  ;;; (demo-run 1 () (for-all (x1 x2) 
+  ;;;   (fresh (r1 r2)
+  ;;;     (sort-two-boolo (list x1 x2) (list r1 r2))
+  ;;;     (disj* (conj* (=/= x1 #f) (=/= x2 #f))
+  ;;;            (== r2 #f)))))
+  ;;; (demo-run 1 (q) (filter p q (list)))
+  ;;; (demo-run 1 (z) (neg (zeros z)))
   ))
 
 
-
-;;; 
-(define test-cases-graph-reachable
-  (list-reflective
-    (demo-run 1 () (unreachable 'c 'a))
-    (demo-run 1 () (reachable 'c 'a))
-    (demo-run 1 (z) (unreachable 'c z))
-    (demo-run 1 (z) (unreachable 'd z))
-    (demo-run 1 (z) (unreachable z 'a))
-    (demo-run 1 (z) (unreachable z 'b))
-    (demo-run 1 (z) (unreachable z 'c))
-    
-  ))
 
 (define test-cases-evalo
   (list-reflective
     ;;; eigen cannot do this!
-    (demo-run 1 ()
-     (cimpl 
-      (evalo '6 5)
-      (evalo omega 5)))
     
     (demo-run 1 (x z) (for-all (y) (evalo `(app ,x (quote ,y)) z)))
     
     (demo-run 1 (x) (for-all (y) (evalo `(app ,x (quote ,y)) y)))
     
-    (demo-run 1 (q) (cimpl (evalo q q)
-                  (fresh (t) (evalo q t) (evalo t q))))
+
+    (demo-run 4 (x) (cimpl (evalo omega 5)
+                           (cimpl (evalo omega 6) 
+                                  (evalo `(cons ,omega ,omega) x))))
+
+    (demo-run 4 (x) (cimpl (evalo omega '())
+                           (cimpl (evalo omega (cons 1 omega)) 
+                                  (evalo `(cons ,omega ,omega) x))))
+    ;;; (demo-run 1 (q) (cimpl (evalo q q)
+    ;;;               (fresh (t) (evalo q t) (evalo t q))))
     
     ;;; type constraint, disequality
     ;;;   we want more forall example that eigen cannot do
@@ -229,10 +262,7 @@
 
 
 ;;; make test-suite into one general
-(define all-demos
-  (append 
-    test-cases-graph-reachable
-  ))
+
 
 
 (define/contract (escape-latex s)
@@ -257,6 +287,7 @@
          [latex-content (escape-latex (format "$~a$" content))])
           (match-let*-values
             ([((cons result _) _ realtime _) (time-apply thunk '())]
+             [(realtime) (if (equal? result 'TOO-LONG) 'N/A realtime)]
              [(latex-result) (format "$~a$" result)]
              [(latex-result-escape) (escape-latex latex-result)]
              )
@@ -270,11 +301,20 @@
   (require rackunit/text-ui)
   (set-debug-info-threshold! 1)
   ;;; (run-tests all-tests)
+  (printf "Constructive Negation Related\n")
+  (printf "Constructive Negation Examples\n")
+  (print-table (run-demos constructive-negation-tests-1)
+    #:border-style 'latex )
+
+  (printf "Constructive Negation Complicated Examples\n")
+  (print-table (run-demos test-cases-constructive-negation-others)
+      #:border-style 'latex )
+
   (printf "Basic Demos\n")
   (print-table (run-demos basic-test-cases)
     #:border-style 'latex )
 
-  (printf "Basic Implication Demos")
+  (printf "Basic Implication Demos\n")
   (print-table (run-demos basic-implication)
     #:border-style 'latex )
   
@@ -282,9 +322,7 @@
   (print-table (run-demos test-cases-evalo)
     #:border-style 'latex )
 
-  (printf "Graph Reachability Demos\n")
-  (print-table (run-demos test-cases-graph-reachable)
-      #:border-style 'latex )
+
 
   (printf "Other Customized Relation Demos\n")
   (print-table (run-demos customized-relate-cases)

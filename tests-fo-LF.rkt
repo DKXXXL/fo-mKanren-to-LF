@@ -682,16 +682,31 @@
                    ((=/= x #f)
                     (== xsys (cons y xsys^))
                     (merge-boolo xs ys^ xsys^)))))))
+;;; (define-relation (sort-boolo xs ys)
+;;;   (conde ((== xs '()) (== ys '()))
+;;;          ((fresh (x)
+;;;            (== xs (list x))
+;;;            (== ys (list x))))
+;;;          ((fresh (x1s x2s y1s y2s)
+;;;               (splito xs x1s x2s)
+;;;               (sort-boolo x1s y1s)
+;;;               (sort-boolo x2s y2s)
+;;;               (merge-boolo y1s y2s ys)))))
+
+(define-relation (inserto x ys xs)
+  (conde ((== ys '()) (== xs (list x)))
+         ((fresh (y rst rst-inserted)
+            (== ys (cons y rst))
+            (conde ((== y #t) (== xs (cons x ys)))
+                   ((== y #f)
+                    (== xs (cons y rst-inserted))
+                    (inserto x rst rst-inserted)))))))
 (define-relation (sort-boolo xs ys)
   (conde ((== xs '()) (== ys '()))
-         ((fresh (x)
-           (== xs (list x))
-           (== ys (list x))))
-         ((fresh (x1s x2s y1s y2s)
-              (splito xs x1s x2s)
-              (sort-boolo x1s y1s)
-              (sort-boolo x2s y2s)
-              (merge-boolo y1s y2s ys)))))
+         ((fresh (x rst rst-sorted)
+            (== xs (cons x rst))
+            (sort-boolo rst rst-sorted)
+            (inserto x rst-sorted ys)))))
 
 
 (define-relation (membero-w/o-ineq elem lst)
@@ -1515,7 +1530,7 @@
   (run 1 ()
     (for-all (xs)
          (cimpl (has-false xs)
-               (fresh (b xs-sorted)
+                (fresh (b xs-sorted)
                   (== xs-sorted (cons #f b))
                   (sort-boolo xs xs-sorted))))) 
   . test-reg!=>ND . 'succeed  )
@@ -1648,13 +1663,15 @@
   . test-reg!=> . 'succeed
 )
 
-(define-relation (noclosure x)
-  (conde
-    ((=/= x 'closure)
-     (fresh (a b)
-        (== x (cons a b))
-        (noclosure a)
-        (noclosure b)))))
+(define-relation (has-closure x)
+  (disj* 
+    (== x 'closure)
+    (fresh (a b)
+      (== x (cons a b))
+      (disj* (has-closure a) (has-closure b)))))
+
+(define-relation (no-closure x)
+  (neg (has-closure x)))
 
 ; this should generate constant functions
 (Evalo-simple-1
