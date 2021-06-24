@@ -697,7 +697,7 @@
   (conde ((== ys '()) (== xs (list x)))
          ((fresh (y rst rst-inserted)
             (== ys (cons y rst))
-            (conde ((== y #t) (== xs (cons x ys)))
+            (conde ((=/= y #f) (== xs (cons x ys)))
                    ((== y #f)
                     (== xs (cons y rst-inserted))
                     (inserto x rst rst-inserted)))))))

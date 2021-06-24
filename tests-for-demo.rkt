@@ -151,6 +151,7 @@
       (demo-run 1 () (for-all (v) (disj* (== v 1) (=/= v 1) (== v 2))))
       (demo-run 1 (a b) (for-all (z) (disj* (== z a) (=/= z b))))
     
+    (demo-run 1 (R) (for-all (x y) (disj (disj (=/= y (cons 'a 'b)) (=/= x y) ) (== y R ))))
   
 
   ))
@@ -247,8 +248,12 @@
     (demo-run 1 (x) (for-all (y) (evalo `(app ,x (quote ,y)) y)))
     
 
-    (demo-run 4 (x) (cimpl (evalo omega id)
+    (demo-run 4 (x) (cimpl (evalo omega idf)
                            (evalo `(app ,omega ,omega) x)))
+
+    (demo-unhalt 1 (z) 
+      (cimpl (evalo `(cons ,omega '6) (cons idf 6)) 
+             (evalo omega z)))
 
     ;;; (demo-run 1 (q) (cimpl (evalo q q)
     ;;;               (fresh (t) (evalo q t) (evalo t q))))
