@@ -104,7 +104,8 @@
   #:transparent
   #:guard (lambda (v cxr type-name)
                     (cond
-                      [(and (var? v) (not (tp-var? v)) (pair? cxr)) 
+                      [#t
+                        ;;; (and (var? v) (not (tp-var? v)) (pair? cxr)) 
                        (values v cxr)]
                       [else (error type-name
                                    "bad v: ~e"
@@ -136,7 +137,8 @@
     [(tproj x y) (tproj x (cons 'car y))]
     [(tp-var x y) (tcar (tproj x y))]
     [(var _ _) (tproj t (list 'car))]
-    [_ (raise-and-warn "tcar: Unexpected Value ~a" t)]
+    ;;; [_ (raise-and-warn "tcar: Unexpected Value ~a" t)]
+    [_ (tproj t (list 'car))]
   ))
 
 (define (tcdr t) 
@@ -145,7 +147,8 @@
     [(tproj x y) (tproj x (cons 'cdr y))]
     [(tp-var x y) (tcdr (tproj x y))]
     [(var _ _) (tproj t (list 'cdr))]
-    [_ (raise-and-warn "tcdr: Unexpected Value ~a" t)]
+    ;;; [_ (raise-and-warn "tcdr: Unexpected Value ~a" t)]
+    [_ (tproj t (list 'cdr))]
   ))
 
 (define (term? x) (or (var? x) (tproj? x)))
@@ -619,6 +622,8 @@
     (match g
       [(disj   a b)   (disj  (rec a) (rec b))]
       [(conj   a b)   (conj  (rec a) (rec b))]
+      [(cimpl-no-falsification x y)     (cimpl-no-falsification (rec x) (rec y))]
+      [(cimpl-syn x y)     (cimpl-syn (rec x) (rec y))]
       [(cimpl  a b)   (cimpl (rec a) (rec b))]
       [(ex     v g)   (ex     v         (rec g))]
       [(forall v b g) (forall v (rec b) (rec g))]
@@ -638,6 +643,8 @@
     [(type-constraint x types) (type-constraint (rec x) types)]
     [(disj a b)     (disj (rec a) (rec b))]
     [(conj a b)     (conj (rec a) (rec b))]
+    [(cimpl-no-falsification x y)     (cimpl-no-falsification (rec x) (rec y))]
+    [(cimpl-syn x y)     (cimpl-syn (rec x) (rec y))]
     [(cimpl x y)     (cimpl (rec x) (rec y))]
     [(ex v g)       (ex v (rec g))]
     [(forall v b g) (forall v (rec b) (rec g))]

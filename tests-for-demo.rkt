@@ -134,7 +134,7 @@
     (demo-unhalt 1 () (winning 'a))
     (demo-unhalt 1 () (winning 'b))
 
-    (demo-unhalt 1 (q) (filter-singleton q (list 1)))
+    ;;; (demo-unhalt 1 (q) (filter-singleton q (list 1)))
     
   ))
 
@@ -176,14 +176,16 @@
     ((_ (x ...) g0 gs ...)
      (let ((x (Opaque-Goal)) ...)  (conj* g0 gs ...)))))
 
+(define-relation (Loop x) (Loop x))
+
 ;;; 5.2 Basic Implication Test
 (define basic-implication
   (list-reflective
     (demo-run 1 (a b)  (cimpl (== a 1) (== a b)))
     (demo-run 1 ()  (for-all (a b) (cimpl (conj* (== b a) (symbolo a)) (=/= b 1))) )
     (demo-run 1 ()  (for-all (a) (cimpl (== a 1) (symbolo a))))
-    (demo-run 1 ()  (for-all (x z) (cimpl (conj (== x z)(False z)) 
-                                   (False x))))   
+    (demo-run 1 ()  (for-all (x z) (cimpl (conj (== x z)(Loop z)) 
+                                   (Loop x))))   
     (demo-run 1 (R) (for-all (x y) (cimpl (conj (== y (cons 'a 'b)) (== x y) ) (== y R ))))
     (random-goal (A)
       (demo-run 1 ()  (cimpl 
@@ -203,8 +205,8 @@
     (random-goal (A)
       (demo-run 1 ()  (cimpl 
                       (conj* 
-                        (for-all (x) ((False x) . cimpl . A))
-                        (fresh (k) (False k)))
+                        (for-all (x) ((Loop x) . cimpl . A))
+                        (fresh (k) (Loop k)))
                       A)))
     (demo-run 1 () (cimpl (neg (winning 'a)) (winning 'b)))
     (demo-run 1 () (cimpl (cimpl (winning 'd) (Bottom)) (Bottom) ))
@@ -218,8 +220,20 @@
   (list-reflective
     ;;; (demo-run 1 (x) (for-all (b) (has-false (list b b x)))) 
 
-    (demo-run 1 () (for-all (x) (sort-boolo (list #f x #f) (list #f #f x))))   
+    (demo-run 1 () (for-all (x) (sort-boolo (list x #f) (list #f x))))   
+    (demo-unhalt 1 (x) (neg (sort-boolo (list x #f) (list #f x))))
+    (demo-run 1 ()  (for-all (x) (sort-boolo (list x #f) (list x #f))))
     (demo-run 1 () (cimpl (for-all (x) (sort-boolo (list x #f) (list x #f))) (Bottom)))
+
+
+    (demo-run 1 () (for-all (x) (sort-boolo (list #f x #f) (list #f #f x))))   
+    (demo-unhalt 1 (x) (neg (sort-boolo (list #f x #f) (list #f #f x))))
+    (demo-run 1 ()  (for-all (x) (sort-boolo (list x #f #f) (list x #f #f))))
+    (demo-run 1 () (cimpl (for-all (x) (sort-boolo (list x #f #f) (list x #f #f))) (Bottom)))
+    
+
+
+    
     ;;; (demo-run 1 (x) (cimpl (sort-boolo (list x #f) (list x #f)) (Bottom)))
 
     ;;; (demo-run 1 () (for-all (x) (sort-boolo (list #f x #f #f) (list #f #f #f x))))   
@@ -291,7 +305,7 @@
           ([each-demo ds])
       (match-let* 
         ([(cons content thunk) each-demo]
-        ;;;  [_ (printf "~a\n" content)]
+         [_ (printf "~a\n" content)]
          [latex-content (escape-latex (format "$~a$" content))])
           (match-let*-values
             ([((cons result _) _ realtime _) (time-apply thunk '())]

@@ -435,6 +435,10 @@
           ;;;   syn solve and try to falsify the assumption 
          (not (empty-assumption-base? assmpt))))
   
+  (if heuristic-to-syn-solve 
+      (debug-dump "  \n Currently solving ~a \n with assumption ~a \n and state ~a \n" g assmpt st)
+      (void))
+
   (if heuristic-to-syn-solve
     (mplus 
       (syn-solve assmpt assmpt st g)
@@ -685,7 +689,7 @@
       ;;; TODO: rewrite the following into ANF-style (the push-let form)
       (match-let* 
             ([(cons g1-dec g1-ndec) (simplify-dec+nondec g1)]
-             [k (debug-dump-off "\n dec comp: ~a \n undec comp ~a \n " g1-dec g1-ndec)]
+             [k (debug-dump "\n dec comp: ~a \n undec comp ~a \n " g1-dec g1-ndec)]
              [~g1-dec-ty (complement g1-dec)]
              [cimpl-syn-short-circuit 
                 (λ (antc conseq) (if (equal? antc (Top)) conseq (cimpl-syn antc conseq)))]
@@ -693,6 +697,14 @@
                 (if (cimpl-no-falsification? g) 
                     (Bottom)
                     (cimpl-syn g1-ndec (Bottom)))]
+             [main-goal
+                  (conj g1-dec 
+                      (disj* 
+                        try-falsification-goal ;;; and syntactical falsifying 
+                        (cimpl-syn g1-ndec g2)      ;;; and syntactical solving
+                        ))]
+             [simpl-main-goal (all-linear-simplify main-goal)]
+             [k (debug-dump-off "  \n Syntactical solving goal ~a \n   simplified into ~a \n" main-goal simpl-main-goal)]
             )
         (mplus*
           (pause assmpt st ~g1-dec-ty)
@@ -700,12 +712,7 @@
           ;;; Note: the following decides the soundness of the whole algorithm
           ;;;     because without it, we may not expand the definition of assumption
           ;;;     and really falsifying it
-          (pause assmpt st
-                (conj g1-dec 
-                      (disj* 
-                        try-falsification-goal ;;; and syntactical falsifying 
-                        (cimpl-syn g1-ndec g2)      ;;; and syntactical solving
-                        )))) 
+          (pause assmpt st simpl-main-goal)) 
  
     ))
     
@@ -1160,6 +1167,20 @@
              [(cons new-b st-r) (est-eval b st)]
              [resulting-st      (disj-merge-st st-l st-r st)] ; merge to top of all the state
              [final-goal        (disj new-a new-b)])
+            (cons final-goal resulting-st))]
+        [(cimpl-no-falsification a b)
+          (match-let* 
+            ([(cons new-a _) (est-eval a st)]
+             [(cons new-b _) (est-eval b st)]
+             [resulting-st      st] ; merge to top of all the state
+             [final-goal        (cimpl-no-falsification new-a new-b)])
+            (cons final-goal resulting-st))]
+        [(cimpl-syn a b)
+          (match-let* 
+            ([(cons new-a _) (est-eval a st)]
+             [(cons new-b _) (est-eval b st)]
+             [resulting-st      st] ; merge to top of all the state
+             [final-goal        (cimpl-syn new-a new-b)])
             (cons final-goal resulting-st))]
         [(cimpl a b)
           (match-let* 

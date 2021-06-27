@@ -1929,12 +1929,9 @@
   (run 3 (q) (fresh (e) (find p e q) ))
   . test-reg!=> . 
   `(((((_.0) . _.1)) . ,(Top))
-    (((_.0 (_.1) . _.2))
-     .
-     ,(type-constraint '_.0 (set string? symbol? number?)))
-    (((_.0 (_.1) . _.2))
-     .
-     ,(type-constraint '_.0 (set string? symbol? number?))))
+    (((_.0 (_.1) . _.2)) . ,(type-constraint '_.0 (set string? symbol? number?)))
+    (((#t (_.0) . _.1)) . ,(Top)))
+
 
 )
 
@@ -1942,10 +1939,8 @@
 (CN-ifte-example1
   (run* (q) (fresh (e) (remove p q (list (list))) ))
   . test-reg!=> . 
-  `(((((_.0) ())) . ,(Top))
-    (((())) . ,(Top))
-    (((())) . ,(Top))
-    (((() (_.0))) . ,(Top))
+  `(((((_.0) ())) . ,(Top)) 
+    (((())) . ,(Top)) 
     (((() (_.0))) . ,(Top)))
 )
 
@@ -1956,9 +1951,9 @@
     (((_.0))
      .
      ,(type-constraint '_.0 (set string? symbol? number?)))
-    (((_.0))
+    (((#t))
      .
-     ,(type-constraint '_.0 (set string? symbol? number?))))
+     ,(Top)))
 
 )
 
