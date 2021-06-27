@@ -633,7 +633,7 @@
   (define conj-assumpt-term (foldl LFpair (LFaxiom (Top)) (all-assumption-terms assmpt)))
   (debug-dump-off " \n Before Unfold Assumption : ~a \n" conj-assumpt-ty)
   (define unfold-conj-assumpt-ty (unfold-one-level-relate conj-assumpt-ty))
-  (define s-unfold-conj-assmpt-ty (all-linear-simplify unfold-conj-assumpt-ty))
+  (define s-unfold-conj-assmpt-ty (all-linear-simplify unfold-conj-assumpt-ty st))
 
   (define unfolded-goal (cimpl-no-falsification s-unfold-conj-assmpt-ty goal)) 
   (debug-dump-off " \n After Unfold Assumption : ~a \n" s-unfold-conj-assmpt-ty)
@@ -703,7 +703,7 @@
                         try-falsification-goal ;;; and syntactical falsifying 
                         (cimpl-syn g1-ndec g2)      ;;; and syntactical solving
                         ))]
-             [simpl-main-goal (all-linear-simplify main-goal)]
+             [simpl-main-goal (all-linear-simplify main-goal st)]
              [k (debug-dump-off "  \n Syntactical solving goal ~a \n   simplified into ~a \n" main-goal simpl-main-goal)]
             )
         (mplus*
@@ -1234,15 +1234,15 @@
 
 ;;; include all the simplification that 
 ;;;   only linear complexity to the size of g 
-(define/contract (all-linear-simplify g)
-  (Goal? . -> . Goal?)
-  (syntactical-simplify (est-simplify g))
+(define (all-linear-simplify g [state-init empty-state])
+  ;;; (Goal? . -> . Goal?)
+  (syntactical-simplify (est-simplify g state-init))
   ;;; (syntactical-simplify g)
 )
 
-(define/contract (est-simplify goal)
-  (Goal? . -> . Goal?)
-  (match (est-eval goal empty-state)
+(define/contract (est-simplify goal state-init)
+  (Goal? state? . -> . Goal?)
+  (match (est-eval goal state-init)
     [(cons res-g _) res-g]))
 
 
