@@ -2034,6 +2034,66 @@
 )
 
 
+(define-relation (disease d)
+  (== d 'a)
+  (symptom 'b))
+(define-relation (symptom s)
+  (== s 'b)
+  (symptom 'd)
+  (disease 'c))
+(JLC1991-1
+  (run 1 (x) (cimpl (symptom 'b) (disease x)))
+. test-reg!=> .
+`(((a) . ,(Top)))  
+  )
+;; expecting to learn (== x 'a)
+(JLC1991-2
+  (run 1 (x) (cimpl (symptom x) (disease 'c)))
+. test-reg!=> .
+`(((_.0) . ,(=/= '_.0 'b)))
+)
+;; expecting to learn (== x 'b)
+
+
+(define-relation (even n)
+  (conde ((== n '()))
+         ((fresh (x)
+            (== n (cons 's x))
+            (odd x)))))
+(define-relation (odd n)
+  (cimpl (even n) (Bottom)))
+(JLC1991-3
+  (run 1 () (cimpl (even '(s)) (Bottom)))
+. test-reg!=> .
+`((() . ,(Top)))
+  )
+;; should be satisfiable
+
+(define-relation (min-result r) (min-result r))
+(define-relation (min m n)
+  (conde ((== n '()) (min-result '()))
+         ((== m '()) (min-result '()))
+         ((fresh (m-- n--)
+            (== m (cons 's m--))
+            (== n (cons 's n--))
+            ;; if this doesn't work well, try moving r to the fresh variable list and remove the for-all
+            (for-all (r) (cimpl (cimpl (min m-- n--) (min-result r)) (min-result (cons 's r))))))))
+
+(JLC1991-4
+  (run 1 (x) (cimpl (min '(s s) '(s)) (min-result x)))
+. test-reg!=>ND . 'succeed  
+)
+;; expecting to learn (== x '(s))
+(JLC1991-5
+  (run 3 (m n x) (cimpl (min m n) (min-result x)))
+. test-reg!=> . 
+
+`(((_.0 () ()) . ,(=/= '_.0 '()))
+  ((_.0 () ()) . ,(Top))
+  ((_.0 () ()) . ,(=/= '_.0 '())))
+)
+;; ?
+
 ;;; k '(1) =
 ;;; (conj (=/= '(1) '()) 
 ;;;       (fresh (y ys)
