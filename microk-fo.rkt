@@ -342,7 +342,6 @@
         (match-let* 
           ([(cons g-dec g-ndec) (rec g)])
         (cons (forall v D g-dec) (forall v D g-ndec)))]
-
     ;;; others are considered as primitive case
     [_ 
       (if (decidable-goal? g)
@@ -436,7 +435,7 @@
          (not (empty-assumption-base? assmpt))))
   
   (if heuristic-to-syn-solve 
-      (debug-dump "  \n Currently solving ~a \n with assumption ~a \n and state ~a \n" g assmpt st)
+      (debug-dump "  \n Currently solving ~a \n with assumption ~a \n and state ~a \n" g (map cdr assmpt) st)
       (void))
 
   (if heuristic-to-syn-solve
@@ -502,6 +501,8 @@
           (fresh-param (applied)
             (let* (
                 [st  st]
+                [k (debug-dump "\n ENTERING!!  ")]
+
                 [reduced-assmpt (filter (lambda (x) (not (equal? top-name-assmpt x))) init-assmpt)]
                 [new-assmpt (cons-assmpt applied b reduced-assmpt)]
                 [w/-cimpl
@@ -509,7 +510,10 @@
                     (λ (st) (pause init-assmpt st a))
                     (pause new-assmpt st g))]
                 [w/o-cimpl
-                  (syn-solve remain-assmpt init-assmpt st g)])
+                  (syn-solve remain-assmpt init-assmpt st g)]
+                [k (debug-dump "\n w/-cimpl ~a \n  " (pause new-assmpt st g))]
+    
+              )
               (mplus w/-cimpl w/o-cimpl)
             ))]
       [(ex v t)
@@ -533,7 +537,7 @@
                 [VT (fresh-var VT)]
                 [forall-internal (cimpl domain t)]
                 [applied-type (forall-internal . subst . [VT // v])]
-                [k (debug-dump-off "\n syn-solve on forall:~a \n" applied-type)]
+                [k (debug-dump "\n syn-solve on forall:~a \n" applied-type)]
                 ;;; Note: even though we seem to only allow for-all to be instantiated
                 ;;;     with only one variable
                 ;;;       the second instantiation will happen when our
@@ -631,12 +635,12 @@
   
   (define conj-assumpt-ty (foldl conj (Top) (all-assumption-goals assmpt)))
   (define conj-assumpt-term (foldl LFpair (LFaxiom (Top)) (all-assumption-terms assmpt)))
-  (debug-dump-off " \n Before Unfold Assumption : ~a \n" conj-assumpt-ty)
+  (debug-dump " \n Before Unfold Assumption : ~a \n" conj-assumpt-ty)
   (define unfold-conj-assumpt-ty (unfold-one-level-relate conj-assumpt-ty))
   (define s-unfold-conj-assmpt-ty (all-linear-simplify unfold-conj-assumpt-ty st))
 
   (define unfolded-goal (cimpl-no-falsification s-unfold-conj-assmpt-ty goal)) 
-  (debug-dump-off " \n After Unfold Assumption : ~a \n" s-unfold-conj-assmpt-ty)
+  (debug-dump " \n After Unfold Assumption : ~a \n" s-unfold-conj-assmpt-ty)
   ;;; use cimpl here to allow newly unfolded assumption processed by sem-solving
   ;;; (match-let*
   ;;;    ([(cons st all-assmpt-term) (push-lflet st conj-assumpt-term : conj-assumpt-ty)]
@@ -676,7 +680,8 @@
     ;;; the real syntactical solving for cimpl
     ((cimpl-syn g1 g2)
       (fresh-param (name-g1)
-            (pause (cons-assmpt name-g1 g1 assmpt) st g2)
+          (debug-dump "  \n ENTERING SEM_SOLVING cimpl-syn with ~a \n" g)
+          (step (pause (cons-assmpt name-g1 g1 assmpt) st g2))
       ))
     ((cimpl g1 g2) 
       ;;; semantic solving of implication is 
@@ -689,7 +694,7 @@
       ;;; TODO: rewrite the following into ANF-style (the push-let form)
       (match-let* 
             ([(cons g1-dec g1-ndec) (simplify-dec+nondec g1)]
-             [k (debug-dump "\n dec comp: ~a \n undec comp ~a \n " g1-dec g1-ndec)]
+             [k (debug-dump "\n dec comp: ~a \n undec comp ~a \n    want to solve goal ~a \n \n with state ~a" g1-dec g1-ndec g2 st)]
              [~g1-dec-ty (complement g1-dec)]
              [cimpl-syn-short-circuit 
                 (λ (antc conseq) (if (equal? antc (Top)) conseq (cimpl-syn antc conseq)))]
@@ -704,7 +709,7 @@
                         (cimpl-syn g1-ndec g2)      ;;; and syntactical solving
                         ))]
              [simpl-main-goal (all-linear-simplify main-goal st)]
-             [k (debug-dump-off "  \n Syntactical solving goal ~a \n   simplified into ~a \n" main-goal simpl-main-goal)]
+             [k (debug-dump "  \n Syntactical solving goal ~a \n   simplified into ~a \n" main-goal simpl-main-goal)]
             )
         (mplus*
           (pause assmpt st ~g1-dec-ty)

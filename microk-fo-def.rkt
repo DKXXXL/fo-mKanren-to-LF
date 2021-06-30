@@ -28,7 +28,7 @@
   #:transparent
   #:methods gen:custom-write
   [(define (write-proc val output-port output-mode)
-     (fprintf output-port "~a" (var-name val)))]
+     (fprintf output-port "~a#~a" (var-name val) (var-index val)))]
 )
 
 ;;; unifiable term?

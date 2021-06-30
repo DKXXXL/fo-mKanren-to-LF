@@ -2038,9 +2038,12 @@
   (== d 'a)
   (symptom 'b))
 (define-relation (symptom s)
-  (== s 'b)
-  (symptom 'd)
-  (disease 'c))
+  (conde ((== s 'b)
+          (symptom 'd)
+          (disease 'c))
+         ;; this branch covers the rest of the domain of s, simulating an open-world interpretation
+         ((=/= s 'b)
+          (symptom s))))
 (JLC1991-1
   (run 1 (x) (cimpl (symptom 'b) (disease x)))
 . test-reg!=> .
@@ -2050,7 +2053,7 @@
 (JLC1991-2
   (run 1 (x) (cimpl (symptom x) (disease 'c)))
 . test-reg!=> .
-`(((_.0) . ,(=/= '_.0 'b)))
+`((b) . ,(Top))
 )
 ;; expecting to learn (== x 'b)
 
@@ -2071,14 +2074,17 @@
 
 (define-relation (min-result r) (min-result r))
 (define-relation (min m n)
-  (conde ((== n '()) (min-result '()))
-         ((== m '()) (min-result '()))
-         ((fresh (m-- n--)
-            (== m (cons 's m--))
-            (== n (cons 's n--))
+  (conj* (cimpl (== n '()) (min-result '()))
+         (cimpl (== m '()) (min-result '()))
+         (for-all (m-- n-- r)
             ;; if this doesn't work well, try moving r to the fresh variable list and remove the for-all
-            (for-all (r) (cimpl (cimpl (min m-- n--) (min-result r)) (min-result (cons 's r))))))))
+            (cimpl (conj*
+                      (== m (cons 's m--))
+                      (== n (cons 's n--))
+                      (cimpl (min m-- n--) (min-result r))) 
+                   (min-result (cons 's r))))))
 
+;;; (run 1 (r x) (cimpl (cimpl (cimpl (min '(s) '()) (min-result r)) (min-result (cons 's r))) (min-result x)))
 (JLC1991-4
   (run 1 (x) (cimpl (min '(s s) '(s)) (min-result x)))
 . test-reg!=>ND . 'succeed  
@@ -2165,6 +2171,39 @@
 ;;;     (disj*
 ;;;       (=/= (cons x y) (cons 'c 'd)) 
 ;;;       (neg-winning y))) )
+
+;; An alternative, reflective version of the previous example that simulates the paper structure more closely:
+(define-relation (calc e)
+  (conde ((fresh (x)
+            (== e `(min ,x ()))
+            (calc '())))
+         ((fresh (x)
+            (== e `(min () ,x))
+            (calc '())))
+         ((fresh (x y)
+            (== e `(min (s . ,x) (s . ,y)))
+            (calc `(s . (min ,x ,y)))))
+         ((fresh (x y z)
+            (== e `(s . (min ,x ,y)))
+            (cimpl
+              (cimpl
+                (calc `(min ,x ,y))
+                (calc z))
+              (calc `(s . ,z)))))))
+
+(define-relation (value x)
+  (conde ((== x '()))
+         ((fresh (y)
+            (== x `(s . ,y))
+            (value y)))))
+;; May have to try this order instead?:
+;(run 1 (x) (value x) (cimpl (calc '(min (s s) (s))) (calc x)))
+(JLC1991-6
+  (run 1 (x) (value x) (cimpl (calc '(min (s s) (s))) (calc x)) )
+. test-reg!=>ND . 
+'succeed  
+  )
+;; expecting (== x '(s))
 
 
 (Non-stratified-example1
