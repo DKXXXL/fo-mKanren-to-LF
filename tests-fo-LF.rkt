@@ -2084,6 +2084,8 @@
                       (cimpl (min m-- n--) (min-result r))) 
                    (min-result (cons 's r))))))
 
+;;; (run 1 (X) (SEQ (MIN (NUM (list 's 's))  (NUM (list 's))) (NUM X)))
+
 ;;; (run 1 (r x) (cimpl (cimpl (cimpl (min '(s) '()) (min-result r)) (min-result (cons 's r))) (min-result x)))
 (JLC1991-4
   (run 1 (x) (cimpl (min '(s s) '(s)) (min-result x)))
