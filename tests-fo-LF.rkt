@@ -2053,7 +2053,7 @@
 (JLC1991-2
   (run 1 (x) (cimpl (symptom x) (disease 'c)))
 . test-reg!=> .
-`((b) . ,(Top))
+`(((b) . ,(Top)))
 )
 ;; expecting to learn (== x 'b)
 
@@ -2096,9 +2096,9 @@
   (run 3 (m n x) (cimpl (min m n) (min-result x)))
 . test-reg!=> . 
 
-`(((_.0 () ()) . ,(=/= '_.0 '()))
-  ((_.0 () ()) . ,(Top))
-  ((_.0 () ()) . ,(=/= '_.0 '())))
+`(((_.0 () ()) . ,(Top)) 
+  ((() _.0 ()) . ,(Top)) 
+  ((_.0 () ()) . ,(Top)))
 )
 ;; ?
 
