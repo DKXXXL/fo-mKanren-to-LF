@@ -14,9 +14,11 @@ Defunctionalized miniKanren (first order implementation) decouples the search st
   * primitive constraints -- `=/=`, `==`
   * and a bunch of primitive type constraints: `symbolo`, `stringo`, `boolo`, `numbero` and their negate
   * `(cimpl A B)` indicating $A \rightarrow B$
+    * `cimpl` stands for constructive implication. Most of the time when dealing with user-customized relation, it is doing pattern matching. This is the reason it is called constructive implication.
   * `(for-all (vs ..) goal)` indicating $\forall vs, goal$
   * `(for-bounds (vs ..) dag goal)` indicating $\forall vs, dag \rightarrow goal$
     * Note that `dag` has to only have conjunction, disjunction and primitive constraints
+    * If you want stronger things in $dag$, just use implication `cimpl`
   * all the quantifier only ranges inside first-order values
     * first order values are only symbols, strings, bools, numbers and the pair of them.
 
